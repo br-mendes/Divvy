@@ -9,6 +9,7 @@ import { JoinDivvy } from './pages/JoinDivvy';
 import { Home } from './pages/Home';
 import { Login } from './pages/Login';
 import { Signup } from './pages/Signup';
+import { Notes } from './pages/Notes';
 
 // Protected Route Component
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -38,6 +39,7 @@ const AppRoutes: React.FC = () => {
       <Route path="/login" element={<Login />} />
       <Route path="/signup" element={<Signup />} />
       <Route path="/join/:token" element={<JoinDivvy />} />
+      <Route path="/notes" element={<Notes />} />
       <Route
         path="/dashboard"
         element={
