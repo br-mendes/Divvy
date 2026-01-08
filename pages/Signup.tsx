@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
@@ -7,12 +7,15 @@ import toast, { Toaster } from 'react-hot-toast';
 
 export const Signup: React.FC = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const redirectUrl = searchParams.get('redirect') || '/dashboard';
 
   async function handleSignup(e: React.FormEvent) {
     e.preventDefault();
@@ -60,7 +63,8 @@ export const Signup: React.FC = () => {
       }
 
       toast.success('Conta criada com sucesso! Verifique seu email.');
-      navigate('/login');
+      // Forward the redirect param to the login page so flow continues after login
+      navigate(`/login?redirect=${encodeURIComponent(redirectUrl)}`);
     } catch (err: any) {
       const message = err.message;
       setError(message);
@@ -137,7 +141,10 @@ export const Signup: React.FC = () => {
 
         <div className="mt-6 text-center text-gray-600">
           Já tem conta?{' '}
-          <Link to="/login" className="text-brand-600 font-semibold hover:underline">
+          <Link 
+            to={`/login?redirect=${encodeURIComponent(redirectUrl)}`}
+            className="text-brand-600 font-semibold hover:underline"
+          >
             Fazer login
           </Link>
         </div>

@@ -5,6 +5,7 @@ import { Layout } from './components/Layout';
 import { AuthPage } from './pages/Auth';
 import { Dashboard } from './pages/Dashboard';
 import { DivvyDetail } from './pages/DivvyDetail';
+import { JoinDivvy } from './pages/JoinDivvy';
 import { Home } from './pages/Home';
 import { Login } from './pages/Login';
 import { Signup } from './pages/Signup';
@@ -36,6 +37,7 @@ const AppRoutes: React.FC = () => {
       <Route path="/auth" element={<AuthPage />} />
       <Route path="/login" element={<Login />} />
       <Route path="/signup" element={<Signup />} />
+      <Route path="/join/:token" element={<JoinDivvy />} />
       <Route
         path="/dashboard"
         element={

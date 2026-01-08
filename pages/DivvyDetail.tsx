@@ -7,7 +7,9 @@ import { Button } from '../components/ui/Button';
 import { Modal } from '../components/ui/Modal';
 import { Input } from '../components/ui/Input';
 import { ExpenseCharts } from '../components/Charts';
-import { Plus, UserPlus, Receipt, PieChart, Users, Settings } from 'lucide-react';
+import DivvyHeader from '../components/divvy/DivvyHeader';
+import InviteModal from '../components/invite/InviteModal';
+import { Plus, UserPlus, Receipt, PieChart, Users } from 'lucide-react';
 
 export const DivvyDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -27,9 +29,6 @@ export const DivvyDetail: React.FC = () => {
   const [category, setCategory] = useState('food');
   const [desc, setDesc] = useState('');
   const [submitLoading, setSubmitLoading] = useState(false);
-
-  // Invite Form
-  const [inviteEmail, setInviteEmail] = useState('');
 
   useEffect(() => {
     if (id && user) {
@@ -116,39 +115,24 @@ export const DivvyDetail: React.FC = () => {
     }
   };
 
-  const handleInvite = async (e: React.FormEvent) => {
-    e.preventDefault();
-    // Simulate Invite - In a real app, this would call an Edge Function to send email
-    // and insert into divvy_invites
-    alert(`Simulated: Invite sent to ${inviteEmail}`);
-    
-    // For demo purposes, if the email matches a real user, we could add them directly if we had admin rights,
-    // but without backend logic to lookup user IDs by email, we'll just close the modal.
-    setInviteEmail('');
-    setIsInviteModalOpen(false);
-  };
-
   if (loading) return <div className="flex justify-center p-12"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-600"></div></div>;
   if (!divvy) return <div className="text-center p-12">Divvy not found</div>;
 
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 flex flex-col md:flex-row justify-between md:items-center gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">{divvy.name}</h1>
-          <p className="text-gray-500">{divvy.description}</p>
-        </div>
-        <div className="flex gap-3">
-          <Button variant="outline" onClick={() => setIsInviteModalOpen(true)}>
-            <UserPlus size={18} className="mr-2" />
-            Invite
-          </Button>
-          <Button onClick={() => setIsExpenseModalOpen(true)}>
-            <Plus size={18} className="mr-2" />
-            Add Expense
-          </Button>
-        </div>
+      <DivvyHeader divvy={divvy} />
+
+      {/* Action Buttons */}
+      <div className="flex justify-end gap-3 px-1">
+        <Button variant="outline" onClick={() => setIsInviteModalOpen(true)}>
+          <UserPlus size={18} className="mr-2" />
+          Invite
+        </Button>
+        <Button onClick={() => setIsExpenseModalOpen(true)}>
+          <Plus size={18} className="mr-2" />
+          Add Expense
+        </Button>
       </div>
 
       {/* Tabs */}
@@ -286,22 +270,12 @@ export const DivvyDetail: React.FC = () => {
       </Modal>
 
       {/* Invite Modal */}
-      <Modal isOpen={isInviteModalOpen} onClose={() => setIsInviteModalOpen(false)} title="Invite Member">
-        <form onSubmit={handleInvite} className="space-y-4">
-           <Input
-             label="Email Address"
-             type="email"
-             value={inviteEmail}
-             onChange={(e) => setInviteEmail(e.target.value)}
-             required
-             placeholder="friend@example.com"
-           />
-           <div className="flex justify-end gap-3 mt-4">
-             <Button type="button" variant="outline" onClick={() => setIsInviteModalOpen(false)}>Cancel</Button>
-             <Button type="submit">Send Invite</Button>
-          </div>
-        </form>
-      </Modal>
+      <InviteModal 
+        divvyId={divvy.id}
+        divvyName={divvy.name}
+        isOpen={isInviteModalOpen}
+        onClose={() => setIsInviteModalOpen(false)}
+      />
     </div>
   );
 };
