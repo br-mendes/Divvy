@@ -1,0 +1,5 @@
+{
+  "name": "Divvy",
+  "description": "A smart expense sharing application for roommates, trips, and groups. Manage shared expenses, view balances, and visualize spending habits.",
+  "requestFramePermissions": []
+}
