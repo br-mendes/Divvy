@@ -1,18 +1,16 @@
+
 /**
- * Função para obter a URL dinâmica baseada no ambiente
- * Garante que o Supabase use a URL correta em dev e produção
+ * Dynamic URL helper to ensure redirects point to the correct domain.
  */
 export const getURL = () => {
   let url =
-    process.env.NEXT_PUBLIC_SITE_URL ?? // URL de produção definida manualmente
-    process.env.NEXT_PUBLIC_VERCEL_URL ?? // Auto-gerado pela Vercel
-    'http://localhost:3000/'; // Fallback para desenvolvimento
+    process.env.NEXT_PUBLIC_SITE_URL || // Provided production URL: https://divvy-roan.vercel.app
+    process.env.NEXT_PUBLIC_VERCEL_URL || 
+    'http://localhost:3000/';
 
-  // Garante que tenha https:// quando não for localhost e não tiver protocolo
+  // Protocol check
   url = url.startsWith('http') ? url : `https://${url}`;
 
-  // Garante que tenha trailing slash
-  url = url.endsWith('/') ? url : `${url}/`;
-
-  return url;
+  // Trailing slash normalization
+  return url.endsWith('/') ? url : `${url}/`;
 };

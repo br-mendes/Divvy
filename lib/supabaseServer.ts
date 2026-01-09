@@ -1,10 +1,18 @@
-import { supabase } from './supabase';
+
+import { createClient } from '@supabase/supabase-js';
+
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://jpgifiumxqzbroejhudc.supabase.co';
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || 'sb_secret_T1k4VjwHnPkFru1U0EGZUw_6weHwTaF';
 
 /**
- * Adapter for compatibility with Next.js specific code.
- * Since this is a SPA, we return the client-side instance which is already configured.
- * This prevents "supabaseUrl is required" errors caused by missing Node.js process.env variables.
+ * Creates a server-side Supabase client with elevated privileges.
+ * WARNING: Only use this in API routes or server contexts.
  */
 export const createServerSupabaseClient = () => {
-  return supabase;
+  return createClient(supabaseUrl, supabaseServiceKey, {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false
+    }
+  });
 };
