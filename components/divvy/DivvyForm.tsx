@@ -26,6 +26,12 @@ export default function DivvyForm({ onSuccess }: DivvyFormProps) {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    
+    if (!name.trim()) {
+      toast.error('O nome do grupo é obrigatório');
+      return;
+    }
+
     setLoading(true);
 
     try {
@@ -37,27 +43,41 @@ export default function DivvyForm({ onSuccess }: DivvyFormProps) {
         description,
         type,
         creator_id: user.id,
+        is_archived: false
       }).select().single();
 
-      if (error) throw error;
+      if (error) {
+        console.error('Erro ao criar divvy:', error);
+        throw new Error(`Erro ao criar grupo: ${error.message}`);
+      }
 
-      // 2. Add creator as admin member (Ensure creator can access the divvy)
+      // 2. Add creator as admin member
+      // Try to insert member, but handle cases where trigger might have already done it
       if (divvy) {
-        await supabase.from('divvy_members').insert({
+        const { error: memberError } = await supabase.from('divvy_members').insert({
           divvy_id: divvy.id,
           user_id: user.id,
-          email: user.email!,
+          email: user.email || '',
           role: 'admin',
         });
+
+        if (memberError) {
+          // If error is NOT duplicate key, we log it. 
+          // Duplicate key means user was likely added by a DB trigger, which is fine.
+          if (!memberError.message?.toLowerCase().includes('duplicate')) {
+             console.warn('Aviso ao adicionar membro:', memberError);
+          }
+        }
       }
 
       setName('');
       setDescription('');
       setType('trip');
+      toast.success('Divvy criado com sucesso!');
       onSuccess();
     } catch (err: any) {
-      toast.error('Erro ao criar Divvy');
       console.error(err);
+      toast.error(err.message || 'Erro ao criar Divvy');
     } finally {
       setLoading(false);
     }
@@ -82,7 +102,7 @@ export default function DivvyForm({ onSuccess }: DivvyFormProps) {
         <select
           value={type}
           onChange={(e) => setType(e.target.value)}
-          className="w-full px-4 py-2 border border-gray-200 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-brand-600 bg-white"
+          className="w-full px-4 py-2 border border-gray-300 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-brand-600 bg-white"
         >
           {divvyTypes.map((t) => (
             <option key={t.value} value={t.value}>
@@ -100,7 +120,7 @@ export default function DivvyForm({ onSuccess }: DivvyFormProps) {
           value={description}
           onChange={(e) => setDescription(e.target.value)}
           placeholder="Descreva o propósito desta despesa compartilhada"
-          className="w-full px-4 py-2 border border-gray-200 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-brand-600 resize-none"
+          className="w-full px-4 py-2 border border-gray-300 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-brand-600 resize-none"
           rows={3}
         />
       </div>
