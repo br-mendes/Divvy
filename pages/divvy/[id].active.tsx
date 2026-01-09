@@ -1,3 +1,4 @@
+
 import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/router';
 import { supabase } from '../../lib/supabase';
@@ -11,7 +12,7 @@ import DivvyHeader from '../../components/divvy/DivvyHeader';
 import InviteModal from '../../components/invite/InviteModal';
 import LoadingSpinner from '../../components/ui/LoadingSpinner';
 import EmptyState from '../../components/ui/EmptyState';
-import { Plus, UserPlus, Receipt, PieChart, Users } from 'lucide-react';
+import { Plus, UserPlus, Receipt, PieChart, Users, Pencil, Trash2 } from 'lucide-react';
 import { ProtectedRoute } from '../../components/ProtectedRoute';
 import toast from 'react-hot-toast';
 
@@ -29,7 +30,8 @@ const DivvyDetailContent: React.FC = () => {
   const [isExpenseModalOpen, setIsExpenseModalOpen] = useState(false);
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
 
-  // Expense Form
+  // Expense Form State
+  const [editingExpenseId, setEditingExpenseId] = useState<string | null>(null);
   const [amount, setAmount] = useState('');
   const [category, setCategory] = useState('food');
   const [desc, setDesc] = useState('');
@@ -73,33 +75,72 @@ const DivvyDetailContent: React.FC = () => {
     }
   };
 
-  const handleAddExpense = async (e: React.FormEvent) => {
+  const handleOpenAddExpense = () => {
+    setEditingExpenseId(null);
+    setAmount('');
+    setCategory('food');
+    setDesc('');
+    setIsExpenseModalOpen(true);
+  };
+
+  const handleOpenEditExpense = (exp: Expense) => {
+    setEditingExpenseId(exp.id);
+    setAmount(exp.amount.toString());
+    setCategory(exp.category);
+    setDesc(exp.description);
+    setIsExpenseModalOpen(true);
+  };
+
+  const handleSaveExpense = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user || !divvy) return;
     setSubmitLoading(true);
 
     try {
-      // 1. Create Expense
-      const { data: expense, error: expError } = await supabase
-        .from('expenses')
-        .insert({
-          divvy_id: divvy.id,
-          paid_by_user_id: user.id,
-          amount: parseFloat(amount),
-          category,
-          description: desc,
-          date: new Date().toISOString().split('T')[0],
-        })
-        .select()
-        .single();
+      let expenseId = editingExpenseId;
 
-      if (expError) throw expError;
+      if (editingExpenseId) {
+        // UPDATE existing expense
+        const { error: updateError } = await supabase
+          .from('expenses')
+          .update({
+            amount: parseFloat(amount),
+            category,
+            description: desc,
+            // Mantém data original ou atualiza se desejado. Aqui mantemos simples.
+          })
+          .eq('id', editingExpenseId);
 
-      // 2. Create Splits (Simplified: Even split for all members for MVP)
-      if (expense && members.length > 0) {
+        if (updateError) throw updateError;
+      } else {
+        // CREATE new expense
+        const { data: newExpense, error: insertError } = await supabase
+          .from('expenses')
+          .insert({
+            divvy_id: divvy.id,
+            paid_by_user_id: user.id,
+            amount: parseFloat(amount),
+            category,
+            description: desc,
+            date: new Date().toISOString().split('T')[0],
+          })
+          .select()
+          .single();
+
+        if (insertError) throw insertError;
+        if (newExpense) expenseId = newExpense.id;
+      }
+
+      // RECALCULATE SPLITS (Simplified Strategy: Delete old splits & create new even splits)
+      // This happens for both Create and Update to ensure consistency if amount/members changed.
+      if (expenseId && members.length > 0) {
+        // 1. Delete existing splits
+        await supabase.from('expense_splits').delete().eq('expense_id', expenseId);
+
+        // 2. Create new splits
         const splitAmount = parseFloat(amount) / members.length;
         const splits = members.map(m => ({
-          expense_id: expense.id,
+          expense_id: expenseId,
           participant_user_id: m.user_id,
           amount_owed: splitAmount
         }));
@@ -107,16 +148,28 @@ const DivvyDetailContent: React.FC = () => {
         await supabase.from('expense_splits').insert(splits);
       }
 
-      toast.success('Despesa adicionada!');
+      toast.success(editingExpenseId ? 'Despesa atualizada!' : 'Despesa adicionada!');
       setIsExpenseModalOpen(false);
-      setAmount('');
-      setDesc('');
       fetchDivvyData();
-    } catch (error) {
-      console.error('Error adding expense:', error);
-      toast.error('Falha ao adicionar despesa');
+    } catch (error: any) {
+      console.error('Error saving expense:', error);
+      toast.error('Erro ao salvar despesa: ' + error.message);
     } finally {
       setSubmitLoading(false);
+    }
+  };
+
+  const handleDeleteExpense = async (expenseId: string) => {
+    if (!confirm('Tem certeza que deseja excluir esta despesa?')) return;
+    
+    try {
+      const { error } = await supabase.from('expenses').delete().eq('id', expenseId);
+      if (error) throw error;
+      toast.success('Despesa excluída');
+      fetchDivvyData();
+    } catch (err: any) {
+      console.error(err);
+      toast.error('Erro ao excluir: ' + err.message);
     }
   };
 
@@ -125,14 +178,14 @@ const DivvyDetailContent: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      <DivvyHeader divvy={divvy} />
+      <DivvyHeader divvy={divvy} onUpdate={fetchDivvyData} />
 
       <div className="flex justify-end gap-3 px-1">
         <Button variant="outline" onClick={() => setIsInviteModalOpen(true)}>
           <UserPlus size={18} className="mr-2" />
           Convidar
         </Button>
-        <Button onClick={() => setIsExpenseModalOpen(true)}>
+        <Button onClick={handleOpenAddExpense}>
           <Plus size={18} className="mr-2" />
           Nova Despesa
         </Button>
@@ -182,26 +235,52 @@ const DivvyDetailContent: React.FC = () => {
             {expenses.length === 0 ? (
               <EmptyState />
             ) : (
-              expenses.map((exp) => (
-                <div key={exp.id} className="bg-white p-4 rounded-lg shadow-sm border border-gray-100 flex justify-between items-center">
-                  <div className="flex items-center gap-4">
-                    <div className="h-10 w-10 rounded-full bg-brand-50 flex items-center justify-center text-xl">
-                      {exp.category === 'food' ? '🍽️' : 
-                       exp.category === 'transport' ? '🚗' : 
-                       exp.category === 'accommodation' ? '🏨' : 
-                       exp.category === 'activity' ? '🎬' : '💰'}
+              expenses.map((exp) => {
+                const canEdit = user?.id === exp.paid_by_user_id;
+                
+                return (
+                  <div key={exp.id} className="bg-white p-4 rounded-lg shadow-sm border border-gray-100 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                    <div className="flex items-center gap-4 flex-1">
+                      <div className="h-10 w-10 rounded-full bg-brand-50 flex items-center justify-center text-xl flex-shrink-0">
+                        {exp.category === 'food' ? '🍽️' : 
+                         exp.category === 'transport' ? '🚗' : 
+                         exp.category === 'accommodation' ? '🏨' : 
+                         exp.category === 'activity' ? '🎬' : '💰'}
+                      </div>
+                      <div>
+                        <p className="font-medium text-gray-900">{exp.description || exp.category}</p>
+                        <p className="text-sm text-gray-500">{new Date(exp.date).toLocaleDateString()}</p>
+                      </div>
                     </div>
-                    <div>
-                      <p className="font-medium text-gray-900">{exp.description || exp.category}</p>
-                      <p className="text-sm text-gray-500">{new Date(exp.date).toLocaleDateString()}</p>
+                    
+                    <div className="flex items-center gap-4 w-full sm:w-auto justify-between sm:justify-end">
+                      <div className="text-right mr-2">
+                        <p className="font-bold text-gray-900">R$ {exp.amount.toFixed(2)}</p>
+                        <p className="text-xs text-gray-400">Pago por {members.find(m => m.user_id === exp.paid_by_user_id)?.email.split('@')[0] || 'Desconhecido'}</p>
+                      </div>
+                      
+                      {canEdit && (
+                        <div className="flex gap-1">
+                          <button 
+                            onClick={() => handleOpenEditExpense(exp)}
+                            className="p-2 text-gray-400 hover:text-brand-600 hover:bg-brand-50 rounded-full transition-colors"
+                            title="Editar"
+                          >
+                            <Pencil size={16} />
+                          </button>
+                          <button 
+                            onClick={() => handleDeleteExpense(exp.id)}
+                            className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-full transition-colors"
+                            title="Excluir"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        </div>
+                      )}
                     </div>
                   </div>
-                  <div className="text-right">
-                    <p className="font-bold text-gray-900">R$ {exp.amount.toFixed(2)}</p>
-                    <p className="text-xs text-gray-400">Pago por {members.find(m => m.user_id === exp.paid_by_user_id)?.email.split('@')[0] || 'Desconhecido'}</p>
-                  </div>
-                </div>
-              ))
+                );
+              })
             )}
           </div>
         )}
@@ -229,8 +308,12 @@ const DivvyDetailContent: React.FC = () => {
         )}
       </div>
 
-      <Modal isOpen={isExpenseModalOpen} onClose={() => setIsExpenseModalOpen(false)} title="Adicionar Despesa">
-        <form onSubmit={handleAddExpense} className="space-y-4">
+      <Modal 
+        isOpen={isExpenseModalOpen} 
+        onClose={() => setIsExpenseModalOpen(false)} 
+        title={editingExpenseId ? "Editar Despesa" : "Adicionar Despesa"}
+      >
+        <form onSubmit={handleSaveExpense} className="space-y-4">
           <Input
              label="Valor (R$)"
              type="number"
@@ -264,7 +347,9 @@ const DivvyDetailContent: React.FC = () => {
           />
           <div className="flex justify-end gap-3 mt-4">
              <Button type="button" variant="outline" onClick={() => setIsExpenseModalOpen(false)}>Cancelar</Button>
-             <Button type="submit" isLoading={submitLoading}>Salvar</Button>
+             <Button type="submit" isLoading={submitLoading}>
+               {editingExpenseId ? 'Salvar Alterações' : 'Salvar'}
+             </Button>
           </div>
         </form>
       </Modal>

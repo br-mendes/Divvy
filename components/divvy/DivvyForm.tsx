@@ -1,13 +1,15 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { supabase } from '../../lib/supabase';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
+import { Divvy } from '../../types';
 import toast from 'react-hot-toast';
 
 interface DivvyFormProps {
   onSuccess: () => void;
+  initialData?: Divvy;
 }
 
 const divvyTypes = [
@@ -17,12 +19,20 @@ const divvyTypes = [
   { value: 'general', label: '💰 Geral' },
 ];
 
-export default function DivvyForm({ onSuccess }: DivvyFormProps) {
+export default function DivvyForm({ onSuccess, initialData }: DivvyFormProps) {
   const { user } = useAuth();
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [type, setType] = useState('trip');
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (initialData) {
+      setName(initialData.name);
+      setDescription(initialData.description || '');
+      setType(initialData.type);
+    }
+  }, [initialData]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -37,31 +47,50 @@ export default function DivvyForm({ onSuccess }: DivvyFormProps) {
     try {
       if (!user) throw new Error("Usuário não autenticado");
 
-      // 1. Create Divvy
-      // O banco de dados possui um TRIGGER que adiciona automaticamente o criador como admin em divvy_members.
-      const { data: divvy, error } = await supabase.from('divvies').insert({
-        name,
-        description,
-        type,
-        creator_id: user.id
-      }).select().single();
+      if (initialData) {
+        // UPDATE Existing Divvy
+        const { error } = await supabase
+          .from('divvies')
+          .update({
+            name,
+            description,
+            type,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', initialData.id);
 
-      if (error) {
-        console.error('Erro ao criar divvy:', error);
-        if (error.code === '42501') {
-           throw new Error('Permissão negada. Verifique suas credenciais.');
+        if (error) throw error;
+        toast.success('Divvy atualizado com sucesso!');
+      } else {
+        // CREATE New Divvy
+        // O banco de dados possui um TRIGGER que adiciona automaticamente o criador como admin.
+        const { error } = await supabase.from('divvies').insert({
+          name,
+          description,
+          type,
+          creator_id: user.id
+        });
+
+        if (error) {
+           console.error('Erro ao criar divvy:', error);
+           if (error.code === '42501') {
+              throw new Error('Permissão negada. Verifique suas credenciais.');
+           }
+           throw new Error(`Erro ao criar grupo: ${error.message}`);
         }
-        throw new Error(`Erro ao criar grupo: ${error.message}`);
+        toast.success('Divvy criado com sucesso!');
       }
 
-      setName('');
-      setDescription('');
-      setType('trip');
-      toast.success('Divvy criado com sucesso!');
+      if (!initialData) {
+        setName('');
+        setDescription('');
+        setType('trip');
+      }
+      
       onSuccess();
     } catch (err: any) {
       console.error(err);
-      toast.error(err.message || 'Erro ao criar Divvy');
+      toast.error(err.message || 'Erro ao salvar Divvy');
     } finally {
       setLoading(false);
     }
@@ -69,7 +98,9 @@ export default function DivvyForm({ onSuccess }: DivvyFormProps) {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
-      <h3 className="text-lg font-semibold text-gray-900 mb-4">Criar novo Divvy</h3>
+      <h3 className="text-lg font-semibold text-gray-900 mb-4">
+        {initialData ? 'Editar Divvy' : 'Criar novo Divvy'}
+      </h3>
       <Input
         id="divvy-name"
         label="Nome"
@@ -116,7 +147,7 @@ export default function DivvyForm({ onSuccess }: DivvyFormProps) {
           disabled={!name.trim()}
           isLoading={loading}
         >
-          Criar Divvy
+          {initialData ? 'Salvar Alterações' : 'Criar Divvy'}
         </Button>
       </div>
     </form>
