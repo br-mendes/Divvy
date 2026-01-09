@@ -38,34 +38,43 @@ export default function DivvyForm({ onSuccess }: DivvyFormProps) {
       if (!user) throw new Error("Usuário não autenticado");
 
       // 1. Create Divvy
+      // Removido is_archived para evitar violação de RLS e usar o default do banco
       const { data: divvy, error } = await supabase.from('divvies').insert({
         name,
         description,
         type,
-        creator_id: user.id,
-        is_archived: false
+        creator_id: user.id
       }).select().single();
 
       if (error) {
         console.error('Erro ao criar divvy:', error);
+        if (error.code === '42501') {
+           throw new Error('Permissão negada. Verifique suas credenciais.');
+        }
         throw new Error(`Erro ao criar grupo: ${error.message}`);
       }
 
       // 2. Add creator as admin member
-      // Try to insert member, but handle cases where trigger might have already done it
       if (divvy) {
-        const { error: memberError } = await supabase.from('divvy_members').insert({
-          divvy_id: divvy.id,
-          user_id: user.id,
-          email: user.email || '',
-          role: 'admin',
-        });
+        // Verificar se já é membro (caso exista trigger no banco)
+        const { data: existingMember } = await supabase
+          .from('divvy_members')
+          .select('id')
+          .eq('divvy_id', divvy.id)
+          .eq('user_id', user.id)
+          .single();
 
-        if (memberError) {
-          // If error is NOT duplicate key, we log it. 
-          // Duplicate key means user was likely added by a DB trigger, which is fine.
-          if (!memberError.message?.toLowerCase().includes('duplicate')) {
-             console.warn('Aviso ao adicionar membro:', memberError);
+        if (!existingMember) {
+          const { error: memberError } = await supabase.from('divvy_members').insert({
+            divvy_id: divvy.id,
+            user_id: user.id,
+            email: user.email || '',
+            role: 'admin',
+          });
+
+          if (memberError) {
+            console.warn('Aviso ao adicionar membro:', memberError);
+            // Não lançamos erro fatal aqui pois o grupo já foi criado
           }
         }
       }
