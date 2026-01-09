@@ -1,3 +1,4 @@
+
 import React from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
@@ -15,10 +16,16 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
 
   const isActive = (path: string) => router.pathname === path;
 
-  // Extrair iniciais ou usar avatar
-  const userName = user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'Usuário';
+  // Prioridade: Apelido > Nome Completo > Email
+  const nickname = user?.user_metadata?.nickname;
+  const fullName = user?.user_metadata?.full_name;
+  const emailName = user?.email?.split('@')[0];
+  
+  const displayName = nickname || fullName || emailName || 'Usuário';
+  const displayEmail = user?.email;
+
   const userAvatar = user?.user_metadata?.avatar_url;
-  const userInitial = userName.charAt(0).toUpperCase();
+  const userInitial = displayName.charAt(0).toUpperCase();
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col md:flex-row">
@@ -67,8 +74,8 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
                   )}
                </div>
                <div className="flex-1 min-w-0">
-                 <p className="text-sm font-medium text-gray-900 truncate group-hover:text-brand-700">{userName}</p>
-                 <p className="text-xs text-gray-500 truncate">{user?.email}</p>
+                 <p className="text-sm font-medium text-gray-900 truncate group-hover:text-brand-700">{displayName}</p>
+                 <p className="text-xs text-gray-500 truncate">{displayEmail}</p>
                </div>
             </Link>
             <button

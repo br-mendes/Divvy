@@ -3,8 +3,17 @@ export interface User {
   id: string;
   email: string;
   full_name?: string;
+  nickname?: string;
   avatar_url?: string;
   created_at: string;
+}
+
+export interface Profile {
+  id: string;
+  email: string;
+  full_name?: string;
+  nickname?: string;
+  avatar_url?: string;
 }
 
 export type DivvyType = 'trip' | 'roommate' | 'event' | 'general';
@@ -25,9 +34,11 @@ export interface DivvyMember {
   id: string;
   divvy_id: string;
   user_id: string;
-  email: string;
+  email: string; // Mantido para fallback
   role: 'admin' | 'member';
   joined_at: string;
+  // Dados unidos da tabela profiles
+  profiles?: Profile;
 }
 
 export type ExpenseCategory =

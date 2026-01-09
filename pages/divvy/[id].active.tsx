@@ -45,7 +45,6 @@ const DivvyDetailContent: React.FC = () => {
   
   // Split State
   const [splitMode, setSplitMode] = useState<SplitMode>('equal');
-  // Stores the input value for each user (boolean for equal, number for amount/percentage)
   const [splitValues, setSplitValues] = useState<Record<string, number>>({});
 
   useEffect(() => {
@@ -59,7 +58,21 @@ const DivvyDetailContent: React.FC = () => {
       const { data: divvyData } = await supabase.from('divvies').select('*').eq('id', id).single();
       setDivvy(divvyData);
 
-      const { data: memberData } = await supabase.from('divvy_members').select('*').eq('divvy_id', id);
+      // Fetch members and join with profiles to get names/avatars
+      const { data: memberData } = await supabase
+        .from('divvy_members')
+        .select(`
+          *,
+          profiles:user_id (
+            id,
+            full_name,
+            nickname,
+            avatar_url,
+            email
+          )
+        `)
+        .eq('divvy_id', id);
+        
       setMembers(memberData || []);
 
       const { data: expenseData } = await supabase.from('expenses').select('*').eq('divvy_id', id).order('date', { ascending: false });
@@ -72,6 +85,34 @@ const DivvyDetailContent: React.FC = () => {
     }
   };
 
+  // Helper para obter nome de exibição (Apelido > Nome > Email)
+  const getMemberName = (userId: string) => {
+    const member = members.find(m => m.user_id === userId);
+    if (!member) return 'Desconhecido';
+    
+    // Se for o próprio usuário, indica (Você)
+    const isMe = userId === user?.id;
+    
+    const profile = member.profiles;
+    let displayName = member.email; // Fallback
+
+    if (profile) {
+       displayName = profile.nickname || profile.full_name || profile.email;
+    }
+
+    // Se o email ainda for o fallback, tenta pegar apenas a parte antes do @
+    if (displayName.includes('@')) {
+        displayName = displayName.split('@')[0];
+    }
+    
+    return isMe ? `${displayName} (Você)` : displayName;
+  };
+
+  const getMemberAvatar = (userId: string) => {
+    const member = members.find(m => m.user_id === userId);
+    return member?.profiles?.avatar_url;
+  };
+
   // --- Handlers for Modal Opening ---
 
   const handleOpenAddExpense = () => {
@@ -81,10 +122,9 @@ const DivvyDetailContent: React.FC = () => {
     setCategory('food');
     setDesc('');
     setDate(new Date().toISOString().split('T')[0]);
-    setPayerId(user.id); // Default to current user
+    setPayerId(user.id);
     setSplitMode('equal');
     
-    // Initialize equal split: everyone selected (1)
     const initialSplits: Record<string, number> = {};
     members.forEach(m => initialSplits[m.user_id] = 1);
     setSplitValues(initialSplits);
@@ -100,40 +140,30 @@ const DivvyDetailContent: React.FC = () => {
     setDate(exp.date);
     setPayerId(exp.paid_by_user_id);
 
-    // Fetch existing splits to populate form
-    const { data: splits } = await supabase
+    const { data: splitsData } = await supabase
       .from('expense_splits')
       .select('*')
       .eq('expense_id', exp.id);
+    
+    // Explicitly cast to ExpenseSplit[] to ensure types are correct
+    const splits = splitsData as ExpenseSplit[] | null;
 
     if (splits && splits.length > 0) {
       const loadedSplits: Record<string, number> = {};
-      const totalAmount = exp.amount;
-      
-      // Check if it looks like an equal split (all non-zero splits are equal)
-      // We use a small epsilon for float comparison
       const firstAmount = splits[0].amount_owed;
       const isRoughlyEqual = splits.every(s => Math.abs(s.amount_owed - firstAmount) < 0.02);
       
-      // Also need to check if *everyone* in the group was included for it to be a "simple equal",
-      // otherwise it's a "subset equal". Our logic handles subset equal fine.
-      
       if (isRoughlyEqual) {
         setSplitMode('equal');
-        // Initialize all as 0 (unselected) first
         members.forEach(m => loadedSplits[m.user_id] = 0);
-        // Set participants as 1 (selected)
         splits.forEach(s => loadedSplits[s.participant_user_id] = 1);
       } else {
         setSplitMode('amount');
-        // Initialize all as 0
         members.forEach(m => loadedSplits[m.user_id] = 0);
-        // Fill actual amounts
         splits.forEach(s => loadedSplits[s.participant_user_id] = s.amount_owed);
       }
       setSplitValues(loadedSplits);
     } else {
-        // Fallback if no splits found
         setSplitMode('equal');
         const initialSplits: Record<string, number> = {};
         members.forEach(m => initialSplits[m.user_id] = 1);
@@ -165,7 +195,7 @@ const DivvyDetailContent: React.FC = () => {
     else if (splitMode === 'amount') {
       currentTotal = Object.values(splitValues).reduce((a: number, b: number) => a + b, 0);
       const diff = totalAmount - currentTotal;
-      if (Math.abs(diff) > 0.02) { // Tolerance for float math
+      if (Math.abs(diff) > 0.02) {
         isValid = false;
         if (diff > 0) message = `Faltam R$ ${diff.toFixed(2)}`;
         else message = `Passou R$ ${Math.abs(diff).toFixed(2)}`;
@@ -205,8 +235,6 @@ const DivvyDetailContent: React.FC = () => {
     }));
   };
 
-  // --- Save Handler ---
-
   const handleSaveExpense = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user || !divvy || !isSplitValid) return;
@@ -215,7 +243,6 @@ const DivvyDetailContent: React.FC = () => {
     try {
       let expenseId = editingExpenseId;
 
-      // 1. Upsert Expense
       const expenseData = {
         divvy_id: divvy.id,
         paid_by_user_id: payerId,
@@ -235,9 +262,7 @@ const DivvyDetailContent: React.FC = () => {
         expenseId = data.id;
       }
 
-      // 2. Calculate Splits based on mode
       if (expenseId) {
-        // Delete old splits
         await supabase.from('expense_splits').delete().eq('expense_id', expenseId);
 
         let splitsToInsert: any[] = [];
@@ -349,8 +374,6 @@ const DivvyDetailContent: React.FC = () => {
         {activeTab === 'expenses' && (
           <div className="space-y-4">
             {expenses.length === 0 ? <EmptyState /> : expenses.map((exp) => {
-              const payerName = members.find(m => m.user_id === exp.paid_by_user_id)?.email.split('@')[0] || 'Desconhecido';
-              // Check permissions: Creator of Divvy OR Payer of Expense can edit/delete
               const canEdit = user?.id === exp.paid_by_user_id || user?.id === divvy.creator_id;
               
               return (
@@ -367,7 +390,7 @@ const DivvyDetailContent: React.FC = () => {
                       <div className="text-sm text-gray-500 flex gap-2">
                         <span>{new Date(exp.date).toLocaleDateString()}</span>
                         <span>•</span>
-                        <span>Pago por <strong>{payerName}</strong></span>
+                        <span>Pago por <strong>{getMemberName(exp.paid_by_user_id)}</strong></span>
                       </div>
                     </div>
                   </div>
@@ -410,17 +433,28 @@ const DivvyDetailContent: React.FC = () => {
 
         {activeTab === 'members' && (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {members.map(member => (
-              <div key={member.id} className="bg-white p-4 rounded-lg border border-gray-100 flex items-center gap-3">
-                <div className="h-10 w-10 rounded-full bg-gray-200 flex items-center justify-center text-gray-600 font-bold">
-                  {member.email.charAt(0).toUpperCase()}
+            {members.map(member => {
+              const avatar = member.profiles?.avatar_url;
+              const name = getMemberName(member.user_id);
+              
+              return (
+                <div key={member.id} className="bg-white p-4 rounded-lg border border-gray-100 flex items-center gap-3">
+                  {avatar ? (
+                     <img src={avatar} alt={name} className="h-10 w-10 rounded-full object-cover border border-gray-200" />
+                  ) : (
+                    <div className="h-10 w-10 rounded-full bg-brand-100 flex items-center justify-center text-brand-600 font-bold border border-brand-200">
+                      {name.charAt(0).toUpperCase()}
+                    </div>
+                  )}
+                  <div>
+                    <p className="font-medium text-gray-900">
+                      {name}
+                    </p>
+                    <p className="text-xs text-gray-500 capitalize">{member.role === 'admin' ? '👑 Admin' : 'Membro'}</p>
+                  </div>
                 </div>
-                <div>
-                  <p className="font-medium text-gray-900">{member.email}</p>
-                  <p className="text-xs text-gray-500 capitalize">{member.role}</p>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
@@ -489,7 +523,7 @@ const DivvyDetailContent: React.FC = () => {
             >
               {members.map(m => (
                 <option key={m.id} value={m.user_id}>
-                  {m.email} {m.user_id === user?.id ? '(Você)' : ''}
+                  {getMemberName(m.user_id)}
                 </option>
               ))}
             </select>
@@ -499,7 +533,6 @@ const DivvyDetailContent: React.FC = () => {
           <div className="border-t border-gray-100 pt-4">
             <label className="block text-sm font-medium text-gray-700 mb-3">Como dividir?</label>
             
-            {/* Tabs de Divisão */}
             <div className="flex bg-gray-100 p-1 rounded-lg mb-4">
               <button
                 type="button"
@@ -524,63 +557,70 @@ const DivvyDetailContent: React.FC = () => {
               </button>
             </div>
 
-            {/* Lista de Membros para Divisão */}
             <div className="space-y-3 max-h-60 overflow-y-auto pr-2 custom-scrollbar">
-              {members.map(m => (
-                <div key={m.id} className="flex items-center justify-between p-2 hover:bg-gray-50 rounded-lg">
-                  <div className="flex items-center gap-2 overflow-hidden">
-                    <div className="h-8 w-8 rounded-full bg-brand-100 flex items-center justify-center text-xs font-bold text-brand-700 flex-shrink-0">
-                      {m.email.substring(0, 2).toUpperCase()}
+              {members.map(m => {
+                const name = getMemberName(m.user_id);
+                const avatar = m.profiles?.avatar_url;
+
+                return (
+                  <div key={m.id} className="flex items-center justify-between p-2 hover:bg-gray-50 rounded-lg">
+                    <div className="flex items-center gap-2 overflow-hidden">
+                      {avatar ? (
+                        <img src={avatar} alt="Avatar" className="h-8 w-8 rounded-full object-cover flex-shrink-0" />
+                      ) : (
+                        <div className="h-8 w-8 rounded-full bg-brand-100 flex items-center justify-center text-xs font-bold text-brand-700 flex-shrink-0">
+                          {name.charAt(0).toUpperCase()}
+                        </div>
+                      )}
+                      <span className="text-sm text-gray-700 truncate">{name}</span>
                     </div>
-                    <span className="text-sm text-gray-700 truncate">{m.email}</span>
+
+                    <div className="flex items-center gap-2">
+                      {splitMode === 'equal' && (
+                         <button
+                           type="button"
+                           onClick={() => handleToggleMember(m.user_id)}
+                           className={`w-6 h-6 rounded border flex items-center justify-center transition-colors ${splitValues[m.user_id] === 1 ? 'bg-brand-600 border-brand-600 text-white' : 'border-gray-300 text-transparent'}`}
+                         >
+                           <Check size={14} />
+                         </button>
+                      )}
+
+                      {splitMode === 'amount' && (
+                         <div className="relative w-24">
+                            <span className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400 text-xs">R$</span>
+                            <input 
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              value={splitValues[m.user_id] || ''}
+                              onChange={(e) => handleSplitChange(m.user_id, e.target.value)}
+                              className="w-full pl-6 pr-2 py-1 text-right text-sm border border-gray-300 rounded focus:border-brand-500 focus:outline-none"
+                              placeholder="0.00"
+                            />
+                         </div>
+                      )}
+
+                      {splitMode === 'percentage' && (
+                         <div className="relative w-20">
+                            <input 
+                              type="number"
+                              min="0"
+                              max="100"
+                              value={splitValues[m.user_id] || ''}
+                              onChange={(e) => handleSplitChange(m.user_id, e.target.value)}
+                              className="w-full pl-2 pr-6 py-1 text-right text-sm border border-gray-300 rounded focus:border-brand-500 focus:outline-none"
+                              placeholder="0"
+                            />
+                            <span className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 text-xs">%</span>
+                         </div>
+                      )}
+                    </div>
                   </div>
-
-                  <div className="flex items-center gap-2">
-                    {splitMode === 'equal' && (
-                       <button
-                         type="button"
-                         onClick={() => handleToggleMember(m.user_id)}
-                         className={`w-6 h-6 rounded border flex items-center justify-center transition-colors ${splitValues[m.user_id] === 1 ? 'bg-brand-600 border-brand-600 text-white' : 'border-gray-300 text-transparent'}`}
-                       >
-                         <Check size={14} />
-                       </button>
-                    )}
-
-                    {splitMode === 'amount' && (
-                       <div className="relative w-24">
-                          <span className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400 text-xs">R$</span>
-                          <input 
-                            type="number"
-                            min="0"
-                            step="0.01"
-                            value={splitValues[m.user_id] || ''}
-                            onChange={(e) => handleSplitChange(m.user_id, e.target.value)}
-                            className="w-full pl-6 pr-2 py-1 text-right text-sm border border-gray-300 rounded focus:border-brand-500 focus:outline-none"
-                            placeholder="0.00"
-                          />
-                       </div>
-                    )}
-
-                    {splitMode === 'percentage' && (
-                       <div className="relative w-20">
-                          <input 
-                            type="number"
-                            min="0"
-                            max="100"
-                            value={splitValues[m.user_id] || ''}
-                            onChange={(e) => handleSplitChange(m.user_id, e.target.value)}
-                            className="w-full pl-2 pr-6 py-1 text-right text-sm border border-gray-300 rounded focus:border-brand-500 focus:outline-none"
-                            placeholder="0"
-                          />
-                          <span className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 text-xs">%</span>
-                       </div>
-                    )}
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
 
-            {/* Validation Message */}
             <div className={`mt-4 p-3 rounded-lg flex items-center gap-2 text-sm ${isSplitValid ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>
                {isSplitValid ? <Check size={16} /> : <AlertCircle size={16} />}
                <span className="font-medium">{splitMessage}</span>
