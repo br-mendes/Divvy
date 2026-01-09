@@ -5,4 +5,10 @@ import react from '@vitejs/plugin-react';
 export default defineConfig({
   plugins: [react()],
   base: './', // Essential for GitHub Pages to resolve assets correctly
+  build: {
+    sourcemap: false, // Matches productionBrowserSourceMaps: false
+  },
+  optimizeDeps: {
+    include: ['@supabase/supabase-js'], // Pre-bundle Supabase client
+  },
 });
