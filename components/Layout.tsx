@@ -1,12 +1,11 @@
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import DivvyLogo from './branding/DivvyLogo';
 import { 
   LogOut, 
   LayoutDashboard, 
-  Plus,
   User,
-  Wallet
 } from 'lucide-react';
 
 export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -21,10 +20,8 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
       <aside className="bg-white border-b md:border-b-0 md:border-r border-gray-200 w-full md:w-64 flex-shrink-0">
         <div className="p-4 md:p-6 flex flex-row md:flex-col justify-between items-center md:items-stretch h-full">
           <div className="flex flex-row md:flex-col items-center md:items-start w-full gap-4 md:gap-8">
-            <Link to="/" className="flex items-center gap-2 px-2">
-              <div className="bg-brand-600 text-white p-1.5 rounded-lg">
-                <Wallet size={24} />
-              </div>
+            <Link to="/" className="flex items-center gap-3 px-2">
+              <DivvyLogo className="w-8 h-8" />
               <span className="text-xl font-bold text-gray-900">Divvy</span>
             </Link>
 

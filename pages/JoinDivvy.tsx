@@ -3,6 +3,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 import { Button } from '../components/ui/Button';
+import LoadingSpinner from '../components/ui/LoadingSpinner';
 import toast, { Toaster } from 'react-hot-toast';
 
 export const JoinDivvy: React.FC = () => {
@@ -126,7 +127,7 @@ export const JoinDivvy: React.FC = () => {
   if (loading || authLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-brand-600"></div>
+        <LoadingSpinner />
       </div>
     );
   }

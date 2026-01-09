@@ -6,6 +6,8 @@ import { Divvy } from '../types';
 import { Button } from '../components/ui/Button';
 import DivvyList from '../components/divvy/DivvyList';
 import DivvyForm from '../components/divvy/DivvyForm';
+import LoadingSpinner from '../components/ui/LoadingSpinner';
+import EmptyState from '../components/ui/EmptyState';
 import toast, { Toaster } from 'react-hot-toast';
 
 export const Dashboard: React.FC = () => {
@@ -71,10 +73,7 @@ export const Dashboard: React.FC = () => {
   if (authLoading) {
     return (
       <div className="flex justify-center items-center min-h-[50vh]">
-        <div className="text-center">
-          <div className="animate-spin text-brand-600 text-4xl mb-4">⏳</div>
-          <p className="text-gray-600">Carregando...</p>
-        </div>
+        <LoadingSpinner />
       </div>
     );
   }
@@ -110,27 +109,25 @@ export const Dashboard: React.FC = () => {
 
         <div>
           {loading ? (
-            <div className="text-center py-12">
-              <div className="animate-spin inline-block w-8 h-8 border-4 border-current border-t-transparent text-brand-600 rounded-full mb-4"></div>
-              <p className="text-gray-600">Carregando seus Divvies...</p>
+            <div className="py-12 flex justify-center">
+              <LoadingSpinner />
             </div>
           ) : divvies.length > 0 ? (
             <DivvyList divvies={divvies} onRefresh={fetchDivvies} />
           ) : (
-            <div className="text-center py-12 bg-white rounded-xl border border-dashed border-gray-300">
-              <div className="text-6xl mb-4">🎉</div>
-              <h2 className="text-2xl font-bold text-gray-900 mb-2">
-                Nenhum Divvy ainda
-              </h2>
-              <p className="text-gray-600 mb-6 max-w-md mx-auto">
-                Crie seu primeiro Divvy para começar a organizar despesas com amigos, família ou viagens.
-              </p>
-              <Button
-                variant="primary"
-                onClick={() => setShowForm(true)}
-              >
-                Criar primeiro Divvy
-              </Button>
+            <div className="flex flex-col items-center">
+              <EmptyState 
+                message="Nenhum Divvy ainda" 
+                description="Crie seu primeiro Divvy para começar a organizar despesas com amigos, família ou viagens."
+              />
+              <div className="mt-4">
+                <Button
+                  variant="primary"
+                  onClick={() => setShowForm(true)}
+                >
+                  Criar primeiro Divvy
+                </Button>
+              </div>
             </div>
           )}
         </div>

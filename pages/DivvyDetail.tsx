@@ -9,6 +9,8 @@ import { Input } from '../components/ui/Input';
 import { ExpenseCharts } from '../components/Charts';
 import DivvyHeader from '../components/divvy/DivvyHeader';
 import InviteModal from '../components/invite/InviteModal';
+import LoadingSpinner from '../components/ui/LoadingSpinner';
+import EmptyState from '../components/ui/EmptyState';
 import { Plus, UserPlus, Receipt, PieChart, Users } from 'lucide-react';
 
 export const DivvyDetail: React.FC = () => {
@@ -115,7 +117,7 @@ export const DivvyDetail: React.FC = () => {
     }
   };
 
-  if (loading) return <div className="flex justify-center p-12"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-600"></div></div>;
+  if (loading) return <div className="flex justify-center p-12"><LoadingSpinner /></div>;
   if (!divvy) return <div className="text-center p-12">Divvy not found</div>;
 
   return (
@@ -179,7 +181,7 @@ export const DivvyDetail: React.FC = () => {
         {activeTab === 'expenses' && (
           <div className="space-y-4">
             {expenses.length === 0 ? (
-              <p className="text-center text-gray-500 py-12">No expenses yet.</p>
+              <EmptyState />
             ) : (
               expenses.map((exp) => (
                 <div key={exp.id} className="bg-white p-4 rounded-lg shadow-sm border border-gray-100 flex justify-between items-center">

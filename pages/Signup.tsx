@@ -3,6 +3,7 @@ import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
+import DivvyLogo from '../components/branding/DivvyLogo';
 import toast, { Toaster } from 'react-hot-toast';
 
 export const Signup: React.FC = () => {
@@ -78,6 +79,11 @@ export const Signup: React.FC = () => {
     <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
       <Toaster position="top-right" />
       <div className="w-full max-w-md bg-white p-8 rounded-lg border border-gray-200 shadow-md">
+        <div className="flex justify-center mb-6">
+          <Link to="/">
+            <DivvyLogo className="w-12 h-12" />
+          </Link>
+        </div>
         <div className="text-center mb-6">
           <h2 className="text-2xl font-bold text-gray-900">Criar conta no Divvy</h2>
           <p className="text-gray-500 mt-2">Comece a organizar suas despesas em grupo</p>

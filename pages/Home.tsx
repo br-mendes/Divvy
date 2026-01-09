@@ -2,6 +2,9 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { Button } from '../components/ui/Button';
+import DivvyLogo from '../components/branding/DivvyLogo';
+import LoadingSpinner from '../components/ui/LoadingSpinner';
+import AnimatedTagline from '../components/home/AnimatedTagline';
 
 export const Home: React.FC = () => {
   const { user, loading } = useAuth();
@@ -9,10 +12,7 @@ export const Home: React.FC = () => {
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin text-brand-600 text-4xl mb-4">⏳</div>
-          <p className="text-gray-600">Carregando...</p>
-        </div>
+        <LoadingSpinner />
       </div>
     );
   }
@@ -22,8 +22,8 @@ export const Home: React.FC = () => {
       {/* Header */}
       <header className="border-b border-gray-200 bg-white/80 backdrop-blur-sm sticky top-0 z-40">
         <div className="max-w-7xl mx-auto px-4 py-4 flex justify-between items-center">
-          <div className="flex items-center gap-2">
-            <span className="text-3xl">💜</span>
+          <div className="flex items-center gap-3">
+            <DivvyLogo className="w-8 h-8" animated={false} />
             <span className="text-2xl font-bold text-gray-900">Divvy</span>
           </div>
 
@@ -60,8 +60,7 @@ export const Home: React.FC = () => {
             </div>
 
             <h1 className="text-5xl md:text-6xl font-bold text-gray-900 leading-tight">
-              Despesas em grupo
-              <span className="text-brand-600"> sem drama</span>
+              <AnimatedTagline />
             </h1>
 
             <p className="text-xl text-gray-600 leading-relaxed">
@@ -85,8 +84,9 @@ export const Home: React.FC = () => {
 
           {/* Right - Illustration */}
           <div className="hidden md:flex justify-center">
-            <div className="bg-gradient-to-br from-brand-600/20 to-purple-200/20 rounded-3xl w-full h-96 flex items-center justify-center">
-              <div className="text-8xl">💰</div>
+            <div className="bg-gradient-to-br from-brand-600/20 to-purple-200/20 rounded-3xl w-full h-96 flex items-center justify-center relative overflow-hidden">
+               <div className="absolute inset-0 bg-grid-slate-100 [mask-image:linear-gradient(0deg,white,rgba(255,255,255,0.6))]"></div>
+               <DivvyLogo className="w-56 h-56 relative z-10" />
             </div>
           </div>
         </div>
@@ -132,9 +132,9 @@ export const Home: React.FC = () => {
               },
               {
                 icon: '💳',
-                title: 'Divida Flexível',
+                title: 'Divisão Flexível',
                 description:
-                  'Divida igualmente, por shares ou valores customizados.',
+                  'Divida igualmente, por porcentagens ou valores customizados.',
               },
               {
                 icon: '✅',
@@ -145,9 +145,9 @@ export const Home: React.FC = () => {
             ].map((feature, idx) => (
               <div
                 key={idx}
-                className="p-6 bg-gray-50 rounded-xl border border-gray-200 hover:shadow-lg transition"
+                className="p-6 bg-gray-50 rounded-xl border border-gray-200 hover:shadow-lg transition group"
               >
-                <div className="text-4xl mb-4">{feature.icon}</div>
+                <div className="text-4xl mb-4 group-hover:scale-110 transition-transform duration-300">{feature.icon}</div>
                 <h3 className="text-xl font-semibold text-gray-900 mb-2">
                   {feature.title}
                 </h3>
@@ -203,7 +203,7 @@ export const Home: React.FC = () => {
             <Button
               variant="primary"
               size="lg"
-              className="bg-white text-brand-600 hover:bg-gray-100"
+              className="bg-white text-brand-600 hover:bg-gray-100 border-none"
             >
               {user ? 'Ir ao Dashboard' : 'Criar Conta Agora'} →
             </Button>
@@ -216,9 +216,9 @@ export const Home: React.FC = () => {
         <div className="max-w-7xl mx-auto px-4">
           <div className="grid md:grid-cols-4 gap-8 mb-8">
             <div>
-              <div className="flex items-center gap-2 mb-4">
-                <span className="text-2xl">💜</span>
-                <span className="font-bold">Divvy</span>
+              <div className="flex items-center gap-3 mb-4">
+                <DivvyLogo className="w-8 h-8" animated={false} />
+                <span className="font-bold text-xl">Divvy</span>
               </div>
               <p className="text-gray-400 text-sm">
                 Despesas em grupo sem drama
@@ -229,12 +229,12 @@ export const Home: React.FC = () => {
               <h4 className="font-semibold mb-4">Produto</h4>
               <ul className="space-y-2 text-sm text-gray-400">
                 <li>
-                  <a href="#features" className="hover:text-white">
+                  <a href="#features" className="hover:text-white transition-colors">
                     Features
                   </a>
                 </li>
                 <li>
-                  <a href="#" className="hover:text-white">
+                  <a href="#" className="hover:text-white transition-colors">
                     Preços
                   </a>
                 </li>
@@ -245,12 +245,12 @@ export const Home: React.FC = () => {
               <h4 className="font-semibold mb-4">Empresa</h4>
               <ul className="space-y-2 text-sm text-gray-400">
                 <li>
-                  <a href="#" className="hover:text-white">
+                  <a href="#" className="hover:text-white transition-colors">
                     Sobre
                   </a>
                 </li>
                 <li>
-                  <a href="#" className="hover:text-white">
+                  <a href="#" className="hover:text-white transition-colors">
                     Blog
                   </a>
                 </li>
@@ -261,12 +261,12 @@ export const Home: React.FC = () => {
               <h4 className="font-semibold mb-4">Legal</h4>
               <ul className="space-y-2 text-sm text-gray-400">
                 <li>
-                  <a href="#" className="hover:text-white">
+                  <a href="#" className="hover:text-white transition-colors">
                     Privacidade
                   </a>
                 </li>
                 <li>
-                  <a href="#" className="hover:text-white">
+                  <a href="#" className="hover:text-white transition-colors">
                     Termos
                   </a>
                 </li>

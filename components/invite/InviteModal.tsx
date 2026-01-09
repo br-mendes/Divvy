@@ -4,6 +4,7 @@ import { useAuth } from '../../context/AuthContext';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
 import { Modal } from '../ui/Modal';
+import SuccessCheck from '../ui/SuccessCheck';
 import toast from 'react-hot-toast';
 import QRCode from 'qrcode';
 
@@ -107,7 +108,7 @@ export default function InviteModal({
     <Modal
       isOpen={isOpen}
       onClose={handleClose}
-      title={`Convidar membro para ${divvyName}`}
+      title={inviteLink ? 'Convite Gerado!' : `Convidar membro para ${divvyName}`}
     >
       {!inviteLink ? (
         <form onSubmit={handleSendInvite} className="space-y-4">
@@ -139,11 +140,12 @@ export default function InviteModal({
           </div>
         </form>
       ) : (
-        <div className="space-y-4">
-          <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
-            <p className="text-sm text-green-700 mb-2 font-medium">✅ Convite gerado!</p>
-            <p className="text-xs text-green-600">
-              Convite para <strong>{email}</strong> registrado.
+        <div className="space-y-6">
+          <div className="flex flex-col items-center justify-center">
+            <SuccessCheck />
+            <p className="text-lg font-bold text-gray-900 mt-2">Convite gerado com sucesso!</p>
+            <p className="text-sm text-gray-500 text-center mt-1">
+              O convite foi registrado para <strong>{email}</strong>
             </p>
           </div>
 
@@ -182,7 +184,7 @@ export default function InviteModal({
             fullWidth
             onClick={handleClose}
           >
-            Fechar
+            Concluir
           </Button>
         </div>
       )}
