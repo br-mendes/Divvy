@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState, useMemo } from 'react';
 import { useRouter } from 'next/router';
 import { supabase } from '../../lib/supabase';
@@ -58,22 +57,33 @@ const DivvyDetailContent: React.FC = () => {
       const { data: divvyData } = await supabase.from('divvies').select('*').eq('id', id).single();
       setDivvy(divvyData);
 
-      // Fetch members and join with profiles to get names/avatars
+      // 1. Fetch Divvy Members
       const { data: memberData } = await supabase
         .from('divvy_members')
-        .select(`
-          *,
-          profiles:user_id (
-            id,
-            full_name,
-            nickname,
-            avatar_url,
-            email
-          )
-        `)
+        .select('*')
         .eq('divvy_id', id);
         
-      setMembers(memberData || []);
+      if (memberData && memberData.length > 0) {
+        // 2. Fetch Profiles for these members separately to ensure we get data
+        // even if foreign keys are not strict or 'profiles' table is handled differently
+        const userIds = memberData.map(m => m.user_id);
+        const { data: profilesData } = await supabase
+          .from('profiles')
+          .select('*')
+          .in('id', userIds);
+
+        // Merge profiles into members
+        const mergedMembers = memberData.map(member => {
+            const profile = profilesData?.find(p => p.id === member.user_id);
+            return {
+                ...member,
+                profiles: profile || null // Assign profile if found
+            };
+        });
+        setMembers(mergedMembers);
+      } else {
+        setMembers([]);
+      }
 
       const { data: expenseData } = await supabase.from('expenses').select('*').eq('divvy_id', id).order('date', { ascending: false });
       setExpenses(expenseData || []);
@@ -93,24 +103,20 @@ const DivvyDetailContent: React.FC = () => {
     // Se for o próprio usuário, indica (Você)
     const isMe = userId === user?.id;
     
+    // Check local profile data from join
     const profile = member.profiles;
-    let displayName = member.email; // Fallback
+    let displayName = member.email; // Fallback to email in member table
 
     if (profile) {
        displayName = profile.nickname || profile.full_name || profile.email;
     }
 
     // Se o email ainda for o fallback, tenta pegar apenas a parte antes do @
-    if (displayName.includes('@')) {
+    if (displayName && displayName.includes('@')) {
         displayName = displayName.split('@')[0];
     }
     
     return isMe ? `${displayName} (Você)` : displayName;
-  };
-
-  const getMemberAvatar = (userId: string) => {
-    const member = members.find(m => m.user_id === userId);
-    return member?.profiles?.avatar_url;
   };
 
   // --- Handlers for Modal Opening ---
@@ -145,7 +151,6 @@ const DivvyDetailContent: React.FC = () => {
       .select('*')
       .eq('expense_id', exp.id);
     
-    // Explicitly cast to ExpenseSplit[] to ensure types are correct
     const splits = splitsData as ExpenseSplit[] | null;
 
     if (splits && splits.length > 0) {
@@ -193,7 +198,7 @@ const DivvyDetailContent: React.FC = () => {
       }
     } 
     else if (splitMode === 'amount') {
-      currentTotal = Object.values(splitValues).reduce((a: number, b: number) => a + b, 0);
+      currentTotal = (Object.values(splitValues) as number[]).reduce((a, b) => a + b, 0);
       const diff = totalAmount - currentTotal;
       if (Math.abs(diff) > 0.02) {
         isValid = false;
@@ -204,7 +209,7 @@ const DivvyDetailContent: React.FC = () => {
       }
     } 
     else if (splitMode === 'percentage') {
-      currentTotal = Object.values(splitValues).reduce((a: number, b: number) => a + b, 0);
+      currentTotal = (Object.values(splitValues) as number[]).reduce((a, b) => a + b, 0);
       const diff = 100 - currentTotal;
       if (Math.abs(diff) > 0.1) {
         isValid = false;

@@ -7,7 +7,8 @@ import DivvyLogo from './branding/DivvyLogo';
 import { 
   LogOut, 
   LayoutDashboard,
-  Settings 
+  Settings,
+  User
 } from 'lucide-react';
 
 export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -30,12 +31,12 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col md:flex-row">
       {/* Sidebar for Desktop / Header for Mobile */}
-      <aside className="bg-white border-b md:border-b-0 md:border-r border-gray-200 w-full md:w-64 flex-shrink-0">
+      <aside className="bg-white border-b md:border-b-0 md:border-r border-gray-200 w-full md:w-64 flex-shrink-0 z-20">
         <div className="p-4 md:p-6 flex flex-row md:flex-col justify-between items-center md:items-stretch h-full">
           <div className="flex flex-row md:flex-col items-center md:items-start w-full gap-4 md:gap-8">
             <Link href="/" className="flex items-center gap-3 px-2">
               <DivvyLogo className="w-8 h-8" />
-              <span className="text-xl font-bold text-gray-900">Divvy</span>
+              <span className="text-xl font-bold text-gray-900 hidden xs:inline">Divvy</span>
             </Link>
 
             <nav className="hidden md:flex flex-col w-full gap-1">
@@ -64,7 +65,17 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
             </nav>
           </div>
 
-          <div className="flex md:flex-col gap-2 md:w-full border-t border-gray-100 md:border-none pt-0 md:pt-4">
+          <div className="flex items-center gap-3 md:flex-col md:items-stretch md:w-full md:border-t border-gray-100 md:pt-4">
+             {/* Mobile Profile Link */}
+             <Link href="/profile" className="flex md:hidden items-center justify-center w-10 h-10 rounded-full bg-gray-100 text-gray-700 hover:bg-gray-200">
+                {userAvatar ? (
+                   <img src={userAvatar} alt="Profile" className="w-full h-full rounded-full object-cover" />
+                ) : (
+                   <User size={20} />
+                )}
+             </Link>
+
+             {/* Desktop Profile Info */}
             <Link href="/profile" className="hidden md:flex items-center gap-3 px-3 py-3 mb-2 hover:bg-gray-50 rounded-lg transition-colors cursor-pointer group">
                <div className="h-8 w-8 rounded-full bg-brand-100 flex-shrink-0 overflow-hidden flex items-center justify-center text-brand-700 font-semibold border border-brand-200">
                   {userAvatar ? (
@@ -78,9 +89,11 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
                  <p className="text-xs text-gray-500 truncate">{displayEmail}</p>
                </div>
             </Link>
+
             <button
               onClick={() => signOut()}
-              className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-red-50 hover:text-red-600 transition-colors w-full"
+              className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-red-50 hover:text-red-600 transition-colors w-full md:w-full"
+              title="Sair"
             >
               <LogOut size={20} />
               <span className="hidden md:inline">Sair</span>
@@ -90,7 +103,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 overflow-y-auto h-[calc(100vh-64px)] md:h-screen">
+      <main className="flex-1 overflow-y-auto h-[calc(100vh-73px)] md:h-screen">
         <div className="max-w-5xl mx-auto p-4 md:p-8">
           {children}
         </div>
