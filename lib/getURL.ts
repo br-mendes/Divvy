@@ -4,8 +4,8 @@
  */
 export const getURL = () => {
   let url =
-    (import.meta as any).env?.VITE_SITE_URL ?? // URL de produção
-    (import.meta as any).env?.VITE_VERCEL_URL ?? // Auto-gerado pela Vercel (se prefixado)
+    process.env.NEXT_PUBLIC_SITE_URL ?? // URL de produção definida manualmente
+    process.env.NEXT_PUBLIC_VERCEL_URL ?? // Auto-gerado pela Vercel
     'http://localhost:3000/'; // Fallback para desenvolvimento
 
   // Garante que tenha https:// quando não for localhost e não tiver protocolo

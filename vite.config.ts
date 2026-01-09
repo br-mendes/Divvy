@@ -1,1 +1,0 @@
-// Vite configuration removed. Project migrated to Next.js.

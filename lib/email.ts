@@ -1,15 +1,5 @@
-// Helper for Vite environment variables
-const getEnv = (key: string) => {
-  try {
-    // Check both standard and VITE_ prefixed variables
-    // @ts-ignore
-    return import.meta.env[key] || import.meta.env[`VITE_${key}`];
-  } catch {
-    return undefined;
-  }
-};
-
-const apiKey = getEnv('RESEND_API_KEY');
+// Helper for environment variables
+const apiKey = process.env.RESEND_API_KEY;
 
 // Helper function to send email via Resend API using fetch directly
 // This avoids importing the 'resend' Node.js package which causes issues in browser-only environments via esm.sh
@@ -21,7 +11,7 @@ async function sendViaResend(payload: any) {
 
   // Note: This will likely fail with CORS if called directly from browser to Resend API
   // unless Resend enables browser access (unlikely for security keys).
-  // But this implementation removes the syntax error crashing the app.
+  // Ideally this should be called from a Next.js API route.
   const response = await fetch('https://api.resend.com/emails', {
     method: 'POST',
     headers: {
@@ -202,7 +192,7 @@ export async function sendInviteEmail(
       </html>
     `;
 
-    const fromEmail = getEnv('RESEND_FROM_EMAIL') || 'noreply@divvy.com';
+    const fromEmail = process.env.NEXT_PUBLIC_RESEND_FROM_EMAIL || 'noreply@divvy.com';
 
     const data = await sendViaResend({
       from: fromEmail,
@@ -357,7 +347,7 @@ export async function sendConfirmationEmail(
       </html>
     `;
 
-    const fromEmail = getEnv('RESEND_FROM_EMAIL') || 'noreply@divvy.com';
+    const fromEmail = process.env.NEXT_PUBLIC_RESEND_FROM_EMAIL || 'noreply@divvy.com';
 
     const data = await sendViaResend({
       from: fromEmail,
@@ -464,7 +454,7 @@ export async function sendExpenseNotificationEmail(
       </html>
     `;
 
-    const fromEmail = getEnv('RESEND_FROM_EMAIL') || 'noreply@divvy.com';
+    const fromEmail = process.env.NEXT_PUBLIC_RESEND_FROM_EMAIL || 'noreply@divvy.com';
 
     const data = await sendViaResend({
       from: fromEmail,
