@@ -1,14 +1,22 @@
 
 /**
  * Dynamic URL helper to ensure redirects point to the correct domain.
+ * Prioritizes window.location.origin on the client side for maximum reliability.
  */
 export const getURL = () => {
+  // Client-side: use the current origin
+  if (typeof window !== 'undefined' && window.location) {
+    const origin = window.location.origin;
+    return origin.endsWith('/') ? origin : `${origin}/`;
+  }
+
+  // Server-side or fallback: use environment variables
   let url =
-    process.env.NEXT_PUBLIC_SITE_URL || // Provided production URL: https://divvy-roan.vercel.app
+    process.env.NEXT_PUBLIC_SITE_URL || 
     process.env.NEXT_PUBLIC_VERCEL_URL || 
     'http://localhost:3000/';
 
-  // Protocol check
+  // Protocol check (Vercel variables often omit it)
   url = url.startsWith('http') ? url : `https://${url}`;
 
   // Trailing slash normalization
