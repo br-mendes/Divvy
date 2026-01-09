@@ -1,3 +1,4 @@
+
 export interface User {
   id: string;
   email: string;
@@ -6,7 +7,7 @@ export interface User {
   created_at: string;
 }
 
-export type DivvyType = 'trip' | 'roommate' | 'couple' | 'event' | 'other';
+export type DivvyType = 'trip' | 'roommate' | 'event' | 'general';
 
 export interface Divvy {
   id: string;
@@ -75,7 +76,7 @@ export interface DivvyInvite {
   divvy_id: string;
   invited_email: string;
   invited_by_user_id: string;
-  status: 'pending' | 'accepted' | 'rejected';
+  status: 'pending' | 'accepted' | 'declined' | 'expired';
   expires_at: string;
   accepted_at?: string;
   created_at: string;

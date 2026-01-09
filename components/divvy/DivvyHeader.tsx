@@ -1,3 +1,4 @@
+
 import React from 'react';
 import Link from 'next/link';
 import { Divvy } from '../../types';
@@ -10,17 +11,15 @@ interface DivvyHeaderProps {
 const typeEmoji: Record<string, string> = {
   trip: '✈️',
   roommate: '🏠',
-  couple: '💜',
   event: '🎉',
-  other: '💰',
+  general: '💰',
 };
 
 const typeLabel: Record<string, string> = {
   trip: 'Viagem',
   roommate: 'República',
-  couple: 'Casal',
   event: 'Evento',
-  other: 'Outro',
+  general: 'Geral',
 };
 
 export default function DivvyHeader({ divvy }: DivvyHeaderProps) {

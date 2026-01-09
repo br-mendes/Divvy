@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { supabase } from '../../lib/supabase';
@@ -12,9 +13,8 @@ interface DivvyFormProps {
 const divvyTypes = [
   { value: 'trip', label: '✈️ Viagem' },
   { value: 'roommate', label: '🏠 República' },
-  { value: 'couple', label: '💜 Casal' },
   { value: 'event', label: '🎉 Evento' },
-  { value: 'other', label: '💰 Outro' },
+  { value: 'general', label: '💰 Geral' },
 ];
 
 export default function DivvyForm({ onSuccess }: DivvyFormProps) {
@@ -38,7 +38,7 @@ export default function DivvyForm({ onSuccess }: DivvyFormProps) {
       if (!user) throw new Error("Usuário não autenticado");
 
       // 1. Create Divvy
-      // Removido is_archived para evitar violação de RLS e usar o default do banco
+      // O banco de dados possui um TRIGGER que adiciona automaticamente o criador como admin em divvy_members.
       const { data: divvy, error } = await supabase.from('divvies').insert({
         name,
         description,
@@ -52,31 +52,6 @@ export default function DivvyForm({ onSuccess }: DivvyFormProps) {
            throw new Error('Permissão negada. Verifique suas credenciais.');
         }
         throw new Error(`Erro ao criar grupo: ${error.message}`);
-      }
-
-      // 2. Add creator as admin member
-      if (divvy) {
-        // Verificar se já é membro (caso exista trigger no banco)
-        const { data: existingMember } = await supabase
-          .from('divvy_members')
-          .select('id')
-          .eq('divvy_id', divvy.id)
-          .eq('user_id', user.id)
-          .single();
-
-        if (!existingMember) {
-          const { error: memberError } = await supabase.from('divvy_members').insert({
-            divvy_id: divvy.id,
-            user_id: user.id,
-            email: user.email || '',
-            role: 'admin',
-          });
-
-          if (memberError) {
-            console.warn('Aviso ao adicionar membro:', memberError);
-            // Não lançamos erro fatal aqui pois o grupo já foi criado
-          }
-        }
       }
 
       setName('');

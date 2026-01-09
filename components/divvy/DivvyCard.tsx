@@ -1,3 +1,4 @@
+
 import React from 'react';
 import Link from 'next/link';
 import { Divvy } from '../../types';
@@ -12,17 +13,15 @@ const DivvyCard: React.FC<DivvyCardProps> = ({ divvy, onRefresh }) => {
   const typeEmoji: Record<string, string> = {
     trip: '✈️',
     roommate: '🏠',
-    couple: '💜',
     event: '🎉',
-    other: '💰',
+    general: '💰',
   };
 
   const typeLabel: Record<string, string> = {
     trip: 'Viagem',
     roommate: 'República',
-    couple: 'Casal',
     event: 'Evento',
-    other: 'Outro',
+    general: 'Geral',
   };
 
   return (
@@ -37,7 +36,7 @@ const DivvyCard: React.FC<DivvyCardProps> = ({ divvy, onRefresh }) => {
       </div>
 
       <h3 className="text-xl font-bold text-gray-900 mt-2 mb-1">{divvy.name}</h3>
-      <p className="text-sm text-brand-600 font-medium mb-4">{typeLabel[divvy.type] || 'Outro'}</p>
+      <p className="text-sm text-brand-600 font-medium mb-4">{typeLabel[divvy.type] || 'Geral'}</p>
 
       {divvy.description && (
         <p className="text-gray-600 text-sm mb-4 line-clamp-2 flex-grow">
