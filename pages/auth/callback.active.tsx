@@ -1,4 +1,3 @@
-
 import React, { useEffect } from 'react';
 import { useRouter } from 'next/router';
 import { supabase } from '../../lib/supabase';
@@ -9,49 +8,51 @@ export default function AuthCallback() {
 
   useEffect(() => {
     const handleCallback = async () => {
-      // Supabase handles the session exchange automatically on the client
-      // but we need to verify we have a session and redirect.
-      
+      // Pequeno delay para garantir que o Supabase Client processe o fragmento da URL (#access_token)
       const { data: { session }, error } = await supabase.auth.getSession();
 
       if (error) {
         console.error('Error during auth callback:', error.message);
-        toast.error('Erro na autenticação. Tente novamente.');
+        toast.error('Erro na autenticação.');
         router.push('/login');
         return;
       }
 
       if (session) {
-        toast.success('Bem-vindo de volta!');
+        toast.success('Login realizado com sucesso!');
         router.push('/dashboard');
       } else {
-        // If no session is found after a short delay, redirect to login
-        const timer = setTimeout(() => {
-          router.push('/login');
-        }, 2000);
-        return () => clearTimeout(timer);
+        // Se não houver sessão imediatamente, esperamos uma mudança de estado
+        const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+          if (session) {
+            subscription.unsubscribe();
+            router.push('/dashboard');
+          }
+        });
+
+        // Timeout de segurança
+        const timeout = setTimeout(() => {
+          subscription.unsubscribe();
+          if (!session) router.push('/login');
+        }, 5000);
+
+        return () => {
+          clearTimeout(timeout);
+          subscription.unsubscribe();
+        };
       }
     };
 
     if (router.isReady) {
       handleCallback();
     }
-
-    // Monitor auth state changes as well (good for some OAuth flows)
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if (session && (event === 'SIGNED_IN' || event === 'INITIAL_SESSION')) {
-        router.push('/dashboard');
-      }
-    });
-
-    return () => subscription.unsubscribe();
   }, [router.isReady, router]);
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50">
-      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-brand-600 mb-4"></div>
-      <h2 className="text-xl font-semibold text-gray-700">Verificando autenticação...</h2>
-      <p className="text-gray-500 mt-2">Aguarde enquanto confirmamos seus dados.</p>
+      <div className="animate-spin rounded-full h-12 w-12 border-4 border-brand-200 border-t-brand-600 mb-4"></div>
+      <h2 className="text-xl font-semibold text-gray-700">Finalizando acesso...</h2>
+      <p className="text-gray-500 mt-2">Você será redirecionado em instantes.</p>
     </div>
   );
 }

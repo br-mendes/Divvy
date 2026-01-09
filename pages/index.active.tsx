@@ -19,9 +19,13 @@ export default function HomePage() {
   async function checkUser() {
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      setUser(session?.user || null);
+      if (session?.user) {
+        setUser(session.user);
+        // Se o usuário já está logado (comum após redirecionamento OAuth), manda direto pro dashboard
+        router.push('/dashboard');
+      }
     } catch (err) {
-      console.error('Erro:', err);
+      console.error('Erro ao verificar usuário:', err);
     } finally {
       setLoading(false);
     }
@@ -31,7 +35,7 @@ export default function HomePage() {
     return (
       <div className="min-h-screen flex items-center justify-center bg-white">
         <div className="text-center">
-          <div className="text-4xl animate-bounce mb-2">⏳</div>
+          <div className="h-12 w-12 border-4 border-brand-200 border-t-brand-600 rounded-full animate-spin mx-auto mb-4"></div>
           <p className="text-gray-500 font-medium">Carregando...</p>
         </div>
       </div>
