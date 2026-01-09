@@ -6,7 +6,7 @@ import { Input } from '../components/ui/Input';
 import DivvyLogo from '../components/branding/DivvyLogo';
 import toast from 'react-hot-toast';
 import Link from 'next/link';
-import { GOOGLE_CLIENT_ID } from '../lib/constants';
+import { getURL } from '../lib/getURL';
 
 export default function Login() {
   const router = useRouter();
@@ -29,12 +29,12 @@ export default function Login() {
 
   async function handleGoogleLogin() {
     setGoogleLoading(true);
+    
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        redirectTo: `${window.location.origin}/auth/callback`,
-        // O Client ID pode ser passado aqui em alguns fluxos específicos, 
-        // mas o Supabase o gerencia via dashboard.
+        // Usa o helper getURL para garantir que o redirecionamento funcione em dev e prod
+        redirectTo: `${getURL()}auth/callback`,
       },
     });
 
