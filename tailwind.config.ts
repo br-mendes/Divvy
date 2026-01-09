@@ -43,6 +43,8 @@ const config: Config = {
         'float': 'float 3s ease-in-out infinite',
         'draw-circle': 'draw-circle 0.5s ease-out forwards',
         'draw-check': 'draw-check 0.5s ease-out 0.5s forwards',
+        'slide-in': 'slide-in 0.5s ease-out forwards',
+        'fade-in-down': 'fade-in-down 0.5s ease-out forwards',
       },
       keyframes: {
         float: {
@@ -56,6 +58,14 @@ const config: Config = {
         'draw-check': {
           '0%': { strokeDashoffset: '100' },
           '100%': { strokeDashoffset: '0' },
+        },
+        'slide-in': {
+          '0%': { transform: 'translateY(20px)', opacity: '0' },
+          '100%': { transform: 'translateY(0)', opacity: '1' },
+        },
+        'fade-in-down': {
+          '0%': { transform: 'translateY(-10px)', opacity: '0' },
+          '100%': { transform: 'translateY(0)', opacity: '1' },
         },
       },
     },
