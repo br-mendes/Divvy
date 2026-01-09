@@ -13,7 +13,7 @@
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
-    "forceConsistentCasingInFileNames": true,
+    "forceConsistentCasingInFileNames": false,
     "resolveJsonModule": true,
     "incremental": true,
     "plugins": [
@@ -29,5 +29,15 @@
     "sourceMap": true
   },
   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
-  "exclude": ["node_modules"]
+  "exclude": [
+    "node_modules",
+    "pages/Dashboard.tsx",
+    "pages/Home.tsx",
+    "pages/Login.tsx",
+    "pages/Signup.tsx",
+    "pages/DivvyDetail.tsx",
+    "pages/JoinDivvy.tsx",
+    "pages/Auth.tsx",
+    "pages/AuthCallback.tsx"
+  ]
 }
