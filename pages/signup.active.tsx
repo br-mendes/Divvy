@@ -10,20 +10,50 @@ import { getURL } from '../lib/getURL';
 
 export default function Signup() {
   const router = useRouter();
+  const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
 
+  // Validação de senha: Min 8 chars, 1 Maiúscula, 1 Minúscula, 1 Número, 1 Especial
+  const validatePassword = (pwd: string) => {
+    const regex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/;
+    return regex.test(pwd);
+  };
+
   async function handleSignup(e: React.FormEvent) {
     e.preventDefault();
+    
+    if (!name.trim()) {
+      toast.error('Por favor, informe seu nome.');
+      return;
+    }
+
+    if (!validatePassword(password)) {
+      toast.error('A senha deve ter no mínimo 8 caracteres, incluir maiúscula, minúscula, número e caractere especial.');
+      return;
+    }
+
     setLoading(true);
-    const { error } = await supabase.auth.signUp({ email, password });
+    
+    // O Supabase Auth armazena o nome nos metadados do usuário
+    const { error } = await supabase.auth.signUp({ 
+      email, 
+      password,
+      options: {
+        data: {
+          full_name: name,
+          avatar_url: `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(name)}` // Avatar padrão inicial
+        }
+      }
+    });
+
     if (error) {
       toast.error(error.message);
       setLoading(false);
     } else {
-      toast.success('Verifique seu email!');
+      toast.success('Cadastro realizado! Verifique seu email.');
       router.push('/login');
     }
   }
@@ -33,10 +63,15 @@ export default function Signup() {
     
     const redirectTo = `${getURL()}/auth/callback`;
 
+    // O login com Google já captura automaticamente name, email e avatar dos metadados do Google
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
         redirectTo,
+        queryParams: {
+          access_type: 'offline',
+          prompt: 'consent',
+        },
       },
     });
 
@@ -55,8 +90,35 @@ export default function Signup() {
         </div>
         
         <form onSubmit={handleSignup} className="space-y-4">
-          <Input label="Email" type="email" value={email} onChange={e => setEmail(e.target.value)} required />
-          <Input label="Senha" type="password" value={password} onChange={e => setPassword(e.target.value)} required />
+          <Input 
+            label="Nome Completo" 
+            type="text" 
+            value={name} 
+            onChange={e => setName(e.target.value)} 
+            required 
+            placeholder="Ex: João Silva"
+          />
+          <Input 
+            label="Email" 
+            type="email" 
+            value={email} 
+            onChange={e => setEmail(e.target.value)} 
+            required 
+            placeholder="seu@email.com"
+          />
+          <div className="space-y-1">
+            <Input 
+              label="Senha" 
+              type="password" 
+              value={password} 
+              onChange={e => setPassword(e.target.value)} 
+              required 
+              placeholder="••••••••"
+            />
+            <p className="text-xs text-gray-500">
+              Mínimo 8 caracteres, maiúscula, minúscula, número e especial.
+            </p>
+          </div>
           <Button type="submit" fullWidth isLoading={loading}>Cadastrar</Button>
         </form>
 
