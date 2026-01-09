@@ -1,9 +1,9 @@
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { useRouter } from 'next/router';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../context/AuthContext';
-import { Divvy, DivvyMember, Expense } from '../../types';
+import { Divvy, DivvyMember, Expense, ExpenseSplit } from '../../types';
 import { Button } from '../../components/ui/Button';
 import { Modal } from '../../components/ui/Modal';
 import { Input } from '../../components/ui/Input';
@@ -12,30 +12,41 @@ import DivvyHeader from '../../components/divvy/DivvyHeader';
 import InviteModal from '../../components/invite/InviteModal';
 import LoadingSpinner from '../../components/ui/LoadingSpinner';
 import EmptyState from '../../components/ui/EmptyState';
-import { Plus, UserPlus, Receipt, PieChart, Users, Pencil, Trash2 } from 'lucide-react';
+import { Plus, UserPlus, Receipt, PieChart, Users, Pencil, Trash2, Check, AlertCircle } from 'lucide-react';
 import { ProtectedRoute } from '../../components/ProtectedRoute';
 import toast from 'react-hot-toast';
+
+type SplitMode = 'equal' | 'amount' | 'percentage';
 
 const DivvyDetailContent: React.FC = () => {
   const router = useRouter();
   const { id } = router.query;
   const { user } = useAuth();
+  
+  // Data State
   const [divvy, setDivvy] = useState<Divvy | null>(null);
   const [members, setMembers] = useState<DivvyMember[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'expenses' | 'charts' | 'members'>('expenses');
   
-  // Modals
+  // UI State
+  const [activeTab, setActiveTab] = useState<'expenses' | 'charts' | 'members'>('expenses');
   const [isExpenseModalOpen, setIsExpenseModalOpen] = useState(false);
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
+  const [submitLoading, setSubmitLoading] = useState(false);
 
   // Expense Form State
   const [editingExpenseId, setEditingExpenseId] = useState<string | null>(null);
   const [amount, setAmount] = useState('');
   const [category, setCategory] = useState('food');
   const [desc, setDesc] = useState('');
-  const [submitLoading, setSubmitLoading] = useState(false);
+  const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+  const [payerId, setPayerId] = useState('');
+  
+  // Split State
+  const [splitMode, setSplitMode] = useState<SplitMode>('equal');
+  // Stores the input value for each user (boolean for equal, number for amount/percentage)
+  const [splitValues, setSplitValues] = useState<Record<string, number>>({});
 
   useEffect(() => {
     if (id && user) {
@@ -45,27 +56,13 @@ const DivvyDetailContent: React.FC = () => {
 
   const fetchDivvyData = async () => {
     try {
-      // Fetch Divvy Details
-      const { data: divvyData } = await supabase
-        .from('divvies')
-        .select('*')
-        .eq('id', id)
-        .single();
+      const { data: divvyData } = await supabase.from('divvies').select('*').eq('id', id).single();
       setDivvy(divvyData);
 
-      // Fetch Members
-      const { data: memberData } = await supabase
-        .from('divvy_members')
-        .select('*')
-        .eq('divvy_id', id);
+      const { data: memberData } = await supabase.from('divvy_members').select('*').eq('divvy_id', id);
       setMembers(memberData || []);
 
-      // Fetch Expenses
-      const { data: expenseData } = await supabase
-        .from('expenses')
-        .select('*')
-        .eq('divvy_id', id)
-        .order('date', { ascending: false });
+      const { data: expenseData } = await supabase.from('expenses').select('*').eq('divvy_id', id).order('date', { ascending: false });
       setExpenses(expenseData || []);
 
     } catch (error) {
@@ -75,77 +72,206 @@ const DivvyDetailContent: React.FC = () => {
     }
   };
 
+  // --- Handlers for Modal Opening ---
+
   const handleOpenAddExpense = () => {
+    if (!user) return;
     setEditingExpenseId(null);
     setAmount('');
     setCategory('food');
     setDesc('');
+    setDate(new Date().toISOString().split('T')[0]);
+    setPayerId(user.id); // Default to current user
+    setSplitMode('equal');
+    
+    // Initialize equal split: everyone selected (1)
+    const initialSplits: Record<string, number> = {};
+    members.forEach(m => initialSplits[m.user_id] = 1);
+    setSplitValues(initialSplits);
+
     setIsExpenseModalOpen(true);
   };
 
-  const handleOpenEditExpense = (exp: Expense) => {
+  const handleOpenEditExpense = async (exp: Expense) => {
     setEditingExpenseId(exp.id);
     setAmount(exp.amount.toString());
     setCategory(exp.category);
     setDesc(exp.description);
+    setDate(exp.date);
+    setPayerId(exp.paid_by_user_id);
+
+    // Fetch existing splits to populate form
+    const { data: splits } = await supabase
+      .from('expense_splits')
+      .select('*')
+      .eq('expense_id', exp.id);
+
+    if (splits && splits.length > 0) {
+      const loadedSplits: Record<string, number> = {};
+      const totalAmount = exp.amount;
+      
+      // Check if it looks like an equal split (all non-zero splits are equal)
+      // We use a small epsilon for float comparison
+      const firstAmount = splits[0].amount_owed;
+      const isRoughlyEqual = splits.every(s => Math.abs(s.amount_owed - firstAmount) < 0.02);
+      
+      // Also need to check if *everyone* in the group was included for it to be a "simple equal",
+      // otherwise it's a "subset equal". Our logic handles subset equal fine.
+      
+      if (isRoughlyEqual) {
+        setSplitMode('equal');
+        // Initialize all as 0 (unselected) first
+        members.forEach(m => loadedSplits[m.user_id] = 0);
+        // Set participants as 1 (selected)
+        splits.forEach(s => loadedSplits[s.participant_user_id] = 1);
+      } else {
+        setSplitMode('amount');
+        // Initialize all as 0
+        members.forEach(m => loadedSplits[m.user_id] = 0);
+        // Fill actual amounts
+        splits.forEach(s => loadedSplits[s.participant_user_id] = s.amount_owed);
+      }
+      setSplitValues(loadedSplits);
+    } else {
+        // Fallback if no splits found
+        setSplitMode('equal');
+        const initialSplits: Record<string, number> = {};
+        members.forEach(m => initialSplits[m.user_id] = 1);
+        setSplitValues(initialSplits);
+    }
+
     setIsExpenseModalOpen(true);
   };
 
+  // --- Validation & Calculation Logic ---
+
+  const totalAmount = parseFloat(amount) || 0;
+
+  const getSplitSummary = () => {
+    let currentTotal = 0;
+    let isValid = true;
+    let message = '';
+
+    if (splitMode === 'equal') {
+      const selectedCount = Object.values(splitValues).filter(v => v === 1).length;
+      if (selectedCount === 0) {
+        isValid = false;
+        message = 'Selecione pelo menos uma pessoa.';
+      } else {
+        const perPerson = totalAmount / selectedCount;
+        message = `R$ ${perPerson.toFixed(2)} por pessoa`;
+      }
+    } 
+    else if (splitMode === 'amount') {
+      currentTotal = Object.values(splitValues).reduce((a: number, b: number) => a + b, 0);
+      const diff = totalAmount - currentTotal;
+      if (Math.abs(diff) > 0.02) { // Tolerance for float math
+        isValid = false;
+        if (diff > 0) message = `Faltam R$ ${diff.toFixed(2)}`;
+        else message = `Passou R$ ${Math.abs(diff).toFixed(2)}`;
+      } else {
+        message = 'Total correto ✅';
+      }
+    } 
+    else if (splitMode === 'percentage') {
+      currentTotal = Object.values(splitValues).reduce((a: number, b: number) => a + b, 0);
+      const diff = 100 - currentTotal;
+      if (Math.abs(diff) > 0.1) {
+        isValid = false;
+        if (diff > 0) message = `Faltam ${diff.toFixed(1)}%`;
+        else message = `Passou ${Math.abs(diff).toFixed(1)}%`;
+      } else {
+        message = 'Total 100% ✅';
+      }
+    }
+
+    return { isValid, message };
+  };
+
+  const { isValid: isSplitValid, message: splitMessage } = getSplitSummary();
+
+  const handleSplitChange = (userId: string, value: string) => {
+    const numValue = parseFloat(value) || 0;
+    setSplitValues(prev => ({
+      ...prev,
+      [userId]: numValue
+    }));
+  };
+
+  const handleToggleMember = (userId: string) => {
+    setSplitValues(prev => ({
+      ...prev,
+      [userId]: prev[userId] === 1 ? 0 : 1
+    }));
+  };
+
+  // --- Save Handler ---
+
   const handleSaveExpense = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user || !divvy) return;
+    if (!user || !divvy || !isSplitValid) return;
     setSubmitLoading(true);
 
     try {
       let expenseId = editingExpenseId;
 
+      // 1. Upsert Expense
+      const expenseData = {
+        divvy_id: divvy.id,
+        paid_by_user_id: payerId,
+        amount: totalAmount,
+        category,
+        description: desc,
+        date: date,
+        updated_at: new Date().toISOString()
+      };
+
       if (editingExpenseId) {
-        // UPDATE existing expense
-        const { error: updateError } = await supabase
-          .from('expenses')
-          .update({
-            amount: parseFloat(amount),
-            category,
-            description: desc,
-            // Mantém data original ou atualiza se desejado. Aqui mantemos simples.
-          })
-          .eq('id', editingExpenseId);
-
-        if (updateError) throw updateError;
+        const { error } = await supabase.from('expenses').update(expenseData).eq('id', editingExpenseId);
+        if (error) throw error;
       } else {
-        // CREATE new expense
-        const { data: newExpense, error: insertError } = await supabase
-          .from('expenses')
-          .insert({
-            divvy_id: divvy.id,
-            paid_by_user_id: user.id,
-            amount: parseFloat(amount),
-            category,
-            description: desc,
-            date: new Date().toISOString().split('T')[0],
-          })
-          .select()
-          .single();
-
-        if (insertError) throw insertError;
-        if (newExpense) expenseId = newExpense.id;
+        const { data, error } = await supabase.from('expenses').insert(expenseData).select().single();
+        if (error) throw error;
+        expenseId = data.id;
       }
 
-      // RECALCULATE SPLITS (Simplified Strategy: Delete old splits & create new even splits)
-      // This happens for both Create and Update to ensure consistency if amount/members changed.
-      if (expenseId && members.length > 0) {
-        // 1. Delete existing splits
+      // 2. Calculate Splits based on mode
+      if (expenseId) {
+        // Delete old splits
         await supabase.from('expense_splits').delete().eq('expense_id', expenseId);
 
-        // 2. Create new splits
-        const splitAmount = parseFloat(amount) / members.length;
-        const splits = members.map(m => ({
-          expense_id: expenseId,
-          participant_user_id: m.user_id,
-          amount_owed: splitAmount
-        }));
+        let splitsToInsert: any[] = [];
 
-        await supabase.from('expense_splits').insert(splits);
+        if (splitMode === 'equal') {
+          const selectedMembers = members.filter(m => splitValues[m.user_id] === 1);
+          const splitAmount = totalAmount / selectedMembers.length;
+          splitsToInsert = selectedMembers.map(m => ({
+            expense_id: expenseId,
+            participant_user_id: m.user_id,
+            amount_owed: splitAmount
+          }));
+        } else if (splitMode === 'amount') {
+           splitsToInsert = members
+            .filter(m => splitValues[m.user_id] > 0)
+            .map(m => ({
+              expense_id: expenseId,
+              participant_user_id: m.user_id,
+              amount_owed: splitValues[m.user_id]
+            }));
+        } else if (splitMode === 'percentage') {
+           splitsToInsert = members
+            .filter(m => splitValues[m.user_id] > 0)
+            .map(m => ({
+              expense_id: expenseId,
+              participant_user_id: m.user_id,
+              amount_owed: totalAmount * (splitValues[m.user_id] / 100)
+            }));
+        }
+
+        if (splitsToInsert.length > 0) {
+          const { error: splitError } = await supabase.from('expense_splits').insert(splitsToInsert);
+          if (splitError) throw splitError;
+        }
       }
 
       toast.success(editingExpenseId ? 'Despesa atualizada!' : 'Despesa adicionada!');
@@ -161,7 +287,6 @@ const DivvyDetailContent: React.FC = () => {
 
   const handleDeleteExpense = async (expenseId: string) => {
     if (!confirm('Tem certeza que deseja excluir esta despesa?')) return;
-    
     try {
       const { error } = await supabase.from('expenses').delete().eq('id', expenseId);
       if (error) throw error;
@@ -192,39 +317,30 @@ const DivvyDetailContent: React.FC = () => {
       </div>
 
       <div className="border-b border-gray-200">
-        <nav className="-mb-px flex space-x-8">
+        <nav className="-mb-px flex space-x-8 overflow-x-auto">
           <button
             onClick={() => setActiveTab('expenses')}
-            className={`pb-4 px-1 border-b-2 font-medium text-sm flex items-center gap-2 ${
-              activeTab === 'expenses'
-                ? 'border-brand-500 text-brand-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+            className={`pb-4 px-1 border-b-2 font-medium text-sm flex items-center gap-2 whitespace-nowrap ${
+              activeTab === 'expenses' ? 'border-brand-500 text-brand-600' : 'border-transparent text-gray-500 hover:text-gray-700'
             }`}
           >
-            <Receipt size={16} />
-            Despesas
+            <Receipt size={16} /> Despesas
           </button>
           <button
             onClick={() => setActiveTab('charts')}
-            className={`pb-4 px-1 border-b-2 font-medium text-sm flex items-center gap-2 ${
-              activeTab === 'charts'
-                ? 'border-brand-500 text-brand-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+            className={`pb-4 px-1 border-b-2 font-medium text-sm flex items-center gap-2 whitespace-nowrap ${
+              activeTab === 'charts' ? 'border-brand-500 text-brand-600' : 'border-transparent text-gray-500 hover:text-gray-700'
             }`}
           >
-            <PieChart size={16} />
-            Análise
+            <PieChart size={16} /> Análise
           </button>
           <button
             onClick={() => setActiveTab('members')}
-            className={`pb-4 px-1 border-b-2 font-medium text-sm flex items-center gap-2 ${
-              activeTab === 'members'
-                ? 'border-brand-500 text-brand-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+            className={`pb-4 px-1 border-b-2 font-medium text-sm flex items-center gap-2 whitespace-nowrap ${
+              activeTab === 'members' ? 'border-brand-500 text-brand-600' : 'border-transparent text-gray-500 hover:text-gray-700'
             }`}
           >
-            <Users size={16} />
-            Membros ({members.length})
+            <Users size={16} /> Membros ({members.length})
           </button>
         </nav>
       </div>
@@ -232,56 +348,57 @@ const DivvyDetailContent: React.FC = () => {
       <div className="min-h-[400px]">
         {activeTab === 'expenses' && (
           <div className="space-y-4">
-            {expenses.length === 0 ? (
-              <EmptyState />
-            ) : (
-              expenses.map((exp) => {
-                const canEdit = user?.id === exp.paid_by_user_id;
-                
-                return (
-                  <div key={exp.id} className="bg-white p-4 rounded-lg shadow-sm border border-gray-100 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-                    <div className="flex items-center gap-4 flex-1">
-                      <div className="h-10 w-10 rounded-full bg-brand-50 flex items-center justify-center text-xl flex-shrink-0">
-                        {exp.category === 'food' ? '🍽️' : 
-                         exp.category === 'transport' ? '🚗' : 
-                         exp.category === 'accommodation' ? '🏨' : 
-                         exp.category === 'activity' ? '🎬' : '💰'}
-                      </div>
-                      <div>
-                        <p className="font-medium text-gray-900">{exp.description || exp.category}</p>
-                        <p className="text-sm text-gray-500">{new Date(exp.date).toLocaleDateString()}</p>
-                      </div>
+            {expenses.length === 0 ? <EmptyState /> : expenses.map((exp) => {
+              const payerName = members.find(m => m.user_id === exp.paid_by_user_id)?.email.split('@')[0] || 'Desconhecido';
+              // Check permissions: Creator of Divvy OR Payer of Expense can edit/delete
+              const canEdit = user?.id === exp.paid_by_user_id || user?.id === divvy.creator_id;
+              
+              return (
+                <div key={exp.id} className="bg-white p-4 rounded-lg shadow-sm border border-gray-100 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                  <div className="flex items-center gap-4 flex-1">
+                    <div className="h-10 w-10 rounded-full bg-brand-50 flex items-center justify-center text-xl flex-shrink-0">
+                      {exp.category === 'food' ? '🍽️' : 
+                       exp.category === 'transport' ? '🚗' : 
+                       exp.category === 'accommodation' ? '🏨' : 
+                       exp.category === 'activity' ? '🎬' : '💰'}
                     </div>
-                    
-                    <div className="flex items-center gap-4 w-full sm:w-auto justify-between sm:justify-end">
-                      <div className="text-right mr-2">
-                        <p className="font-bold text-gray-900">R$ {exp.amount.toFixed(2)}</p>
-                        <p className="text-xs text-gray-400">Pago por {members.find(m => m.user_id === exp.paid_by_user_id)?.email.split('@')[0] || 'Desconhecido'}</p>
+                    <div>
+                      <p className="font-medium text-gray-900">{exp.description || exp.category}</p>
+                      <div className="text-sm text-gray-500 flex gap-2">
+                        <span>{new Date(exp.date).toLocaleDateString()}</span>
+                        <span>•</span>
+                        <span>Pago por <strong>{payerName}</strong></span>
                       </div>
-                      
-                      {canEdit && (
-                        <div className="flex gap-1">
-                          <button 
-                            onClick={() => handleOpenEditExpense(exp)}
-                            className="p-2 text-gray-400 hover:text-brand-600 hover:bg-brand-50 rounded-full transition-colors"
-                            title="Editar"
-                          >
-                            <Pencil size={16} />
-                          </button>
-                          <button 
-                            onClick={() => handleDeleteExpense(exp.id)}
-                            className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-full transition-colors"
-                            title="Excluir"
-                          >
-                            <Trash2 size={16} />
-                          </button>
-                        </div>
-                      )}
                     </div>
                   </div>
-                );
-              })
-            )}
+                  
+                  <div className="flex items-center gap-4 w-full sm:w-auto justify-between sm:justify-end">
+                    <div className="text-right mr-2">
+                      <p className="font-bold text-gray-900">R$ {exp.amount.toFixed(2)}</p>
+                    </div>
+                    
+                    {canEdit && (
+                      <div className="flex gap-1">
+                        <button 
+                          onClick={() => handleOpenEditExpense(exp)}
+                          className="p-2 text-gray-400 hover:text-brand-600 hover:bg-brand-50 rounded-full transition-colors"
+                          title="Editar"
+                        >
+                          <Pencil size={16} />
+                        </button>
+                        <button 
+                          onClick={() => handleDeleteExpense(exp.id)}
+                          className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-full transition-colors"
+                          title="Excluir"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
           </div>
         )}
 
@@ -311,44 +428,169 @@ const DivvyDetailContent: React.FC = () => {
       <Modal 
         isOpen={isExpenseModalOpen} 
         onClose={() => setIsExpenseModalOpen(false)} 
-        title={editingExpenseId ? "Editar Despesa" : "Adicionar Despesa"}
+        title={editingExpenseId ? "Editar Despesa" : "Nova Despesa"}
+        size="lg"
       >
-        <form onSubmit={handleSaveExpense} className="space-y-4">
-          <Input
-             label="Valor (R$)"
-             type="number"
-             step="0.01"
-             value={amount}
-             onChange={(e: any) => setAmount(e.target.value)}
-             required
-             placeholder="0,00"
-          />
+        <form onSubmit={handleSaveExpense} className="space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+             <Input
+               label="Valor Total (R$)"
+               type="number"
+               step="0.01"
+               value={amount}
+               onChange={(e: any) => setAmount(e.target.value)}
+               required
+               placeholder="0,00"
+               className="text-lg font-bold"
+            />
+            
+            <Input
+              label="Data"
+              type="date"
+              value={date}
+              onChange={(e: any) => setDate(e.target.value)}
+              required
+            />
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+             <Input
+              label="Descrição"
+              value={desc}
+              onChange={(e: any) => setDesc(e.target.value)}
+              placeholder="Ex: Jantar no Outback"
+              required
+            />
+             <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Categoria</label>
+              <select
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-gray-900 bg-white"
+                value={category}
+                onChange={(e) => setCategory(e.target.value)}
+              >
+                <option value="food">🍽️ Alimentação</option>
+                <option value="transport">🚗 Transporte</option>
+                <option value="accommodation">🏨 Hospedagem</option>
+                <option value="activity">🎬 Lazer</option>
+                <option value="utilities">💡 Contas</option>
+                <option value="shopping">🛍️ Compras</option>
+                <option value="other">💰 Outro</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Quem pagou? */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Categoria</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Quem pagou?</label>
             <select
               className="w-full rounded-lg border border-gray-300 px-3 py-2 text-gray-900 bg-white"
-              value={category}
-              onChange={(e) => setCategory(e.target.value)}
+              value={payerId}
+              onChange={(e) => setPayerId(e.target.value)}
             >
-              <option value="food">🍽️ Alimentação</option>
-              <option value="transport">🚗 Transporte</option>
-              <option value="accommodation">🏨 Hospedagem</option>
-              <option value="activity">🎬 Atividade/Lazer</option>
-              <option value="utilities">💡 Contas/Serviços</option>
-              <option value="shopping">🛍️ Compras</option>
-              <option value="other">💰 Outro</option>
+              {members.map(m => (
+                <option key={m.id} value={m.user_id}>
+                  {m.email} {m.user_id === user?.id ? '(Você)' : ''}
+                </option>
+              ))}
             </select>
           </div>
-          <Input
-            label="Descrição"
-            value={desc}
-            onChange={(e: any) => setDesc(e.target.value)}
-            placeholder="No que foi gasto?"
-          />
-          <div className="flex justify-end gap-3 mt-4">
+
+          {/* Divisão */}
+          <div className="border-t border-gray-100 pt-4">
+            <label className="block text-sm font-medium text-gray-700 mb-3">Como dividir?</label>
+            
+            {/* Tabs de Divisão */}
+            <div className="flex bg-gray-100 p-1 rounded-lg mb-4">
+              <button
+                type="button"
+                onClick={() => setSplitMode('equal')}
+                className={`flex-1 py-1.5 text-sm font-medium rounded-md transition-colors ${splitMode === 'equal' ? 'bg-white shadow-sm text-brand-600' : 'text-gray-500 hover:text-gray-700'}`}
+              >
+                Igualmente
+              </button>
+              <button
+                type="button"
+                onClick={() => setSplitMode('amount')}
+                className={`flex-1 py-1.5 text-sm font-medium rounded-md transition-colors ${splitMode === 'amount' ? 'bg-white shadow-sm text-brand-600' : 'text-gray-500 hover:text-gray-700'}`}
+              >
+                Valores (R$)
+              </button>
+              <button
+                type="button"
+                onClick={() => setSplitMode('percentage')}
+                className={`flex-1 py-1.5 text-sm font-medium rounded-md transition-colors ${splitMode === 'percentage' ? 'bg-white shadow-sm text-brand-600' : 'text-gray-500 hover:text-gray-700'}`}
+              >
+                Porcentagem (%)
+              </button>
+            </div>
+
+            {/* Lista de Membros para Divisão */}
+            <div className="space-y-3 max-h-60 overflow-y-auto pr-2 custom-scrollbar">
+              {members.map(m => (
+                <div key={m.id} className="flex items-center justify-between p-2 hover:bg-gray-50 rounded-lg">
+                  <div className="flex items-center gap-2 overflow-hidden">
+                    <div className="h-8 w-8 rounded-full bg-brand-100 flex items-center justify-center text-xs font-bold text-brand-700 flex-shrink-0">
+                      {m.email.substring(0, 2).toUpperCase()}
+                    </div>
+                    <span className="text-sm text-gray-700 truncate">{m.email}</span>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    {splitMode === 'equal' && (
+                       <button
+                         type="button"
+                         onClick={() => handleToggleMember(m.user_id)}
+                         className={`w-6 h-6 rounded border flex items-center justify-center transition-colors ${splitValues[m.user_id] === 1 ? 'bg-brand-600 border-brand-600 text-white' : 'border-gray-300 text-transparent'}`}
+                       >
+                         <Check size={14} />
+                       </button>
+                    )}
+
+                    {splitMode === 'amount' && (
+                       <div className="relative w-24">
+                          <span className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400 text-xs">R$</span>
+                          <input 
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={splitValues[m.user_id] || ''}
+                            onChange={(e) => handleSplitChange(m.user_id, e.target.value)}
+                            className="w-full pl-6 pr-2 py-1 text-right text-sm border border-gray-300 rounded focus:border-brand-500 focus:outline-none"
+                            placeholder="0.00"
+                          />
+                       </div>
+                    )}
+
+                    {splitMode === 'percentage' && (
+                       <div className="relative w-20">
+                          <input 
+                            type="number"
+                            min="0"
+                            max="100"
+                            value={splitValues[m.user_id] || ''}
+                            onChange={(e) => handleSplitChange(m.user_id, e.target.value)}
+                            className="w-full pl-2 pr-6 py-1 text-right text-sm border border-gray-300 rounded focus:border-brand-500 focus:outline-none"
+                            placeholder="0"
+                          />
+                          <span className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 text-xs">%</span>
+                       </div>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Validation Message */}
+            <div className={`mt-4 p-3 rounded-lg flex items-center gap-2 text-sm ${isSplitValid ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>
+               {isSplitValid ? <Check size={16} /> : <AlertCircle size={16} />}
+               <span className="font-medium">{splitMessage}</span>
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-3 pt-2">
              <Button type="button" variant="outline" onClick={() => setIsExpenseModalOpen(false)}>Cancelar</Button>
-             <Button type="submit" isLoading={submitLoading}>
-               {editingExpenseId ? 'Salvar Alterações' : 'Salvar'}
+             <Button type="submit" isLoading={submitLoading} disabled={!isSplitValid}>
+               {editingExpenseId ? 'Salvar Alterações' : 'Criar Despesa'}
              </Button>
           </div>
         </form>
