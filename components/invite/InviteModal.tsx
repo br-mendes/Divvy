@@ -66,8 +66,8 @@ export default function InviteModal({
       if (error) throw error;
 
       // 3. Generate Link
-      const baseUrl = getURL().replace(/\/$/, ''); // Remove trailing slash for path concatenation
-      const link = `${baseUrl}/#/join/${data.id}`; // Add hash because of HashRouter
+      const baseUrl = getURL().replace(/\/$/, '');
+      const link = `${baseUrl}/join/${data.id}`; // Next.js clean URL
       setInviteLink(link);
 
       // 4. Generate QR Code
@@ -92,7 +92,6 @@ export default function InviteModal({
         );
       } catch (emailErr) {
         console.error('Failed to send email:', emailErr);
-        // Do not block the flow, just warn
         toast('Convite criado, mas houve erro ao enviar o email.', { icon: '⚠️' });
       }
       

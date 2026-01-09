@@ -1,5 +1,5 @@
 import React from 'react';
-import { Link } from 'react-router-dom';
+import Link from 'next/link';
 import { Divvy } from '../../types';
 import { Button } from '../ui/Button';
 
@@ -39,7 +39,7 @@ export default function DivvyHeader({ divvy }: DivvyHeaderProps) {
             </div>
           </div>
 
-          <Link to="/dashboard">
+          <Link href="/dashboard">
             <Button variant="outline">← Voltar</Button>
           </Link>
         </div>

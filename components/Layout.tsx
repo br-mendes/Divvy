@@ -1,18 +1,18 @@
 import React from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import Link from 'next/link';
+import { useRouter } from 'next/router';
 import { useAuth } from '../context/AuthContext';
 import DivvyLogo from './branding/DivvyLogo';
 import { 
   LogOut, 
   LayoutDashboard, 
-  User,
 } from 'lucide-react';
 
 export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { signOut, user } = useAuth();
-  const location = useLocation();
+  const router = useRouter();
 
-  const isActive = (path: string) => location.pathname === path;
+  const isActive = (path: string) => router.pathname === path;
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col md:flex-row">
@@ -20,14 +20,14 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
       <aside className="bg-white border-b md:border-b-0 md:border-r border-gray-200 w-full md:w-64 flex-shrink-0">
         <div className="p-4 md:p-6 flex flex-row md:flex-col justify-between items-center md:items-stretch h-full">
           <div className="flex flex-row md:flex-col items-center md:items-start w-full gap-4 md:gap-8">
-            <Link to="/" className="flex items-center gap-3 px-2">
+            <Link href="/" className="flex items-center gap-3 px-2">
               <DivvyLogo className="w-8 h-8" />
               <span className="text-xl font-bold text-gray-900">Divvy</span>
             </Link>
 
             <nav className="hidden md:flex flex-col w-full gap-1">
               <Link
-                to="/dashboard"
+                href="/dashboard"
                 className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
                   isActive('/dashboard') 
                     ? 'bg-brand-50 text-brand-700' 

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Link } from 'react-router-dom';
+import Link from 'next/link';
 import { Divvy } from '../../types';
 import { Button } from '../ui/Button';
 
@@ -50,7 +50,7 @@ const DivvyCard: React.FC<DivvyCardProps> = ({ divvy, onRefresh }) => {
         <span>📅 {new Date(divvy.created_at).toLocaleDateString('pt-BR')}</span>
       </div>
 
-      <Link to={`/divvy/${divvy.id}`} className="block w-full">
+      <Link href={`/divvy/${divvy.id}`} className="block w-full">
         <Button variant="outline" fullWidth>
           Ver detalhes
         </Button>
