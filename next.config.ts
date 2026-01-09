@@ -1,7 +1,6 @@
 import type { NextConfig } from 'next';
 
 const nextConfig: NextConfig = {
-  distDir: 'build',
   pageExtensions: ['active.tsx', 'active.ts'],
   reactStrictMode: true,
   swcMinify: true,

@@ -1,6 +1,5 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  distDir: 'build',
   pageExtensions: ['active.tsx', 'active.ts'],
   reactStrictMode: true,
   swcMinify: true,
