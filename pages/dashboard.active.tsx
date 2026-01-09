@@ -9,7 +9,6 @@ import LoadingSpinner from '../components/ui/LoadingSpinner';
 import EmptyState from '../components/ui/EmptyState';
 import toast from 'react-hot-toast';
 import { ProtectedRoute } from '../components/ProtectedRoute';
-import { Settings, ShieldCheck } from 'lucide-react';
 
 const DashboardContent: React.FC = () => {
   const { user } = useAuth();
@@ -66,33 +65,6 @@ const DashboardContent: React.FC = () => {
         ) : (
           <EmptyState />
         )}
-
-        {/* Status de Segurança */}
-        <div className="mt-12 pt-8 border-t border-gray-200">
-          <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
-            <div className="flex items-center gap-2 mb-4">
-              <Settings className="text-gray-400" size={20} />
-              <h2 className="text-lg font-semibold text-gray-900">Segurança da Conta</h2>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="space-y-2">
-                <div className="flex items-center gap-2 text-sm font-medium text-gray-700">
-                  <ShieldCheck size={16} className="text-green-500" />
-                  Status da Autenticação
-                </div>
-                <div className="flex items-center gap-2 text-sm text-green-600 bg-green-50 p-3 rounded-lg border border-green-100">
-                  <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
-                  Conexão segura via Supabase Auth
-                </div>
-              </div>
-              <div className="flex flex-col justify-center">
-                 <p className="text-xs text-gray-500">
-                   Suas chaves de integração e IDs de cliente são gerenciados de forma segura pelo servidor e não são expostos no seu navegador.
-                 </p>
-              </div>
-            </div>
-          </div>
-        </div>
       </div>
     </div>
   );
