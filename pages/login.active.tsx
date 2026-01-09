@@ -30,11 +30,13 @@ export default function Login() {
   async function handleGoogleLogin() {
     setGoogleLoading(true);
     
+    // getURL() agora retorna sem a barra final, então usamos /auth/callback
+    const redirectTo = `${getURL()}/auth/callback`;
+    
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        // Usa o helper getURL para garantir que o redirecionamento funcione em dev e prod
-        redirectTo: `${getURL()}auth/callback`,
+        redirectTo,
       },
     });
 

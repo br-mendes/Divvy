@@ -1,24 +1,23 @@
 
 /**
- * Dynamic URL helper to ensure redirects point to the correct domain.
- * Prioritizes window.location.origin on the client side for maximum reliability.
+ * Helper para garantir que as URLs de redirecionamento apontem para o domínio correto.
  */
 export const getURL = () => {
-  // Client-side: use the current origin
-  if (typeof window !== 'undefined' && window.location) {
-    const origin = window.location.origin;
-    return origin.endsWith('/') ? origin : `${origin}/`;
-  }
-
-  // Server-side or fallback: use environment variables
   let url =
     process.env.NEXT_PUBLIC_SITE_URL || 
     process.env.NEXT_PUBLIC_VERCEL_URL || 
-    'http://localhost:3000/';
+    'http://localhost:3000';
+  
+  // No cliente, a verdade absoluta é a barra de endereços
+  if (typeof window !== 'undefined') {
+    url = window.location.origin;
+  }
 
-  // Protocol check (Vercel variables often omit it)
+  // Remove barra no final para evitar o erro de "//auth/callback"
+  url = url.endsWith('/') ? url.slice(0, -1) : url;
+  
+  // Garante que tenha o protocolo correto
   url = url.startsWith('http') ? url : `https://${url}`;
-
-  // Trailing slash normalization
-  return url.endsWith('/') ? url : `${url}/`;
+  
+  return url;
 };

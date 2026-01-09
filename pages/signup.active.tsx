@@ -30,10 +30,13 @@ export default function Signup() {
 
   async function handleGoogleSignup() {
     setGoogleLoading(true);
+    
+    const redirectTo = `${getURL()}/auth/callback`;
+
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        redirectTo: `${getURL()}auth/callback`,
+        redirectTo,
       },
     });
 
