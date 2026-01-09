@@ -30,13 +30,20 @@ export default function Login() {
   async function handleGoogleLogin() {
     setGoogleLoading(true);
     
-    // getURL() agora retorna sem a barra final, então usamos /auth/callback
+    // getURL() retorna 'https://dominio.com' (sem barra)
+    // Então adicionamos '/auth/callback'
     const redirectTo = `${getURL()}/auth/callback`;
     
+    console.log('Redirecionando para:', redirectTo);
+
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
         redirectTo,
+        queryParams: {
+          access_type: 'offline',
+          prompt: 'consent',
+        },
       },
     });
 

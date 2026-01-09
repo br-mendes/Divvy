@@ -4,20 +4,18 @@
  */
 export const getURL = () => {
   let url =
-    process.env.NEXT_PUBLIC_SITE_URL || 
-    process.env.NEXT_PUBLIC_VERCEL_URL || 
+    process.env.NEXT_PUBLIC_SITE_URL ||
+    process.env.NEXT_PUBLIC_VERCEL_URL || // Vercel define isso automaticamente
     'http://localhost:3000';
-  
-  // No cliente, a verdade absoluta é a barra de endereços
+
+  // No lado do cliente, window.location.origin é a fonte da verdade sobre onde o usuário está
   if (typeof window !== 'undefined') {
     url = window.location.origin;
   }
 
-  // Remove barra no final para evitar o erro de "//auth/callback"
-  url = url.endsWith('/') ? url.slice(0, -1) : url;
-  
-  // Garante que tenha o protocolo correto
+  // Garante que a URL comece com http/https
   url = url.startsWith('http') ? url : `https://${url}`;
   
-  return url;
+  // Remove qualquer barra no final para evitar URLs como domain.com//auth/callback
+  return url.replace(/\/$/, '');
 };
