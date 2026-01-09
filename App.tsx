@@ -10,6 +10,8 @@ import { Home } from './pages/Home';
 import { Login } from './pages/Login';
 import { Signup } from './pages/Signup';
 import { Notes } from './pages/Notes';
+import { AuthCallback } from './pages/AuthCallback';
+import { TestEmail } from './pages/TestEmail';
 import LoadingSpinner from './components/ui/LoadingSpinner';
 
 // Protected Route Component
@@ -37,10 +39,12 @@ const AppRoutes: React.FC = () => {
     <Routes>
       <Route path="/" element={<Home />} />
       <Route path="/auth" element={<AuthPage />} />
+      <Route path="/auth/callback" element={<AuthCallback />} />
       <Route path="/login" element={<Login />} />
       <Route path="/signup" element={<Signup />} />
       <Route path="/join/:token" element={<JoinDivvy />} />
       <Route path="/notes" element={<Notes />} />
+      <Route path="/test-email" element={<TestEmail />} />
       <Route
         path="/dashboard"
         element={

@@ -7,6 +7,8 @@ import { Modal } from '../ui/Modal';
 import SuccessCheck from '../ui/SuccessCheck';
 import toast from 'react-hot-toast';
 import QRCode from 'qrcode';
+import { getURL } from '../../lib/getURL';
+import { sendInviteEmail } from '../../lib/email';
 
 interface InviteModalProps {
   divvyId: string;
@@ -64,23 +66,35 @@ export default function InviteModal({
       if (error) throw error;
 
       // 3. Generate Link
-      // Assuming a client-side route like /join/:inviteId will handle acceptance
-      const baseUrl = window.location.origin;
-      const link = `${baseUrl}/join/${data.id}`;
+      const baseUrl = getURL().replace(/\/$/, ''); // Remove trailing slash for path concatenation
+      const link = `${baseUrl}/#/join/${data.id}`; // Add hash because of HashRouter
       setInviteLink(link);
 
       // 4. Generate QR Code
+      let qrUrl = '';
       try {
-        const qrUrl = await QRCode.toDataURL(link);
+        qrUrl = await QRCode.toDataURL(link);
         setQrCodeUrl(qrUrl);
       } catch (qrError) {
         console.warn('Erro ao gerar QR code:', qrError);
       }
       
-      // 5. Simulate Email Sending
-      // In a real server environment, we would call sendInviteEmail here.
-      // Since we are client-side, we just notify success.
-      console.log(`[SIMULATION] Email sent to ${email} with link ${link}`);
+      // 5. Send Invite Email (using Resend or Mock)
+      const inviterName = user.user_metadata?.full_name || user.email || 'Alguém';
+      
+      try {
+        await sendInviteEmail(
+          email,
+          divvyName,
+          inviterName,
+          link,
+          qrUrl
+        );
+      } catch (emailErr) {
+        console.error('Failed to send email:', emailErr);
+        // Do not block the flow, just warn
+        toast('Convite criado, mas houve erro ao enviar o email.', { icon: '⚠️' });
+      }
       
       toast.success('Convite enviado com sucesso!');
     } catch (err: any) {
