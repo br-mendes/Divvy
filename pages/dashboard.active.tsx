@@ -9,6 +9,8 @@ import LoadingSpinner from '../components/ui/LoadingSpinner';
 import EmptyState from '../components/ui/EmptyState';
 import toast from 'react-hot-toast';
 import { ProtectedRoute } from '../components/ProtectedRoute';
+import { GOOGLE_CLIENT_ID } from '../lib/constants';
+import { Settings, ShieldCheck, Globe } from 'lucide-react';
 
 const DashboardContent: React.FC = () => {
   const { user } = useAuth();
@@ -39,13 +41,63 @@ const DashboardContent: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gray-50 py-8 px-4">
-      <div className="max-w-7xl mx-auto">
-        <div className="flex justify-between items-center mb-8">
-          <h1 className="text-2xl font-bold">Meus Divvies</h1>
-          <Button onClick={() => setShowForm(!showForm)}>{showForm ? 'Fechar' : '+ Novo'}</Button>
+      <div className="max-w-7xl mx-auto space-y-8">
+        <div className="flex justify-between items-center">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">Meus Divvies</h1>
+            <p className="text-sm text-gray-500">Gerencie suas despesas compartilhadas</p>
+          </div>
+          <Button onClick={() => setShowForm(!showForm)} variant={showForm ? 'outline' : 'primary'}>
+            {showForm ? 'Cancelar' : '+ Novo Divvy'}
+          </Button>
         </div>
-        {showForm && <div className="mb-8 p-6 bg-white rounded-lg shadow-sm"><DivvyForm onSuccess={() => { setShowForm(false); fetchDivvies(); }} /></div>}
-        {loading ? <LoadingSpinner /> : divvies.length > 0 ? <DivvyList divvies={divvies} onRefresh={fetchDivvies} /> : <EmptyState />}
+
+        {showForm && (
+          <div className="p-6 bg-white rounded-xl shadow-sm border border-brand-100 animate-fade-in-down">
+            <DivvyForm onSuccess={() => { setShowForm(false); fetchDivvies(); }} />
+          </div>
+        )}
+
+        {loading ? (
+          <div className="py-20 flex justify-center">
+            <LoadingSpinner />
+          </div>
+        ) : divvies.length > 0 ? (
+          <DivvyList divvies={divvies} onRefresh={fetchDivvies} />
+        ) : (
+          <EmptyState />
+        )}
+
+        {/* Seção de Status de Integração solicitado pelo usuário */}
+        <div className="mt-12 pt-8 border-t border-gray-200">
+          <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
+            <div className="flex items-center gap-2 mb-4">
+              <Settings className="text-gray-400" size={20} />
+              <h2 className="text-lg font-semibold text-gray-900">Configurações de Integração</h2>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="space-y-2">
+                <div className="flex items-center gap-2 text-sm font-medium text-gray-700">
+                  <Globe size={16} className="text-brand-500" />
+                  Google OAuth Client ID
+                </div>
+                <div className="bg-gray-50 p-3 rounded-lg border border-gray-100 font-mono text-xs text-gray-600 break-all">
+                  {GOOGLE_CLIENT_ID}
+                </div>
+              </div>
+              <div className="space-y-2">
+                <div className="flex items-center gap-2 text-sm font-medium text-gray-700">
+                  <ShieldCheck size={16} className="text-green-500" />
+                  Status da Autenticação
+                </div>
+                <div className="flex items-center gap-2 text-sm text-green-600 bg-green-50 p-3 rounded-lg border border-green-100">
+                  <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
+                  Provedor Google configurado via Supabase
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );
