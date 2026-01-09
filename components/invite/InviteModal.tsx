@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../context/AuthContext';
@@ -36,41 +37,22 @@ export default function InviteModal({
     try {
       if (!user) throw new Error('Usuário não autenticado');
 
-      // 1. Check if Divvy exists (simulating backend check)
-      const { data: divvy, error: divvyError } = await supabase
-        .from('divvies')
-        .select('name')
-        .eq('id', divvyId)
-        .single();
-
-      if (divvyError || !divvy) {
-        throw new Error('Divvy não encontrado');
-      }
-
-      // 2. Create invite in DB
-      const expiresAt = new Date();
-      expiresAt.setDate(expiresAt.getDate() + 7);
-
-      const { data, error } = await supabase
-        .from('divvy_invites')
-        .insert({
-          divvy_id: divvyId,
-          invited_email: email,
-          invited_by_user_id: user.id,
-          status: 'pending',
-          expires_at: expiresAt.toISOString(),
-        })
-        .select()
-        .single();
+      // 1. Create invite via RPC (upsert)
+      const { data: inviteId, error } = await supabase.rpc('upsert_divvy_invite', {
+        p_divvy_id: divvyId,
+        p_invited_by_user_id: user.id,
+        p_invited_email: email
+      });
 
       if (error) throw error;
+      if (!inviteId) throw new Error("Falha ao gerar ID do convite");
 
-      // 3. Generate Link
+      // 2. Generate Link
       const baseUrl = getURL().replace(/\/$/, '');
-      const link = `${baseUrl}/join/${data.id}`; // Next.js clean URL
+      const link = `${baseUrl}/join/${inviteId}`; // Next.js clean URL
       setInviteLink(link);
 
-      // 4. Generate QR Code
+      // 3. Generate QR Code
       let qrUrl = '';
       try {
         qrUrl = await QRCode.toDataURL(link);
@@ -79,7 +61,7 @@ export default function InviteModal({
         console.warn('Erro ao gerar QR code:', qrError);
       }
       
-      // 5. Send Invite Email (using Resend or Mock)
+      // 4. Send Invite Email
       const inviterName = user.user_metadata?.full_name || user.email || 'Alguém';
       
       try {

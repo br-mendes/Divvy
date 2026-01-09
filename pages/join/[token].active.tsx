@@ -1,3 +1,4 @@
+
 import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/router';
 import Link from 'next/link';
@@ -13,8 +14,7 @@ export default function JoinDivvy() {
   const { user, loading: authLoading } = useAuth();
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState(false);
-  const [invite, setInvite] = useState<any | null>(null);
-  const [divvyName, setDivvyName] = useState('');
+  const [inviteData, setInviteData] = useState<any | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -26,36 +26,30 @@ export default function JoinDivvy() {
   const fetchInviteDetails = async () => {
     try {
       setLoading(true);
-      const { data: inviteData, error: inviteError } = await supabase
-        .from('divvy_invites')
-        .select('*')
-        .eq('id', token)
-        .single();
+      
+      // Usa RPC 'get_invite_info' para contornar limitações de RLS para leitura pública
+      const { data, error } = await supabase.rpc('get_invite_info', {
+        p_token: token
+      });
 
-      if (inviteError || !inviteData) {
+      if (error) throw error;
+      
+      // supabase.rpc retorna array de linhas
+      const info = data && data[0];
+
+      if (!info) {
         throw new Error('Convite não encontrado ou inválido.');
       }
 
-      setInvite(inviteData);
-
-      if (new Date(inviteData.expires_at) < new Date()) {
+      if (info.is_expired) {
         throw new Error('Este convite expirou.');
       }
 
-      if (inviteData.status !== 'pending') {
+      if (info.status !== 'pending') {
         throw new Error('Este convite já foi aceito ou recusado.');
       }
 
-      const { data: divvyData, error: divvyError } = await supabase
-        .from('divvies')
-        .select('name')
-        .eq('id', inviteData.divvy_id)
-        .single();
-
-      if (divvyData) {
-        setDivvyName(divvyData.name);
-      }
-
+      setInviteData(info);
       setLoading(false);
     } catch (err: any) {
       console.error(err);
@@ -65,52 +59,28 @@ export default function JoinDivvy() {
   };
 
   const handleAccept = async () => {
-    if (!user || !invite) return;
+    if (!user || !inviteData) return;
     setProcessing(true);
 
     try {
-      const { data: existingMember } = await supabase
-        .from('divvy_members')
-        .select('id')
-        .eq('divvy_id', invite.divvy_id)
-        .eq('user_id', user.id)
-        .single();
+      // Usa RPC 'accept_divvy_invite' para processar a lógica no banco
+      const { data: success, error } = await supabase.rpc('accept_divvy_invite', {
+        p_token: token,
+        p_user_id: user.id,
+        p_user_email: user.email!
+      });
 
-      if (existingMember) {
-        toast.success('Você já é membro deste Divvy.');
-        await supabase
-          .from('divvy_invites')
-          .update({ status: 'accepted', accepted_at: new Date().toISOString() })
-          .eq('id', invite.id);
-          
-        router.push(`/divvy/${invite.divvy_id}`);
-        return;
+      if (error) throw error;
+
+      if (success) {
+        toast.success(`Você entrou em ${inviteData.divvy_name}!`);
+        router.push(`/divvy/${inviteData.divvy_id}`);
+      } else {
+        throw new Error("Não foi possível aceitar o convite. Ele pode ter expirado ou ser inválido.");
       }
-
-      const { error: memberError } = await supabase
-        .from('divvy_members')
-        .insert({
-          divvy_id: invite.divvy_id,
-          user_id: user.id,
-          email: user.email!,
-          role: 'member',
-        });
-
-      if (memberError) throw memberError;
-
-      await supabase
-        .from('divvy_invites')
-        .update({
-          status: 'accepted',
-          accepted_at: new Date().toISOString(),
-        })
-        .eq('id', invite.id);
-
-      toast.success(`Você entrou em ${divvyName}!`);
-      router.push(`/divvy/${invite.divvy_id}`);
     } catch (err: any) {
       console.error(err);
-      toast.error('Erro ao aceitar convite.');
+      toast.error(err.message || 'Erro ao aceitar convite.');
     } finally {
       setProcessing(false);
     }
@@ -145,7 +115,7 @@ export default function JoinDivvy() {
         <div className="text-5xl mb-6">📩</div>
         <h1 className="text-2xl font-bold text-gray-900 mb-2">Convite para Divvy</h1>
         <p className="text-gray-600 mb-6">
-          Você foi convidado para participar do grupo de despesas <strong>{divvyName}</strong>.
+          Você foi convidado por <strong>{inviteData?.inviter_name}</strong> para participar do grupo de despesas <strong>{inviteData?.divvy_name}</strong>.
         </p>
 
         {user ? (
