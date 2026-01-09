@@ -1,3 +1,4 @@
+
 import React, { useEffect, useState, useMemo } from 'react';
 import { useRouter } from 'next/router';
 import { supabase } from '../../lib/supabase';
@@ -64,8 +65,8 @@ const DivvyDetailContent: React.FC = () => {
         .eq('divvy_id', id);
         
       if (memberData && memberData.length > 0) {
-        // 2. Fetch Profiles for these members separately to ensure we get data
-        // even if foreign keys are not strict or 'profiles' table is handled differently
+        // 2. Fetch Profiles for these members separately from the public profiles table
+        // This relies on the database_schema.sql trigger having been set up
         const userIds = memberData.map(m => m.user_id);
         const { data: profilesData } = await supabase
           .from('profiles')
@@ -108,10 +109,11 @@ const DivvyDetailContent: React.FC = () => {
     let displayName = member.email; // Fallback to email in member table
 
     if (profile) {
-       displayName = profile.nickname || profile.full_name || profile.email;
+       // Prioridade: Apelido > Nome Completo > Email
+       displayName = profile.nickname || profile.full_name || profile.email || 'Membro';
     }
 
-    // Se o email ainda for o fallback, tenta pegar apenas a parte antes do @
+    // Se o email ainda for o fallback, tenta pegar apenas a parte antes do @ para ficar mais limpo
     if (displayName && displayName.includes('@')) {
         displayName = displayName.split('@')[0];
     }
@@ -128,6 +130,7 @@ const DivvyDetailContent: React.FC = () => {
     setCategory('food');
     setDesc('');
     setDate(new Date().toISOString().split('T')[0]);
+    // Default payer to current user
     setPayerId(user.id);
     setSplitMode('equal');
     
