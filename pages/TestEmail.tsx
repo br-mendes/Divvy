@@ -3,9 +3,9 @@ import { sendConfirmationEmail } from '../lib/email';
 import { getURL } from '../lib/getURL';
 import { Button } from '../components/ui/Button';
 import DivvyLogo from '../components/branding/DivvyLogo';
-import { Link } from 'react-router-dom';
+import Link from 'next/link';
 
-export const TestEmail: React.FC = () => {
+export default function TestEmail() {
   const [result, setResult] = useState<any>(null);
   const [loading, setLoading] = useState(false);
 
@@ -87,7 +87,7 @@ export const TestEmail: React.FC = () => {
         )}
 
         <div className="mt-8 pt-4 border-t border-gray-100 text-center">
-            <Link to="/" className="text-brand-600 hover:underline text-sm">Voltar para Home</Link>
+            <Link href="/" className="text-brand-600 hover:underline text-sm">Voltar para Home</Link>
         </div>
       </div>
     </div>

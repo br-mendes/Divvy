@@ -1,3 +1,7 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
 /* Animações de Tagline */
 @keyframes fadeInOut {
   0% {
