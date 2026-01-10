@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
@@ -59,7 +60,6 @@ function ProfileContent() {
         if (!error && methods) {
             setPaymentMethods(methods as any);
         } else {
-            console.warn("RPC failed or empty, trying direct select", error);
             // Fallback para select direto caso RPC falhe ou não exista
             const { data: methodsDirect } = await supabase
               .from('user_payment_methods')
@@ -167,6 +167,7 @@ function ProfileContent() {
 
   const handleToggleVisibility = async (id: string, current: boolean) => {
     try {
+        // Tenta usar RPC segura primeiro
         const { error } = await supabase.rpc('toggle_payment_method_visibility', {
             p_payment_method_id: id,
             p_is_visible: !current
@@ -276,4 +277,176 @@ function ProfileContent() {
             <form onSubmit={handleAddPaymentMethod} className="space-y-4">
               {methodType === 'pix' ? (
                 <>
-                  <div className="grid grid-cols-1 md:grid-cols-
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Tipo de Chave</label>
+                      <select
+                        value={pixKeyType}
+                        onChange={(e) => setPixKeyType(e.target.value)}
+                        className="w-full rounded-lg border border-gray-300 px-3 py-2"
+                      >
+                        <option value="cpf">CPF</option>
+                        <option value="cnpj">CNPJ</option>
+                        <option value="email">Email</option>
+                        <option value="phone">Telefone</option>
+                        <option value="random">Chave Aleatória</option>
+                      </select>
+                    </div>
+                    <div className="md:col-span-2">
+                       <Input 
+                         label="Chave Pix" 
+                         value={pixKey} 
+                         onChange={(e) => setPixKey(e.target.value)} 
+                         placeholder="Informe a chave"
+                         required
+                       />
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Banco</label>
+                    <select
+                      value={selectedBankId}
+                      onChange={(e) => setSelectedBankId(e.target.value)}
+                      className="w-full rounded-lg border border-gray-300 px-3 py-2"
+                    >
+                      <option value="">Selecione um banco</option>
+                      {banks.length > 0 ? (
+                        banks.map(bank => (
+                          <option key={bank.id} value={bank.id}>{bank.code} - {bank.name}</option>
+                        ))
+                      ) : (
+                        POPULAR_BANKS.map(bank => (
+                           <option key={bank.code} value={bank.code}>{bank.code} - {bank.name}</option>
+                        ))
+                      )}
+                    </select>
+                  </div>
+                  
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                     <Input 
+                        label="Agência" 
+                        value={agency} 
+                        onChange={e => setAgency(e.target.value)}
+                        placeholder="0000"
+                      />
+                     <Input 
+                        label="Conta" 
+                        value={accountNumber} 
+                        onChange={e => setAccountNumber(e.target.value)}
+                        placeholder="000000"
+                      />
+                     <Input 
+                        label="Dígito" 
+                        value={accountDigit} 
+                        onChange={e => setAccountDigit(e.target.value)}
+                        placeholder="0"
+                        className="md:w-20"
+                      />
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Tipo de Conta</label>
+                      <select
+                        value={accountType}
+                        onChange={(e) => setAccountType(e.target.value)}
+                        className="w-full rounded-lg border border-gray-300 px-3 py-2"
+                      >
+                        <option value="checking">Conta Corrente</option>
+                        <option value="savings">Conta Poupança</option>
+                        <option value="salary">Conta Salário</option>
+                        <option value="payment">Conta de Pagamento</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <Input 
+                      label="Titular (opcional)" 
+                      value={holderName} 
+                      onChange={e => setHolderName(e.target.value)}
+                      placeholder="Se diferente do perfil"
+                    />
+                    <Input 
+                      label="CPF/CNPJ Titular (opcional)" 
+                      value={holderDoc} 
+                      onChange={e => setHolderDoc(e.target.value)}
+                      placeholder="Se diferente do perfil"
+                    />
+                  </div>
+                </>
+              )}
+
+              <div className="flex justify-end gap-3 pt-4">
+                <Button type="button" variant="ghost" onClick={() => setIsAddingPayment(false)}>Cancelar</Button>
+                <Button type="submit" isLoading={paymentLoading}>Salvar Método</Button>
+              </div>
+            </form>
+          </div>
+        )}
+
+        <div className="space-y-4">
+          {paymentMethods.length === 0 ? (
+            <p className="text-gray-500 text-center py-8">Nenhum método de pagamento cadastrado.</p>
+          ) : (
+            paymentMethods.map(method => (
+              <div key={method.id} className="border border-gray-200 rounded-lg p-4 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 bg-white hover:border-brand-200 transition-colors">
+                <div className="flex items-center gap-4">
+                  <div className="h-10 w-10 rounded-full bg-brand-50 flex items-center justify-center text-xl">
+                    {method.type === 'pix' ? '💠' : '🏦'}
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <p className="font-bold text-gray-900">{method.display_text}</p>
+                      {method.is_primary && (
+                        <span className="text-xs bg-brand-100 text-brand-700 px-2 py-0.5 rounded-full font-medium">Principal</span>
+                      )}
+                    </div>
+                    {method.type === 'bank_account' && (
+                        <p className="text-sm text-gray-500">
+                           {method.bank_name || method.banks?.name} • Ag: {method.agency}
+                        </p>
+                    )}
+                    {method.type === 'pix' && (
+                        <p className="text-sm text-gray-500 font-mono">
+                           Chave: {method.pix_key || method.pix_key_masked}
+                        </p>
+                    )}
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 self-end md:self-auto">
+                   <button 
+                      onClick={() => handleToggleVisibility(method.id, method.is_visible_in_groups)}
+                      className={`p-2 rounded-lg transition-colors ${method.is_visible_in_groups ? 'text-gray-500 hover:bg-gray-100' : 'text-gray-400 bg-gray-50'}`}
+                      title={method.is_visible_in_groups ? "Visível nos grupos" : "Oculto nos grupos"}
+                   >
+                      {method.is_visible_in_groups ? <Eye size={18} /> : <EyeOff size={18} />}
+                   </button>
+                   <button 
+                      onClick={() => handleDeleteMethod(method.id)}
+                      className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                      title="Excluir"
+                   >
+                      <Trash2 size={18} />
+                   </button>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export default function Profile() {
+  return (
+    <ProtectedRoute>
+      <ProfileContent />
+    </ProtectedRoute>
+  );
+}

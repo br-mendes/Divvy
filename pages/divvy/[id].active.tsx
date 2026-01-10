@@ -12,9 +12,10 @@ import DivvyHeader from '../../components/divvy/DivvyHeader';
 import InviteModal from '../../components/invite/InviteModal';
 import LoadingSpinner from '../../components/ui/LoadingSpinner';
 import EmptyState from '../../components/ui/EmptyState';
-import { Plus, UserPlus, Receipt, PieChart, Users, Pencil, Trash2, CreditCard, Lock } from 'lucide-react';
+import { Plus, UserPlus, Receipt, PieChart, Users, Pencil, Trash2, CreditCard, Lock, Copy, QrCode, Check } from 'lucide-react';
 import { ProtectedRoute } from '../../components/ProtectedRoute';
 import toast from 'react-hot-toast';
+import QRCode from 'qrcode';
 
 type SplitMode = 'equal' | 'amount' | 'percentage';
 
@@ -43,6 +44,8 @@ const DivvyDetailContent: React.FC = () => {
   const [viewingMemberName, setViewingMemberName] = useState('');
   const [memberPaymentMethods, setMemberPaymentMethods] = useState<PaymentMethod[]>([]);
   const [loadingPayments, setLoadingPayments] = useState(false);
+  const [generatedQrCode, setGeneratedQrCode] = useState<string | null>(null);
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
 
   // Expense Form State
   const [editingExpenseId, setEditingExpenseId] = useState<string | null>(null);
@@ -54,7 +57,6 @@ const DivvyDetailContent: React.FC = () => {
   // Advanced Split Logic State
   const [payerId, setPayerId] = useState('');
   const [splitMode, setSplitMode] = useState<SplitMode>('equal');
-  // Usamos string para permitir edição fluida de inputs (ex: "10.") sem forçar parse imediato
   const [splitValues, setSplitValues] = useState<Record<string, string>>({});
 
   useEffect(() => {
@@ -147,32 +149,27 @@ const DivvyDetailContent: React.FC = () => {
     if (divvy?.is_archived) return;
 
     setEditingExpenseId(exp.id);
-    setAmount(String(exp.amount)); // Safe cast for number to string
+    setAmount(String(exp.amount)); 
     setCategory(exp.category);
     setDesc(exp.description);
     setDate(exp.date);
     setPayerId(exp.paid_by_user_id);
 
-    // Fetch existing splits to populate form
     const { data: splitsData } = await supabase
       .from('expense_splits')
       .select('*')
-      .eq('expense_id', exp.id);
+      .eq('expense_id', String(exp.id));
     
     const splits = splitsData as ExpenseSplit[] | null;
 
     if (splits && splits.length > 0) {
       const loadedSplits: Record<string, string> = {};
       const firstAmount = splits[0].amount_owed;
-      
-      // Heuristic: Check if all splits are roughly equal
       const isRoughlyEqual = splits.every(s => Math.abs(s.amount_owed - firstAmount) < 0.05);
       
       if (isRoughlyEqual) {
         setSplitMode('equal');
-        // Reset all to "0" (unselected) first
         members.forEach(m => loadedSplits[m.user_id] = "0");
-        // Set participants to "1" (selected)
         splits.forEach(s => loadedSplits[s.participant_user_id] = "1");
       } else {
         setSplitMode('amount');
@@ -181,7 +178,6 @@ const DivvyDetailContent: React.FC = () => {
       }
       setSplitValues(loadedSplits);
     } else {
-        // Fallback
         setSplitMode('equal');
         const initialSplits: Record<string, string> = {};
         members.forEach(m => initialSplits[m.user_id] = "1");
@@ -191,13 +187,11 @@ const DivvyDetailContent: React.FC = () => {
     setIsExpenseModalOpen(true);
   };
 
-  // Validation Logic
   const totalAmount = parseFloat(amount) || 0;
   
-  const getSplitSummary = () => {
+  const getSplitSummary = (): { isValid: boolean; message: string } => {
       if (totalAmount <= 0) return { isValid: false, message: 'Insira um valor válido' };
 
-      // Parse string values to numbers for calculation
       const numericValues = Object.entries(splitValues).reduce((acc, [key, val]) => {
           acc[key] = parseFloat(val) || 0;
           return acc;
@@ -214,7 +208,7 @@ const DivvyDetailContent: React.FC = () => {
       
       if (splitMode === 'amount') {
           const diff = totalAmount - currentSum;
-          const isValid = Math.abs(diff) < 0.05; // Tolerance for floating point
+          const isValid = Math.abs(diff) < 0.05; 
           if (isValid) return { isValid: true, message: 'Total fechado corretamente' };
           return { isValid: false, message: diff > 0 ? `Faltam R$ ${Math.abs(diff).toFixed(2)}` : `Passou R$ ${Math.abs(diff).toFixed(2)}` };
       }
@@ -232,8 +226,7 @@ const DivvyDetailContent: React.FC = () => {
   const { isValid: isSplitValid, message: splitMessage } = getSplitSummary();
 
   const handleSplitValueChange = (userId: string, value: string) => {
-    // Permite digitação livre (inclusive "0." ou vazio)
-    setSplitValues(prev => ({ ...prev, [userId]: value }));
+    setSplitValues(prev => ({ ...prev, [userId]: String(value) }));
   };
 
   const toggleMemberSelection = (userId: string) => {
@@ -265,13 +258,9 @@ const DivvyDetailContent: React.FC = () => {
       }
 
       if (expenseId) {
-        // Delete old splits
         await supabase.from('expense_splits').delete().eq('expense_id', expenseId);
         
-        // Calculate new splits
         let splitsToInsert: any[] = [];
-        
-        // Parse current values
         const numericValues = Object.entries(splitValues).reduce((acc, [key, val]) => {
           acc[key] = parseFloat(val) || 0;
           return acc;
@@ -330,6 +319,8 @@ const DivvyDetailContent: React.FC = () => {
     setViewingMemberName(getMemberName(memberId).replace(' (Você)', ''));
     setIsPaymentModalOpen(true);
     setMemberPaymentMethods([]);
+    setGeneratedQrCode(null);
+    setCopiedKey(null);
 
     try {
         const { data, error } = await supabase.rpc('get_divvy_members_payment_methods', {
@@ -337,6 +328,7 @@ const DivvyDetailContent: React.FC = () => {
         });
 
         if (error) throw error;
+        // Se 'get_divvy_members_payment_methods' retornar, filtra
         const memberMethods = (data || []).filter((m: any) => m.member_id === memberId);
         setMemberPaymentMethods(memberMethods);
     } catch (error: any) {
@@ -347,6 +339,22 @@ const DivvyDetailContent: React.FC = () => {
     }
   };
 
+  const handleCopy = (text: string, id: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedKey(id);
+    toast.success("Chave copiada!");
+    setTimeout(() => setCopiedKey(null), 3000);
+  };
+
+  const handleGenerateQR = async (text: string) => {
+    try {
+      const url = await QRCode.toDataURL(text);
+      setGeneratedQrCode(url);
+    } catch (err) {
+      console.error("QR Error", err);
+      toast.error("Erro ao gerar QR Code");
+    }
+  };
 
   if (loading) return <div className="flex justify-center p-12"><LoadingSpinner /></div>;
   if (!divvy) return <div className="text-center p-12">Divvy não encontrado</div>;
@@ -651,27 +659,62 @@ const DivvyDetailContent: React.FC = () => {
             ) : memberPaymentMethods.length === 0 ? (
                <p className="text-gray-500 text-center py-4">Nenhum método de pagamento disponível.</p>
             ) : (
-               memberPaymentMethods.map(method => (
-                  <div key={method.id} className="border border-gray-200 rounded-lg p-4 bg-gray-50">
-                     <div className="flex items-center gap-3 mb-2">
-                        <span className="text-2xl">{method.method_type === 'pix' ? '💠' : '🏦'}</span>
-                        <h4 className="font-bold text-gray-900">{method.display_text}</h4>
-                     </div>
-                     <div className="space-y-1 text-sm text-gray-600 pl-10">
-                        {method.method_type === 'pix' ? (
-                           <p className="font-mono bg-white p-2 rounded border border-gray-200 select-all">
-                              {method.pix_key_masked || method.pix_key}
-                           </p>
-                        ) : (
-                           <>
-                              <p>Agência: {method.agency_masked}</p>
-                              <p>Conta: {method.account_number_masked}</p>
-                              <p>Titular: {method.account_holder_name}</p>
-                           </>
-                        )}
-                     </div>
-                  </div>
-               ))
+               memberPaymentMethods.map(method => {
+                  const pixKey = method.raw_pix_key || method.pix_key || method.pix_key_masked;
+                  
+                  return (
+                    <div key={method.id} className="border border-gray-200 rounded-lg p-4 bg-gray-50">
+                       <div className="flex items-center gap-3 mb-2">
+                          <span className="text-2xl">{method.method_type === 'pix' ? '💠' : '🏦'}</span>
+                          <h4 className="font-bold text-gray-900">{method.display_text}</h4>
+                       </div>
+                       
+                       <div className="space-y-3 mt-3">
+                          {method.method_type === 'pix' ? (
+                             <div className="space-y-3">
+                                <div className="flex items-center gap-2">
+                                  <div className="flex-1 bg-white p-3 rounded border border-gray-200 font-mono text-sm break-all">
+                                      {pixKey}
+                                  </div>
+                                  <button 
+                                     onClick={() => handleCopy(pixKey || '', method.id)}
+                                     className="p-3 bg-white border border-gray-200 rounded hover:bg-gray-50 text-gray-600 transition-colors"
+                                     title="Copiar chave"
+                                  >
+                                     {copiedKey === method.id ? <Check size={20} className="text-green-600" /> : <Copy size={20} />}
+                                  </button>
+                                </div>
+                                
+                                <Button 
+                                  variant="outline" 
+                                  size="sm" 
+                                  fullWidth 
+                                  onClick={() => handleGenerateQR(pixKey || '')}
+                                  className="flex items-center justify-center gap-2"
+                                >
+                                  <QrCode size={16} />
+                                  Gerar QR Code
+                                </Button>
+                                
+                                {generatedQrCode && (
+                                   <div className="flex flex-col items-center justify-center p-4 bg-white rounded border border-gray-200 animate-fade-in-down">
+                                      <img src={generatedQrCode} alt="QR Code Pix" className="w-48 h-48" />
+                                      <p className="text-xs text-gray-500 mt-2">Escaneie para pagar</p>
+                                   </div>
+                                )}
+                             </div>
+                          ) : (
+                             <div className="text-sm text-gray-600 bg-white p-3 rounded border border-gray-200 space-y-1">
+                                <p><span className="font-semibold">Banco:</span> {method.bank_name || method.banks?.name}</p>
+                                <p><span className="font-semibold">Agência:</span> {method.raw_agency || method.agency || method.agency_masked}</p>
+                                <p><span className="font-semibold">Conta:</span> {method.raw_account_number || method.account_number || method.account_number_masked}</p>
+                                <p><span className="font-semibold">Titular:</span> {method.account_holder_name}</p>
+                             </div>
+                          )}
+                       </div>
+                    </div>
+                  );
+               })
             )}
             <Button variant="outline" fullWidth onClick={() => setIsPaymentModalOpen(false)}>Fechar</Button>
          </div>
