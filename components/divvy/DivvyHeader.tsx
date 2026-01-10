@@ -8,7 +8,7 @@ import { Modal } from '../ui/Modal';
 import DivvyForm from './DivvyForm';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../context/AuthContext';
-import { Pencil, Trash2 } from 'lucide-react';
+import { Pencil, Trash2, Archive, RotateCcw, Calendar } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 interface DivvyHeaderProps {
@@ -34,7 +34,7 @@ export default function DivvyHeader({ divvy, onUpdate }: DivvyHeaderProps) {
   const router = useRouter();
   const { user } = useAuth();
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
-  const [deleteLoading, setDeleteLoading] = useState(false);
+  const [actionLoading, setActionLoading] = useState(false);
 
   const isCreator = user?.id === divvy.creator_id;
 
@@ -43,7 +43,7 @@ export default function DivvyHeader({ divvy, onUpdate }: DivvyHeaderProps) {
       return;
     }
 
-    setDeleteLoading(true);
+    setActionLoading(true);
     try {
       const { error } = await supabase.from('divvies').delete().eq('id', divvy.id);
       if (error) throw error;
@@ -53,8 +53,31 @@ export default function DivvyHeader({ divvy, onUpdate }: DivvyHeaderProps) {
     } catch (err: any) {
       console.error(err);
       toast.error('Erro ao excluir grupo: ' + err.message);
-      setDeleteLoading(false);
+      setActionLoading(false);
     }
+  };
+
+  const handleToggleArchive = async () => {
+     const newStatus = !divvy.is_archived;
+     const action = newStatus ? 'arquivar' : 'desarquivar';
+     
+     if (!window.confirm(`Deseja realmente ${action} este grupo?`)) return;
+
+     setActionLoading(true);
+     try {
+       const { error } = await supabase
+        .from('divvies')
+        .update({ is_archived: newStatus })
+        .eq('id', divvy.id);
+       
+       if (error) throw error;
+       toast.success(`Grupo ${newStatus ? 'arquivado' : 'ativado'} com sucesso!`);
+       if (onUpdate) onUpdate();
+     } catch (err: any) {
+       toast.error(`Erro ao ${action}: ` + err.message);
+     } finally {
+       setActionLoading(false);
+     }
   };
 
   const handleEditSuccess = () => {
@@ -62,30 +85,50 @@ export default function DivvyHeader({ divvy, onUpdate }: DivvyHeaderProps) {
     if (onUpdate) onUpdate();
   };
 
+  const formatDate = (dateStr?: string) => {
+    if (!dateStr) return null;
+    // Adiciona timezone fix para evitar dia anterior
+    const date = new Date(dateStr + 'T12:00:00'); 
+    return date.toLocaleDateString('pt-BR');
+  };
+
   return (
     <>
-      <div className="bg-white border-b border-gray-200 -mx-4 md:-mx-8 -mt-4 md:-mt-8 mb-8">
+      <div className={`border-b -mx-4 md:-mx-8 -mt-4 md:-mt-8 mb-8 transition-colors ${divvy.is_archived ? 'bg-gray-100 border-gray-300' : 'bg-white border-gray-200'}`}>
         <div className="max-w-5xl mx-auto px-4 py-6 md:px-8">
           <div className="flex flex-col md:flex-row md:items-start justify-between gap-4 mb-4">
             <div className="flex items-center gap-3">
-              <span className="text-4xl">{typeEmoji[divvy.type] || '💰'}</span>
+              <span className="text-4xl filter grayscale-[.5]">{typeEmoji[divvy.type] || '💰'}</span>
               <div>
                 <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
                   {divvy.name}
                   {divvy.is_archived && (
-                    <span className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded-full font-normal">
-                      Arquivado
+                    <span className="text-xs bg-gray-600 text-white px-2 py-1 rounded-full font-bold flex items-center gap-1">
+                      <Archive size={10} /> Arquivado
                     </span>
                   )}
                 </h1>
-                <div className="text-sm text-gray-500">
-                  {typeLabel[divvy.type]} •{' '}
-                  {new Date(divvy.created_at).toLocaleDateString('pt-BR')}
+                <div className="text-sm text-gray-500 flex flex-wrap items-center gap-2 mt-1">
+                  <span>{typeLabel[divvy.type]}</span>
+                  <span>•</span>
+                  <span>Criado em {new Date(divvy.created_at).toLocaleDateString('pt-BR')}</span>
+                  
+                  {(divvy.start_date || divvy.end_date) && (
+                     <>
+                       <span className="hidden sm:inline">•</span>
+                       <span className="flex items-center gap-1 text-gray-600 bg-gray-100 px-2 py-0.5 rounded">
+                          <Calendar size={12} />
+                          {formatDate(divvy.start_date) || '...'} 
+                          {' → '} 
+                          {formatDate(divvy.end_date) || '...'}
+                       </span>
+                     </>
+                  )}
                 </div>
               </div>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <Link href="/dashboard">
                 <Button variant="outline" size="sm">← Voltar</Button>
               </Link>
@@ -97,15 +140,28 @@ export default function DivvyHeader({ divvy, onUpdate }: DivvyHeaderProps) {
                     size="sm" 
                     onClick={() => setIsEditModalOpen(true)}
                     title="Editar Grupo"
+                    disabled={divvy.is_archived}
                   >
                     <Pencil size={16} />
                   </Button>
+                  
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    onClick={handleToggleArchive}
+                    title={divvy.is_archived ? "Desarquivar" : "Arquivar"}
+                    isLoading={actionLoading}
+                    className={divvy.is_archived ? "text-brand-600 border-brand-200" : "text-gray-600"}
+                  >
+                    {divvy.is_archived ? <RotateCcw size={16} /> : <Archive size={16} />}
+                  </Button>
+
                   <Button 
                     variant="outline" 
                     size="sm" 
                     className="text-red-600 hover:bg-red-50 border-red-200"
                     onClick={handleDelete}
-                    isLoading={deleteLoading}
+                    isLoading={actionLoading}
                     title="Excluir Grupo"
                   >
                     <Trash2 size={16} />

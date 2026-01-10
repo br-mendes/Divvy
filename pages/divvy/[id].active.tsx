@@ -12,7 +12,7 @@ import DivvyHeader from '../../components/divvy/DivvyHeader';
 import InviteModal from '../../components/invite/InviteModal';
 import LoadingSpinner from '../../components/ui/LoadingSpinner';
 import EmptyState from '../../components/ui/EmptyState';
-import { Plus, UserPlus, Receipt, PieChart, Users, Pencil, Trash2, Check, AlertCircle } from 'lucide-react';
+import { Plus, UserPlus, Receipt, PieChart, Users, Pencil, Trash2, Check, AlertCircle, Lock } from 'lucide-react';
 import { ProtectedRoute } from '../../components/ProtectedRoute';
 import toast from 'react-hot-toast';
 
@@ -65,20 +65,18 @@ const DivvyDetailContent: React.FC = () => {
         .eq('divvy_id', id);
         
       if (memberData && memberData.length > 0) {
-        // 2. Fetch Profiles for these members separately from the public profiles table
-        // This relies on the database_schema.sql trigger having been set up
+        // 2. Fetch Profiles separately
         const userIds = memberData.map(m => m.user_id);
         const { data: profilesData } = await supabase
           .from('profiles')
           .select('*')
           .in('id', userIds);
 
-        // Merge profiles into members
         const mergedMembers = memberData.map(member => {
             const profile = profilesData?.find(p => p.id === member.user_id);
             return {
                 ...member,
-                profiles: profile || null // Assign profile if found
+                profiles: profile || null 
             };
         });
         setMembers(mergedMembers);
@@ -101,19 +99,14 @@ const DivvyDetailContent: React.FC = () => {
     const member = members.find(m => m.user_id === userId);
     if (!member) return 'Desconhecido';
     
-    // Se for o próprio usuário, indica (Você)
     const isMe = userId === user?.id;
-    
-    // Check local profile data from join
     const profile = member.profiles;
-    let displayName = member.email; // Fallback to email in member table
+    let displayName = member.email;
 
     if (profile) {
-       // Prioridade: Apelido > Nome Completo > Email
        displayName = profile.nickname || profile.full_name || profile.email || 'Membro';
     }
 
-    // Se o email ainda for o fallback, tenta pegar apenas a parte antes do @ para ficar mais limpo
     if (displayName && displayName.includes('@')) {
         displayName = displayName.split('@')[0];
     }
@@ -125,12 +118,15 @@ const DivvyDetailContent: React.FC = () => {
 
   const handleOpenAddExpense = () => {
     if (!user) return;
+    if (divvy?.is_archived) {
+       toast.error("Grupo arquivado. Não é possível adicionar despesas.");
+       return;
+    }
     setEditingExpenseId(null);
     setAmount('');
     setCategory('food');
     setDesc('');
     setDate(new Date().toISOString().split('T')[0]);
-    // Default payer to current user
     setPayerId(user.id);
     setSplitMode('equal');
     
@@ -142,6 +138,8 @@ const DivvyDetailContent: React.FC = () => {
   };
 
   const handleOpenEditExpense = async (exp: Expense) => {
+    if (divvy?.is_archived) return;
+
     setEditingExpenseId(exp.id);
     setAmount(exp.amount.toString());
     setCategory(exp.category);
@@ -180,8 +178,6 @@ const DivvyDetailContent: React.FC = () => {
 
     setIsExpenseModalOpen(true);
   };
-
-  // --- Validation & Calculation Logic ---
 
   const totalAmount = parseFloat(amount) || 0;
 
@@ -319,6 +315,7 @@ const DivvyDetailContent: React.FC = () => {
   };
 
   const handleDeleteExpense = async (expenseId: string) => {
+    if (divvy?.is_archived) return;
     if (!confirm('Tem certeza que deseja excluir esta despesa?')) return;
     try {
       const { error } = await supabase.from('expenses').delete().eq('id', expenseId);
@@ -338,12 +335,26 @@ const DivvyDetailContent: React.FC = () => {
     <div className="space-y-6">
       <DivvyHeader divvy={divvy} onUpdate={fetchDivvyData} />
 
+      {divvy.is_archived && (
+        <div className="bg-gray-100 border border-gray-300 text-gray-700 p-4 rounded-lg flex items-center gap-3">
+          <Lock size={20} />
+          <div>
+            <p className="font-bold">Este grupo está arquivado.</p>
+            <p className="text-sm">Não é possível adicionar ou editar despesas, mas você pode visualizar o histórico.</p>
+          </div>
+        </div>
+      )}
+
       <div className="flex justify-end gap-3 px-1">
         <Button variant="outline" onClick={() => setIsInviteModalOpen(true)}>
           <UserPlus size={18} className="mr-2" />
           Convidar
         </Button>
-        <Button onClick={handleOpenAddExpense}>
+        <Button 
+           onClick={handleOpenAddExpense} 
+           disabled={divvy.is_archived}
+           className={divvy.is_archived ? "opacity-50 cursor-not-allowed" : ""}
+        >
           <Plus size={18} className="mr-2" />
           Nova Despesa
         </Button>
@@ -382,10 +393,10 @@ const DivvyDetailContent: React.FC = () => {
         {activeTab === 'expenses' && (
           <div className="space-y-4">
             {expenses.length === 0 ? <EmptyState /> : expenses.map((exp) => {
-              const canEdit = user?.id === exp.paid_by_user_id || user?.id === divvy.creator_id;
+              const canEdit = (user?.id === exp.paid_by_user_id || user?.id === divvy.creator_id) && !divvy.is_archived;
               
               return (
-                <div key={exp.id} className="bg-white p-4 rounded-lg shadow-sm border border-gray-100 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                <div key={exp.id} className={`bg-white p-4 rounded-lg shadow-sm border border-gray-100 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 ${divvy.is_archived ? 'opacity-75' : ''}`}>
                   <div className="flex items-center gap-4 flex-1">
                     <div className="h-10 w-10 rounded-full bg-brand-50 flex items-center justify-center text-xl flex-shrink-0">
                       {exp.category === 'food' ? '🍽️' : 
@@ -521,7 +532,7 @@ const DivvyDetailContent: React.FC = () => {
             </div>
           </div>
 
-          {/* Quem pagou? */}
+          {/* Quem pagou? - Aqui garantimos o uso do apelido/nome */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Quem pagou?</label>
             <select

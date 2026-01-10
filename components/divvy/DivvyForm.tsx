@@ -24,6 +24,8 @@ export default function DivvyForm({ onSuccess, initialData }: DivvyFormProps) {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [type, setType] = useState('trip');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -31,6 +33,8 @@ export default function DivvyForm({ onSuccess, initialData }: DivvyFormProps) {
       setName(initialData.name);
       setDescription(initialData.description || '');
       setType(initialData.type);
+      setStartDate(initialData.start_date || '');
+      setEndDate(initialData.end_date || '');
     }
   }, [initialData]);
 
@@ -47,14 +51,20 @@ export default function DivvyForm({ onSuccess, initialData }: DivvyFormProps) {
     try {
       if (!user) throw new Error("Usuário não autenticado");
 
+      const payload = {
+        name,
+        description,
+        type,
+        start_date: startDate || null,
+        end_date: endDate || null,
+      };
+
       if (initialData) {
         // UPDATE Existing Divvy
         const { error } = await supabase
           .from('divvies')
           .update({
-            name,
-            description,
-            type,
+            ...payload,
             updated_at: new Date().toISOString()
           })
           .eq('id', initialData.id);
@@ -63,11 +73,8 @@ export default function DivvyForm({ onSuccess, initialData }: DivvyFormProps) {
         toast.success('Divvy atualizado com sucesso!');
       } else {
         // CREATE New Divvy
-        // O banco de dados possui um TRIGGER que adiciona automaticamente o criador como admin.
         const { error } = await supabase.from('divvies').insert({
-          name,
-          description,
-          type,
+          ...payload,
           creator_id: user.id
         });
 
@@ -85,6 +92,8 @@ export default function DivvyForm({ onSuccess, initialData }: DivvyFormProps) {
         setName('');
         setDescription('');
         setType('trip');
+        setStartDate('');
+        setEndDate('');
       }
       
       onSuccess();
@@ -125,6 +134,21 @@ export default function DivvyForm({ onSuccess, initialData }: DivvyFormProps) {
             </option>
           ))}
         </select>
+      </div>
+
+      <div className="grid grid-cols-2 gap-4">
+        <Input
+          type="date"
+          label="Data Inicial (Opcional)"
+          value={startDate}
+          onChange={(e: React.ChangeEvent<HTMLInputElement>) => setStartDate(e.target.value)}
+        />
+        <Input
+          type="date"
+          label="Data Final (Opcional)"
+          value={endDate}
+          onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEndDate(e.target.value)}
+        />
       </div>
 
       <div>

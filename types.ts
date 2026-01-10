@@ -25,7 +25,8 @@ export interface Divvy {
   creator_id: string;
   type: DivvyType;
   created_at: string;
-  ended_at?: string;
+  start_date?: string;
+  end_date?: string;
   is_archived: boolean;
   members?: DivvyMember[];
 }
