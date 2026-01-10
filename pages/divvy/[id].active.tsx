@@ -44,7 +44,10 @@ const DivvyDetailContent: React.FC = () => {
   const [viewingMemberName, setViewingMemberName] = useState('');
   const [memberPaymentMethods, setMemberPaymentMethods] = useState<PaymentMethod[]>([]);
   const [loadingPayments, setLoadingPayments] = useState(false);
+  
+  // Pix QR Code & Copy State
   const [generatedQrCode, setGeneratedQrCode] = useState<string | null>(null);
+  const [activeQrMethodId, setActiveQrMethodId] = useState<string | null>(null);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
 
   // Expense Form State
@@ -226,7 +229,7 @@ const DivvyDetailContent: React.FC = () => {
   const { isValid: isSplitValid, message: splitMessage } = getSplitSummary();
 
   const handleSplitValueChange = (userId: string, value: string) => {
-    setSplitValues(prev => ({ ...prev, [userId]: String(value) }));
+    setSplitValues(prev => ({ ...prev, [userId]: String(value as string) }));
   };
 
   const toggleMemberSelection = (userId: string) => {
@@ -262,7 +265,7 @@ const DivvyDetailContent: React.FC = () => {
         
         let splitsToInsert: any[] = [];
         const numericValues = Object.entries(splitValues).reduce((acc, [key, val]) => {
-          acc[key] = parseFloat(val) || 0;
+          acc[key] = parseFloat(val as string) || 0;
           return acc;
         }, {} as Record<string, number>);
 
@@ -320,6 +323,7 @@ const DivvyDetailContent: React.FC = () => {
     setIsPaymentModalOpen(true);
     setMemberPaymentMethods([]);
     setGeneratedQrCode(null);
+    setActiveQrMethodId(null);
     setCopiedKey(null);
 
     try {
@@ -346,10 +350,11 @@ const DivvyDetailContent: React.FC = () => {
     setTimeout(() => setCopiedKey(null), 3000);
   };
 
-  const handleGenerateQR = async (text: string) => {
+  const handleGenerateQR = async (text: string, methodId: string) => {
     try {
       const url = await QRCode.toDataURL(text);
       setGeneratedQrCode(url);
+      setActiveQrMethodId(methodId);
     } catch (err) {
       console.error("QR Error", err);
       toast.error("Erro ao gerar QR Code");
@@ -660,21 +665,23 @@ const DivvyDetailContent: React.FC = () => {
                <p className="text-gray-500 text-center py-4">Nenhum método de pagamento disponível.</p>
             ) : (
                memberPaymentMethods.map(method => {
+                  // Determine payment type reliably (check both type fields)
+                  const isPix = method.method_type === 'pix' || method.type === 'pix';
                   const pixKey = method.raw_pix_key || method.pix_key || method.pix_key_masked;
                   
                   return (
                     <div key={method.id} className="border border-gray-200 rounded-lg p-4 bg-gray-50">
                        <div className="flex items-center gap-3 mb-2">
-                          <span className="text-2xl">{method.method_type === 'pix' ? '💠' : '🏦'}</span>
+                          <span className="text-2xl">{isPix ? '💠' : '🏦'}</span>
                           <h4 className="font-bold text-gray-900">{method.display_text}</h4>
                        </div>
                        
                        <div className="space-y-3 mt-3">
-                          {method.method_type === 'pix' ? (
+                          {isPix ? (
                              <div className="space-y-3">
                                 <div className="flex items-center gap-2">
                                   <div className="flex-1 bg-white p-3 rounded border border-gray-200 font-mono text-sm break-all">
-                                      {pixKey}
+                                      {pixKey || 'Chave não disponível'}
                                   </div>
                                   <button 
                                      onClick={() => handleCopy(pixKey || '', method.id)}
@@ -689,14 +696,14 @@ const DivvyDetailContent: React.FC = () => {
                                   variant="outline" 
                                   size="sm" 
                                   fullWidth 
-                                  onClick={() => handleGenerateQR(pixKey || '')}
+                                  onClick={() => handleGenerateQR(pixKey || '', method.id)}
                                   className="flex items-center justify-center gap-2"
                                 >
                                   <QrCode size={16} />
                                   Gerar QR Code
                                 </Button>
                                 
-                                {generatedQrCode && (
+                                {activeQrMethodId === method.id && generatedQrCode && (
                                    <div className="flex flex-col items-center justify-center p-4 bg-white rounded border border-gray-200 animate-fade-in-down">
                                       <img src={generatedQrCode} alt="QR Code Pix" className="w-48 h-48" />
                                       <p className="text-xs text-gray-500 mt-2">Escaneie para pagar</p>
