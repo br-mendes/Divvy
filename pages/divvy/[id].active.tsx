@@ -12,7 +12,7 @@ import DivvyHeader from '../../components/divvy/DivvyHeader';
 import InviteModal from '../../components/invite/InviteModal';
 import LoadingSpinner from '../../components/ui/LoadingSpinner';
 import EmptyState from '../../components/ui/EmptyState';
-import { Plus, UserPlus, Receipt, PieChart, Users, Pencil, Trash2, Check, AlertCircle, Lock, CreditCard } from 'lucide-react';
+import { Plus, UserPlus, Receipt, PieChart, Users, Pencil, Trash2, CreditCard, Lock } from 'lucide-react';
 import { ProtectedRoute } from '../../components/ProtectedRoute';
 import toast from 'react-hot-toast';
 
@@ -22,6 +22,9 @@ const DivvyDetailContent: React.FC = () => {
   const router = useRouter();
   const { id } = router.query;
   const { user } = useAuth();
+  
+  // Ensure id is a string
+  const divvyId = typeof id === 'string' ? id : '';
   
   // Data State
   const [divvy, setDivvy] = useState<Divvy | null>(null);
@@ -48,30 +51,27 @@ const DivvyDetailContent: React.FC = () => {
   const [desc, setDesc] = useState('');
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   
-  // New Split Logic State
+  // Advanced Split Logic State
   const [payerId, setPayerId] = useState('');
   const [splitMode, setSplitMode] = useState<SplitMode>('equal');
-  // splitValues: 
-  // - Equal mode: 1 = selected, 0 = not selected
-  // - Amount mode: value in currency
-  // - Percentage mode: value in %
-  const [splitValues, setSplitValues] = useState<Record<string, number>>({});
+  // Usamos string para permitir edição fluida de inputs (ex: "10.") sem forçar parse imediato
+  const [splitValues, setSplitValues] = useState<Record<string, string>>({});
 
   useEffect(() => {
-    if (id && user) {
+    if (divvyId && user) {
       fetchDivvyData();
     }
-  }, [id, user]);
+  }, [divvyId, user]);
 
   const fetchDivvyData = async () => {
     try {
-      const { data: divvyData } = await supabase.from('divvies').select('*').eq('id', id).single();
+      const { data: divvyData } = await supabase.from('divvies').select('*').eq('id', divvyId).single();
       setDivvy(divvyData);
 
       const { data: memberData } = await supabase
         .from('divvy_members')
         .select('*')
-        .eq('divvy_id', id);
+        .eq('divvy_id', divvyId);
         
       if (memberData && memberData.length > 0) {
         const userIds = memberData.map(m => m.user_id);
@@ -92,7 +92,7 @@ const DivvyDetailContent: React.FC = () => {
         setMembers([]);
       }
 
-      const { data: expenseData } = await supabase.from('expenses').select('*').eq('divvy_id', id).order('date', { ascending: false });
+      const { data: expenseData } = await supabase.from('expenses').select('*').eq('divvy_id', divvyId).order('date', { ascending: false });
       setExpenses(expenseData || []);
 
     } catch (error) {
@@ -134,10 +134,10 @@ const DivvyDetailContent: React.FC = () => {
     setDate(new Date().toISOString().split('T')[0]);
     setPayerId(user.id); // Default to current user
     
-    // Initialize split: Equal split, everyone selected
+    // Initialize split: Equal split, everyone selected ("1" = selected)
     setSplitMode('equal');
-    const initialSplits: Record<string, number> = {};
-    members.forEach(m => initialSplits[m.user_id] = 1);
+    const initialSplits: Record<string, string> = {};
+    members.forEach(m => initialSplits[m.user_id] = "1");
     setSplitValues(initialSplits);
 
     setIsExpenseModalOpen(true);
@@ -162,30 +162,29 @@ const DivvyDetailContent: React.FC = () => {
     const splits = splitsData as ExpenseSplit[] | null;
 
     if (splits && splits.length > 0) {
-      const loadedSplits: Record<string, number> = {};
+      const loadedSplits: Record<string, string> = {};
       const firstAmount = splits[0].amount_owed;
       
       // Heuristic: Check if all splits are roughly equal
-      // Note: This isn't perfect if amounts were manually set to be equal, but good enough for UX
-      const isRoughlyEqual = splits.every(s => Math.abs(s.amount_owed - firstAmount) < 0.02);
+      const isRoughlyEqual = splits.every(s => Math.abs(s.amount_owed - firstAmount) < 0.05);
       
       if (isRoughlyEqual) {
         setSplitMode('equal');
-        // Reset all to 0 first
-        members.forEach(m => loadedSplits[m.user_id] = 0);
-        // Set participants to 1
-        splits.forEach(s => loadedSplits[s.participant_user_id] = 1);
+        // Reset all to "0" (unselected) first
+        members.forEach(m => loadedSplits[m.user_id] = "0");
+        // Set participants to "1" (selected)
+        splits.forEach(s => loadedSplits[s.participant_user_id] = "1");
       } else {
         setSplitMode('amount');
-        members.forEach(m => loadedSplits[m.user_id] = 0);
-        splits.forEach(s => loadedSplits[s.participant_user_id] = s.amount_owed);
+        members.forEach(m => loadedSplits[m.user_id] = "0");
+        splits.forEach(s => loadedSplits[s.participant_user_id] = String(s.amount_owed));
       }
       setSplitValues(loadedSplits);
     } else {
         // Fallback
         setSplitMode('equal');
-        const initialSplits: Record<string, number> = {};
-        members.forEach(m => initialSplits[m.user_id] = 1);
+        const initialSplits: Record<string, string> = {};
+        members.forEach(m => initialSplits[m.user_id] = "1");
         setSplitValues(initialSplits);
     }
 
@@ -198,14 +197,20 @@ const DivvyDetailContent: React.FC = () => {
   const getSplitSummary = () => {
       if (totalAmount <= 0) return { isValid: false, message: 'Insira um valor válido' };
 
+      // Parse string values to numbers for calculation
+      const numericValues = Object.entries(splitValues).reduce((acc, [key, val]) => {
+          acc[key] = parseFloat(val) || 0;
+          return acc;
+      }, {} as Record<string, number>);
+
       if (splitMode === 'equal') {
-          const selectedCount = Object.values(splitValues).filter(v => v === 1).length;
+          const selectedCount = Object.values(numericValues).filter(v => v === 1).length;
           if (selectedCount === 0) return { isValid: false, message: 'Selecione pelo menos uma pessoa' };
           const perPerson = totalAmount / selectedCount;
           return { isValid: true, message: `R$ ${perPerson.toFixed(2)} por pessoa` };
       } 
       
-      const currentSum = Object.values(splitValues).reduce((a: number, b: number) => a + b, 0);
+      const currentSum = Object.values(numericValues).reduce((a, b) => a + b, 0);
       
       if (splitMode === 'amount') {
           const diff = totalAmount - currentSum;
@@ -218,7 +223,7 @@ const DivvyDetailContent: React.FC = () => {
           const diff = 100 - currentSum;
           const isValid = Math.abs(diff) < 0.1;
           if (isValid) return { isValid: true, message: 'Total: 100%' };
-          return { isValid: false, message: diff > 0 ? `Faltam ${diff.toFixed(1)}%` : `Passou ${Math.abs(diff).toFixed(1)}%` };
+          return { isValid: false, message: diff > 0 ? `Faltam ${Math.abs(diff).toFixed(1)}%` : `Passou ${Math.abs(diff).toFixed(1)}%` };
       }
 
       return { isValid: false, message: '' };
@@ -227,13 +232,12 @@ const DivvyDetailContent: React.FC = () => {
   const { isValid: isSplitValid, message: splitMessage } = getSplitSummary();
 
   const handleSplitValueChange = (userId: string, value: string) => {
-    let numVal = parseFloat(value);
-    if (isNaN(numVal) || numVal < 0) numVal = 0;
-    setSplitValues(prev => ({ ...prev, [userId]: numVal }));
+    // Permite digitação livre (inclusive "0." ou vazio)
+    setSplitValues(prev => ({ ...prev, [userId]: value }));
   };
 
   const toggleMemberSelection = (userId: string) => {
-    setSplitValues(prev => ({ ...prev, [userId]: prev[userId] === 1 ? 0 : 1 }));
+    setSplitValues(prev => ({ ...prev, [userId]: prev[userId] === "1" ? "0" : "1" }));
   };
 
   const handleSaveExpense = async (e: React.FormEvent) => {
@@ -257,7 +261,7 @@ const DivvyDetailContent: React.FC = () => {
         await supabase.from('expenses').update(expenseData).eq('id', editingExpenseId);
       } else {
         const { data } = await supabase.from('expenses').insert(expenseData).select().single();
-        if (data) expenseId = data.id;
+        if (data) expenseId = (data as Expense).id;
       }
 
       if (expenseId) {
@@ -266,9 +270,15 @@ const DivvyDetailContent: React.FC = () => {
         
         // Calculate new splits
         let splitsToInsert: any[] = [];
+        
+        // Parse current values
+        const numericValues = Object.entries(splitValues).reduce((acc, [key, val]) => {
+          acc[key] = parseFloat(val) || 0;
+          return acc;
+        }, {} as Record<string, number>);
 
         if (splitMode === 'equal') {
-          const selectedMembers = members.filter(m => splitValues[m.user_id] === 1);
+          const selectedMembers = members.filter(m => numericValues[m.user_id] === 1);
           const amountPerPerson = totalAmount / selectedMembers.length;
           splitsToInsert = selectedMembers.map(m => ({
             expense_id: expenseId,
@@ -277,19 +287,19 @@ const DivvyDetailContent: React.FC = () => {
           }));
         } else if (splitMode === 'amount') {
           splitsToInsert = members
-            .filter(m => splitValues[m.user_id] > 0)
+            .filter(m => numericValues[m.user_id] > 0)
             .map(m => ({
               expense_id: expenseId,
               participant_user_id: m.user_id,
-              amount_owed: splitValues[m.user_id]
+              amount_owed: numericValues[m.user_id]
             }));
         } else if (splitMode === 'percentage') {
            splitsToInsert = members
-            .filter(m => splitValues[m.user_id] > 0)
+            .filter(m => numericValues[m.user_id] > 0)
             .map(m => ({
               expense_id: expenseId,
               participant_user_id: m.user_id,
-              amount_owed: totalAmount * (splitValues[m.user_id] / 100)
+              amount_owed: totalAmount * (numericValues[m.user_id] / 100)
             }));
         }
 
@@ -323,7 +333,7 @@ const DivvyDetailContent: React.FC = () => {
 
     try {
         const { data, error } = await supabase.rpc('get_divvy_members_payment_methods', {
-            p_divvy_id: id
+            p_divvy_id: divvyId
         });
 
         if (error) throw error;
@@ -574,7 +584,7 @@ const DivvyDetailContent: React.FC = () => {
               <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
                 {members.map(m => {
                   const name = getMemberName(m.user_id);
-                  const isSelected = splitValues[m.user_id] === 1;
+                  const isSelected = splitValues[m.user_id] === "1";
                   
                   return (
                     <div key={m.user_id} className="flex items-center justify-between p-2 rounded border border-gray-100 hover:bg-gray-50">
@@ -596,7 +606,7 @@ const DivvyDetailContent: React.FC = () => {
                         {splitMode === 'equal' ? (
                            isSelected ? (
                              <span className="text-sm font-medium text-gray-900">
-                               R$ {((totalAmount / Math.max(1, Object.values(splitValues).filter(v => v === 1).length))).toFixed(2)}
+                               R$ {((totalAmount / Math.max(1, Object.values(splitValues).filter(v => v === "1").length))).toFixed(2)}
                              </span>
                            ) : <span className="text-xs text-gray-400">-</span>
                         ) : (
