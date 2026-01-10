@@ -33,8 +33,16 @@ export default function DivvyForm({ onSuccess, initialData }: DivvyFormProps) {
       setName(initialData.name);
       setDescription(initialData.description || '');
       setType(initialData.type);
-      setStartDate(initialData.start_date || '');
-      setEndDate(initialData.end_date || '');
+      
+      // Importante: Supabase pode retornar ISO strings (ex: 2024-01-01T00:00:00).
+      // O input type="date" exige YYYY-MM-DD exato.
+      const formatIsoDate = (isoStr?: string) => {
+         if (!isoStr) return '';
+         return String(isoStr).split('T')[0];
+      };
+
+      setStartDate(formatIsoDate(initialData.start_date));
+      setEndDate(formatIsoDate(initialData.end_date));
     }
   }, [initialData]);
 
@@ -75,7 +83,8 @@ export default function DivvyForm({ onSuccess, initialData }: DivvyFormProps) {
         // CREATE New Divvy
         const { error } = await supabase.from('divvies').insert({
           ...payload,
-          creator_id: user.id
+          creator_id: user.id,
+          is_archived: false // Garante valor inicial
         });
 
         if (error) {

@@ -58,7 +58,9 @@ export default function DivvyHeader({ divvy, onUpdate }: DivvyHeaderProps) {
   };
 
   const handleToggleArchive = async () => {
-     const newStatus = !divvy.is_archived;
+     // Força boolean
+     const currentStatus = !!divvy.is_archived;
+     const newStatus = !currentStatus;
      const action = newStatus ? 'arquivar' : 'desarquivar';
      
      if (!window.confirm(`Deseja realmente ${action} este grupo?`)) return;
@@ -85,11 +87,17 @@ export default function DivvyHeader({ divvy, onUpdate }: DivvyHeaderProps) {
     if (onUpdate) onUpdate();
   };
 
+  // Formata data de forma robusta ignorando timezone, usando apenas a string YYYY-MM-DD
   const formatDate = (dateStr?: string) => {
     if (!dateStr) return null;
-    // Adiciona timezone fix para evitar dia anterior
-    const date = new Date(dateStr + 'T12:00:00'); 
-    return date.toLocaleDateString('pt-BR');
+    try {
+      const rawDate = String(dateStr).split('T')[0];
+      const [year, month, day] = rawDate.split('-');
+      if (!year || !month || !day) return null;
+      return `${day}/${month}/${year}`;
+    } catch (e) {
+      return null;
+    }
   };
 
   return (
