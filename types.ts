@@ -1,4 +1,5 @@
 
+
 export interface User {
   id: string;
   email: string;
@@ -92,4 +93,56 @@ export interface DivvyInvite {
   expires_at: string;
   accepted_at?: string;
   created_at: string;
+}
+
+// Payment Types
+export type PaymentMethodType = 'pix' | 'bank_account';
+export type PixKeyType = 'cpf' | 'cnpj' | 'email' | 'phone' | 'random';
+export type BankAccountType = 'checking' | 'savings' | 'salary' | 'payment';
+
+export interface Bank {
+  id: string;
+  code: string;
+  name: string;
+  short_name: string;
+}
+
+export interface PaymentMethod {
+  id: string;
+  user_id: string;
+  type: PaymentMethodType;
+  
+  // Pix
+  pix_key?: string;
+  pix_key_type?: PixKeyType;
+  
+  // Bank Account
+  bank_id?: string;
+  bank_name?: string; // Fallback or joined
+  agency?: string;
+  account_number?: string;
+  account_digit?: string;
+  account_type?: BankAccountType;
+  account_holder_name?: string;
+  account_holder_document?: string;
+  
+  nickname?: string;
+  description?: string;
+  is_primary: boolean;
+  is_active: boolean;
+  is_visible_in_groups: boolean;
+  
+  // Joined Fields (for display)
+  banks?: Bank;
+  
+  // Fields from RPC view
+  pix_key_masked?: string;
+  agency_masked?: string;
+  account_number_masked?: string;
+  display_text?: string;
+  raw_pix_key?: string;
+  raw_agency?: string;
+  raw_account_number?: string;
+  raw_account_digit?: string;
+  method_type?: PaymentMethodType;
 }
