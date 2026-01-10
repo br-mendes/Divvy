@@ -147,7 +147,7 @@ const DivvyDetailContent: React.FC = () => {
     if (divvy?.is_archived) return;
 
     setEditingExpenseId(exp.id);
-    setAmount(exp.amount.toString());
+    setAmount(String(exp.amount)); // Safe cast for number to string
     setCategory(exp.category);
     setDesc(exp.description);
     setDate(exp.date);
@@ -261,7 +261,7 @@ const DivvyDetailContent: React.FC = () => {
         await supabase.from('expenses').update(expenseData).eq('id', editingExpenseId);
       } else {
         const { data } = await supabase.from('expenses').insert(expenseData).select().single();
-        if (data) expenseId = (data as Expense).id;
+        if (data) expenseId = (data as any).id;
       }
 
       if (expenseId) {
