@@ -392,11 +392,15 @@ function ProfileContent() {
           {paymentMethods.length === 0 ? (
             <p className="text-gray-500 text-center py-8">Nenhum método de pagamento cadastrado.</p>
           ) : (
-            paymentMethods.map(method => (
+            paymentMethods.map(method => {
+              // Robust check for display logic
+              const isPix = method.type === 'pix' || method.method_type === 'pix' || !!method.pix_key;
+              
+              return (
               <div key={method.id} className="border border-gray-200 rounded-lg p-4 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 bg-white hover:border-brand-200 transition-colors">
                 <div className="flex items-center gap-4">
                   <div className="h-10 w-10 rounded-full bg-brand-50 flex items-center justify-center text-xl">
-                    {method.type === 'pix' ? '💠' : '🏦'}
+                    {isPix ? '💠' : '🏦'}
                   </div>
                   <div>
                     <div className="flex items-center gap-2">
@@ -405,12 +409,12 @@ function ProfileContent() {
                         <span className="text-xs bg-brand-100 text-brand-700 px-2 py-0.5 rounded-full font-medium">Principal</span>
                       )}
                     </div>
-                    {method.type === 'bank_account' && (
+                    {!isPix && (
                         <p className="text-sm text-gray-500">
                            {method.bank_name || method.banks?.name} • Ag: {method.agency}
                         </p>
                     )}
-                    {method.type === 'pix' && (
+                    {isPix && (
                         <p className="text-sm text-gray-500 font-mono">
                            Chave: {method.pix_key || method.pix_key_masked}
                         </p>
@@ -435,7 +439,7 @@ function ProfileContent() {
                    </button>
                 </div>
               </div>
-            ))
+            )})
           )}
         </div>
       </div>

@@ -196,7 +196,7 @@ const DivvyDetailContent: React.FC = () => {
       if (totalAmount <= 0) return { isValid: false, message: 'Insira um valor válido' };
 
       const numericValues = Object.entries(splitValues).reduce((acc, [key, val]) => {
-          acc[key] = parseFloat(val) || 0;
+          acc[key] = parseFloat(val as string) || 0;
           return acc;
       }, {} as Record<string, number>);
 
@@ -229,7 +229,7 @@ const DivvyDetailContent: React.FC = () => {
   const { isValid: isSplitValid, message: splitMessage } = getSplitSummary();
 
   const handleSplitValueChange = (userId: string, value: string) => {
-    setSplitValues(prev => ({ ...prev, [userId]: String(value as string) }));
+    setSplitValues(prev => ({ ...prev, [userId]: value }));
   };
 
   const toggleMemberSelection = (userId: string) => {
@@ -332,7 +332,6 @@ const DivvyDetailContent: React.FC = () => {
         });
 
         if (error) throw error;
-        // Se 'get_divvy_members_payment_methods' retornar, filtra
         const memberMethods = (data || []).filter((m: any) => m.member_id === memberId);
         setMemberPaymentMethods(memberMethods);
     } catch (error: any) {
@@ -665,8 +664,14 @@ const DivvyDetailContent: React.FC = () => {
                <p className="text-gray-500 text-center py-4">Nenhum método de pagamento disponível.</p>
             ) : (
                memberPaymentMethods.map(method => {
-                  // Determine payment type reliably (check both type fields)
-                  const isPix = method.method_type === 'pix' || method.type === 'pix';
+                  // Robust Pix detection checking both type fields and content
+                  const isPix = 
+                    method.method_type === 'pix' || 
+                    method.type === 'pix' || 
+                    (method.display_text && method.display_text.toLowerCase().includes('pix')) ||
+                    !!method.pix_key ||
+                    !!method.raw_pix_key;
+
                   const pixKey = method.raw_pix_key || method.pix_key || method.pix_key_masked;
                   
                   return (
@@ -680,8 +685,8 @@ const DivvyDetailContent: React.FC = () => {
                           {isPix ? (
                              <div className="space-y-3">
                                 <div className="flex items-center gap-2">
-                                  <div className="flex-1 bg-white p-3 rounded border border-gray-200 font-mono text-sm break-all">
-                                      {pixKey || 'Chave não disponível'}
+                                  <div className="flex-1 bg-white p-3 rounded border border-gray-200 font-mono text-sm break-all flex items-center justify-between">
+                                      <span>{pixKey || 'Chave indisponível'}</span>
                                   </div>
                                   <button 
                                      onClick={() => handleCopy(pixKey || '', method.id)}
@@ -698,6 +703,7 @@ const DivvyDetailContent: React.FC = () => {
                                   fullWidth 
                                   onClick={() => handleGenerateQR(pixKey || '', method.id)}
                                   className="flex items-center justify-center gap-2"
+                                  disabled={!pixKey}
                                 >
                                   <QrCode size={16} />
                                   Gerar QR Code
@@ -712,10 +718,10 @@ const DivvyDetailContent: React.FC = () => {
                              </div>
                           ) : (
                              <div className="text-sm text-gray-600 bg-white p-3 rounded border border-gray-200 space-y-1">
-                                <p><span className="font-semibold">Banco:</span> {method.bank_name || method.banks?.name}</p>
-                                <p><span className="font-semibold">Agência:</span> {method.raw_agency || method.agency || method.agency_masked}</p>
-                                <p><span className="font-semibold">Conta:</span> {method.raw_account_number || method.account_number || method.account_number_masked}</p>
-                                <p><span className="font-semibold">Titular:</span> {method.account_holder_name}</p>
+                                <p><span className="font-semibold">Banco:</span> {method.bank_name || method.banks?.name || 'N/A'}</p>
+                                <p><span className="font-semibold">Agência:</span> {method.raw_agency || method.agency || method.agency_masked || '-'}</p>
+                                <p><span className="font-semibold">Conta:</span> {method.raw_account_number || method.account_number || method.account_number_masked || '-'}</p>
+                                <p><span className="font-semibold">Titular:</span> {method.account_holder_name || '-'}</p>
                              </div>
                           )}
                        </div>
