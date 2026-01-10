@@ -49,15 +49,30 @@ function ProfileContent() {
   }, [user]);
 
   const fetchPaymentData = async () => {
-    // Fetch user methods
-    const { data: methods } = await supabase
-      .from('user_payment_methods')
-      .select('*, banks(name, short_name)')
-      .eq('user_id', user?.id)
-      .eq('is_active', true)
-      .order('is_primary', { ascending: false });
-    
-    if (methods) setPaymentMethods(methods as any);
+    if (!user) return;
+
+    try {
+        // Tenta buscar via RPC primeiro (mais robusto e formatado)
+        const { data: methods, error } = await supabase.rpc('get_user_payment_methods', {
+            p_user_id: user.id
+        });
+
+        if (!error && methods) {
+            setPaymentMethods(methods as any);
+        } else {
+            // Fallback para select direto caso RPC falhe ou não exista
+            const { data: methodsDirect } = await supabase
+              .from('user_payment_methods')
+              .select('*, banks(name, short_name)')
+              .eq('user_id', user.id)
+              .eq('is_active', true)
+              .order('is_primary', { ascending: false });
+            
+            if (methodsDirect) setPaymentMethods(methodsDirect as any);
+        }
+    } catch (e) {
+        console.error("Error fetching payments", e);
+    }
 
     // Fetch banks
     const { data: banksData } = await supabase.from('banks').select('*').order('name');
@@ -102,13 +117,6 @@ function ProfileContent() {
         payload.pix_key = pixKey;
         payload.pix_key_type = pixKeyType;
       } else {
-        if (!selectedBankId && !banks.length) {
-            // Se não houver bancos no DB, não trava, mas idealmente deveria ter
-        }
-        
-        // Se usar o select customizado sem ID real do banco (apenas para fallback visual),
-        // precisaria adaptar. Mas assumimos que o usuário selecionou um ID válido se existir.
-        
         payload.bank_id = selectedBankId || null;
         payload.agency = agency;
         payload.account_number = accountNumber;
@@ -135,12 +143,22 @@ function ProfileContent() {
   const handleDeleteMethod = async (id: string) => {
     if (!confirm("Tem certeza que deseja excluir este método de pagamento?")) return;
     try {
-      const { error } = await supabase
-        .from('user_payment_methods')
-        .update({ is_active: false })
-        .eq('id', id);
+      // Tenta usar RPC segura primeiro
+      const { error } = await supabase.rpc('delete_payment_method', {
+          p_payment_method_id: id
+      });
+
+      if (error) {
+          // Se RPC falhar (ex: não existe), tenta método direto
+          console.warn("RPC delete failed, trying direct update", error);
+          const { error: updateError } = await supabase
+            .from('user_payment_methods')
+            .update({ is_active: false })
+            .eq('id', id);
+            
+          if (updateError) throw updateError;
+      }
       
-      if (error) throw error;
       fetchPaymentData();
       toast.success("Método removido");
     } catch (error: any) {
@@ -150,14 +168,24 @@ function ProfileContent() {
 
   const handleToggleVisibility = async (id: string, current: boolean) => {
     try {
-        const { error } = await supabase
-            .from('user_payment_methods')
-            .update({ is_visible_in_groups: !current })
-            .eq('id', id);
-        if (error) throw error;
+        // Tenta usar RPC segura primeiro
+        const { error } = await supabase.rpc('toggle_payment_method_visibility', {
+            p_payment_method_id: id,
+            p_is_visible: !current
+        });
+
+        if (error) {
+             console.warn("RPC toggle failed, trying direct update", error);
+             const { error: updateError } = await supabase
+                .from('user_payment_methods')
+                .update({ is_visible_in_groups: !current })
+                .eq('id', id);
+             if (updateError) throw updateError;
+        }
+
         fetchPaymentData();
     } catch (error: any) {
-        toast.error(error.message);
+        toast.error("Erro ao alterar visibilidade: " + error.message);
     }
   };
 
@@ -279,107 +307,4 @@ function ProfileContent() {
               ) : (
                 <>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Banco</label>
-                    <select
-                      value={selectedBankId}
-                      onChange={(e) => setSelectedBankId(e.target.value)}
-                      className="w-full rounded-lg border border-gray-300 px-3 py-2"
-                      required={banks.length > 0}
-                    >
-                      <option value="">Selecione um banco...</option>
-                      {banks.length > 0 ? (
-                          banks.map(bank => (
-                              <option key={bank.id} value={bank.id}>{bank.code} - {bank.name}</option>
-                          ))
-                      ) : (
-                          POPULAR_BANKS.map(bank => (
-                             // Fallback visual apenas se não houver DB
-                             <option key={bank.code} value="" disabled>{bank.name} (Requer Sync DB)</option>
-                          ))
-                      )}
-                    </select>
-                  </div>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                     <Input label="Agência" value={agency} onChange={(e) => setAgency(e.target.value)} placeholder="0000" />
-                     <Input label="Conta" value={accountNumber} onChange={(e) => setAccountNumber(e.target.value)} placeholder="000000" />
-                     <Input label="Dígito" value={accountDigit} onChange={(e) => setAccountDigit(e.target.value)} placeholder="0" className="w-20" />
-                     <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Tipo</label>
-                        <select value={accountType} onChange={(e) => setAccountType(e.target.value)} className="w-full rounded-lg border border-gray-300 px-3 py-2">
-                           <option value="checking">Corrente</option>
-                           <option value="savings">Poupança</option>
-                        </select>
-                     </div>
-                  </div>
-                  <div className="grid md:grid-cols-2 gap-4">
-                     <Input label="Nome do Titular" value={holderName} onChange={(e) => setHolderName(e.target.value)} placeholder={name} />
-                     <Input label="CPF/CNPJ Titular" value={holderDoc} onChange={(e) => setHolderDoc(e.target.value)} placeholder="Apenas números" />
-                  </div>
-                </>
-              )}
-
-              <div className="flex justify-end gap-3 pt-4">
-                 <Button type="button" variant="ghost" onClick={() => setIsAddingPayment(false)}>Cancelar</Button>
-                 <Button type="submit" isLoading={paymentLoading}>Salvar Método</Button>
-              </div>
-            </form>
-          </div>
-        )}
-
-        <div className="space-y-4">
-          {paymentMethods.length === 0 && !isAddingPayment ? (
-            <p className="text-gray-500 text-center py-8">Nenhum método de pagamento cadastrado.</p>
-          ) : (
-            paymentMethods.map(method => (
-              <div key={method.id} className="border border-gray-200 rounded-lg p-4 flex items-center justify-between hover:border-brand-200 transition-colors">
-                <div className="flex items-center gap-4">
-                   <div className="h-10 w-10 rounded-full bg-gray-100 flex items-center justify-center text-xl">
-                      {method.type === 'pix' ? '💠' : '🏦'}
-                   </div>
-                   <div>
-                      <p className="font-medium text-gray-900">
-                        {method.type === 'pix' 
-                           ? `PIX (${method.pix_key_type?.toUpperCase()})` 
-                           : `${method.banks?.short_name || method.bank_name || 'Banco'} - Conta ${method.account_type === 'checking' ? 'Corrente' : 'Poupança'}`
-                        }
-                      </p>
-                      <p className="text-sm text-gray-500">
-                        {method.type === 'pix' 
-                           ? method.pix_key 
-                           : `Ag: ${method.agency} CC: ${method.account_number}-${method.account_digit}`
-                        }
-                      </p>
-                   </div>
-                </div>
-                <div className="flex items-center gap-2">
-                   <button 
-                      onClick={() => handleToggleVisibility(method.id, method.is_visible_in_groups)}
-                      className={`p-2 rounded-full transition-colors ${method.is_visible_in_groups ? 'text-brand-600 bg-brand-50' : 'text-gray-400 hover:bg-gray-100'}`}
-                      title={method.is_visible_in_groups ? "Visível nos grupos" : "Oculto nos grupos"}
-                   >
-                      {method.is_visible_in_groups ? <Eye size={18} /> : <EyeOff size={18} />}
-                   </button>
-                   <button 
-                      onClick={() => handleDeleteMethod(method.id)}
-                      className="p-2 text-red-500 hover:bg-red-50 rounded-full transition-colors"
-                      title="Excluir"
-                   >
-                      <Trash2 size={18} />
-                   </button>
-                </div>
-              </div>
-            ))
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-export default function ProfilePage() {
-  return (
-    <ProtectedRoute>
-      <ProfileContent />
-    </ProtectedRoute>
-  );
-}
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Banco</
