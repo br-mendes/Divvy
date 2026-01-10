@@ -47,10 +47,14 @@ const DivvyDetailContent: React.FC = () => {
   const [category, setCategory] = useState('food');
   const [desc, setDesc] = useState('');
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
-  const [payerId, setPayerId] = useState('');
   
-  // Split State
+  // New Split Logic State
+  const [payerId, setPayerId] = useState('');
   const [splitMode, setSplitMode] = useState<SplitMode>('equal');
+  // splitValues: 
+  // - Equal mode: 1 = selected, 0 = not selected
+  // - Amount mode: value in currency
+  // - Percentage mode: value in %
   const [splitValues, setSplitValues] = useState<Record<string, number>>({});
 
   useEffect(() => {
@@ -117,33 +121,6 @@ const DivvyDetailContent: React.FC = () => {
     return isMe ? `${displayName} (Você)` : displayName;
   };
 
-  const handleOpenPaymentInfo = async (memberId: string) => {
-    setLoadingPayments(true);
-    setViewingMemberName(getMemberName(memberId).replace(' (Você)', ''));
-    setIsPaymentModalOpen(true);
-    setMemberPaymentMethods([]);
-
-    try {
-        // Use the RPC function to get masked payment methods securely
-        const { data, error } = await supabase.rpc('get_divvy_members_payment_methods', {
-            p_divvy_id: id
-        });
-
-        if (error) throw error;
-
-        // Filter for specific member in client (or could modify RPC to take user_id, but prompt specified one way)
-        const memberMethods = (data || []).filter((m: any) => m.member_id === memberId);
-        setMemberPaymentMethods(memberMethods);
-
-    } catch (error: any) {
-        console.error("Error fetching payment info:", error);
-        toast.error("Erro ao carregar dados de pagamento.");
-    } finally {
-        setLoadingPayments(false);
-    }
-  };
-
-  // ... (Existing handlers: handleOpenAddExpense, handleOpenEditExpense, handleSaveExpense, handleDeleteExpense, etc.)
   const handleOpenAddExpense = () => {
     if (!user) return;
     if (divvy?.is_archived) {
@@ -155,9 +132,10 @@ const DivvyDetailContent: React.FC = () => {
     setCategory('food');
     setDesc('');
     setDate(new Date().toISOString().split('T')[0]);
-    setPayerId(user.id);
-    setSplitMode('equal');
+    setPayerId(user.id); // Default to current user
     
+    // Initialize split: Equal split, everyone selected
+    setSplitMode('equal');
     const initialSplits: Record<string, number> = {};
     members.forEach(m => initialSplits[m.user_id] = 1);
     setSplitValues(initialSplits);
@@ -175,6 +153,7 @@ const DivvyDetailContent: React.FC = () => {
     setDate(exp.date);
     setPayerId(exp.paid_by_user_id);
 
+    // Fetch existing splits to populate form
     const { data: splitsData } = await supabase
       .from('expense_splits')
       .select('*')
@@ -185,11 +164,16 @@ const DivvyDetailContent: React.FC = () => {
     if (splits && splits.length > 0) {
       const loadedSplits: Record<string, number> = {};
       const firstAmount = splits[0].amount_owed;
+      
+      // Heuristic: Check if all splits are roughly equal
+      // Note: This isn't perfect if amounts were manually set to be equal, but good enough for UX
       const isRoughlyEqual = splits.every(s => Math.abs(s.amount_owed - firstAmount) < 0.02);
       
       if (isRoughlyEqual) {
         setSplitMode('equal');
+        // Reset all to 0 first
         members.forEach(m => loadedSplits[m.user_id] = 0);
+        // Set participants to 1
         splits.forEach(s => loadedSplits[s.participant_user_id] = 1);
       } else {
         setSplitMode('amount');
@@ -198,6 +182,7 @@ const DivvyDetailContent: React.FC = () => {
       }
       setSplitValues(loadedSplits);
     } else {
+        // Fallback
         setSplitMode('equal');
         const initialSplits: Record<string, number> = {};
         members.forEach(m => initialSplits[m.user_id] = 1);
@@ -207,25 +192,47 @@ const DivvyDetailContent: React.FC = () => {
     setIsExpenseModalOpen(true);
   };
 
+  // Validation Logic
   const totalAmount = parseFloat(amount) || 0;
+  
   const getSplitSummary = () => {
-      // Simplified for brevity in this replace block, logic remains same as original file
+      if (totalAmount <= 0) return { isValid: false, message: 'Insira um valor válido' };
+
       if (splitMode === 'equal') {
-          const count = Object.values(splitValues).filter(v => v === 1).length;
-          return { isValid: count > 0, message: count > 0 ? `R$ ${(totalAmount/count).toFixed(2)} / pessoa` : 'Selecione alguém' };
+          const selectedCount = Object.values(splitValues).filter(v => v === 1).length;
+          if (selectedCount === 0) return { isValid: false, message: 'Selecione pelo menos uma pessoa' };
+          const perPerson = totalAmount / selectedCount;
+          return { isValid: true, message: `R$ ${perPerson.toFixed(2)} por pessoa` };
+      } 
+      
+      const currentSum = Object.values(splitValues).reduce((a: number, b: number) => a + b, 0);
+      
+      if (splitMode === 'amount') {
+          const diff = totalAmount - currentSum;
+          const isValid = Math.abs(diff) < 0.05; // Tolerance for floating point
+          if (isValid) return { isValid: true, message: 'Total fechado corretamente' };
+          return { isValid: false, message: diff > 0 ? `Faltam R$ ${Math.abs(diff).toFixed(2)}` : `Passou R$ ${Math.abs(diff).toFixed(2)}` };
       }
-      const sum = Object.values(splitValues).reduce((a,b) => a+b, 0);
-      const target = splitMode === 'percentage' ? 100 : totalAmount;
-      const diff = target - sum;
-      return { isValid: Math.abs(diff) < 0.1, message: Math.abs(diff) < 0.1 ? 'Total OK' : `Diferença: ${diff.toFixed(2)}` };
+
+      if (splitMode === 'percentage') {
+          const diff = 100 - currentSum;
+          const isValid = Math.abs(diff) < 0.1;
+          if (isValid) return { isValid: true, message: 'Total: 100%' };
+          return { isValid: false, message: diff > 0 ? `Faltam ${diff.toFixed(1)}%` : `Passou ${Math.abs(diff).toFixed(1)}%` };
+      }
+
+      return { isValid: false, message: '' };
   };
+
   const { isValid: isSplitValid, message: splitMessage } = getSplitSummary();
 
-  const handleSplitChange = (userId: string, value: string) => {
-    const numValue = parseFloat(value) || 0;
-    setSplitValues(prev => ({ ...prev, [userId]: numValue }));
+  const handleSplitValueChange = (userId: string, value: string) => {
+    let numVal = parseFloat(value);
+    if (isNaN(numVal) || numVal < 0) numVal = 0;
+    setSplitValues(prev => ({ ...prev, [userId]: numVal }));
   };
-  const handleToggleMember = (userId: string) => {
+
+  const toggleMemberSelection = (userId: string) => {
     setSplitValues(prev => ({ ...prev, [userId]: prev[userId] === 1 ? 0 : 1 }));
   };
 
@@ -254,30 +261,49 @@ const DivvyDetailContent: React.FC = () => {
       }
 
       if (expenseId) {
+        // Delete old splits
         await supabase.from('expense_splits').delete().eq('expense_id', expenseId);
+        
+        // Calculate new splits
         let splitsToInsert: any[] = [];
-        
+
         if (splitMode === 'equal') {
-          const selected = members.filter(m => splitValues[m.user_id] === 1);
-          const val = totalAmount / selected.length;
-          splitsToInsert = selected.map(m => ({ expense_id: expenseId, participant_user_id: m.user_id, amount_owed: val }));
-        } else {
-           // Handle amount/percentage logic similarly
-           splitsToInsert = members.filter(m => splitValues[m.user_id] > 0).map(m => ({
-               expense_id: expenseId,
-               participant_user_id: m.user_id,
-               amount_owed: splitMode === 'percentage' ? totalAmount * (splitValues[m.user_id]/100) : splitValues[m.user_id]
-           }));
+          const selectedMembers = members.filter(m => splitValues[m.user_id] === 1);
+          const amountPerPerson = totalAmount / selectedMembers.length;
+          splitsToInsert = selectedMembers.map(m => ({
+            expense_id: expenseId,
+            participant_user_id: m.user_id,
+            amount_owed: amountPerPerson
+          }));
+        } else if (splitMode === 'amount') {
+          splitsToInsert = members
+            .filter(m => splitValues[m.user_id] > 0)
+            .map(m => ({
+              expense_id: expenseId,
+              participant_user_id: m.user_id,
+              amount_owed: splitValues[m.user_id]
+            }));
+        } else if (splitMode === 'percentage') {
+           splitsToInsert = members
+            .filter(m => splitValues[m.user_id] > 0)
+            .map(m => ({
+              expense_id: expenseId,
+              participant_user_id: m.user_id,
+              amount_owed: totalAmount * (splitValues[m.user_id] / 100)
+            }));
         }
-        
-        if (splitsToInsert.length > 0) await supabase.from('expense_splits').insert(splitsToInsert);
+
+        if (splitsToInsert.length > 0) {
+           await supabase.from('expense_splits').insert(splitsToInsert);
+        }
       }
 
       toast.success(editingExpenseId ? 'Despesa atualizada!' : 'Despesa adicionada!');
       setIsExpenseModalOpen(false);
       fetchDivvyData();
     } catch (error: any) {
-      toast.error('Erro: ' + error.message);
+      console.error('Error adding expense:', error);
+      toast.error('Erro ao salvar despesa: ' + error.message);
     } finally {
       setSubmitLoading(false);
     }
@@ -287,6 +313,28 @@ const DivvyDetailContent: React.FC = () => {
       if (!confirm('Excluir despesa?')) return;
       await supabase.from('expenses').delete().eq('id', expenseId);
       fetchDivvyData();
+  };
+
+  const handleOpenPaymentInfo = async (memberId: string) => {
+    setLoadingPayments(true);
+    setViewingMemberName(getMemberName(memberId).replace(' (Você)', ''));
+    setIsPaymentModalOpen(true);
+    setMemberPaymentMethods([]);
+
+    try {
+        const { data, error } = await supabase.rpc('get_divvy_members_payment_methods', {
+            p_divvy_id: id
+        });
+
+        if (error) throw error;
+        const memberMethods = (data || []).filter((m: any) => m.member_id === memberId);
+        setMemberPaymentMethods(memberMethods);
+    } catch (error: any) {
+        console.error("Error fetching payment info:", error);
+        toast.error("Erro ao carregar dados de pagamento.");
+    } finally {
+        setLoadingPayments(false);
+    }
   };
 
 
@@ -357,7 +405,14 @@ const DivvyDetailContent: React.FC = () => {
             {expenses.length === 0 ? <EmptyState /> : expenses.map((exp) => (
                <div key={exp.id} className="bg-white p-4 rounded-lg shadow-sm border border-gray-100 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                  <div className="flex items-center gap-4 flex-1">
-                    <div className="h-10 w-10 rounded-full bg-brand-50 flex items-center justify-center text-xl">💰</div>
+                    <div className="h-10 w-10 rounded-full bg-brand-50 flex items-center justify-center text-xl">
+                      {exp.category === 'food' ? '🍽️' : 
+                       exp.category === 'transport' ? '🚗' : 
+                       exp.category === 'accommodation' ? '🏨' : 
+                       exp.category === 'activity' ? '🎬' : 
+                       exp.category === 'utilities' ? '💡' :
+                       exp.category === 'shopping' ? '🛍️' : '💰'}
+                    </div>
                     <div>
                         <p className="font-medium text-gray-900">{exp.description || exp.category}</p>
                         <p className="text-sm text-gray-500">{new Date(exp.date).toLocaleDateString()} • {getMemberName(exp.paid_by_user_id)}</p>
@@ -419,16 +474,166 @@ const DivvyDetailContent: React.FC = () => {
         )}
       </div>
 
-      {/* MODALS */}
-      <Modal isOpen={isExpenseModalOpen} onClose={() => setIsExpenseModalOpen(false)} title="Despesa">
-         <form onSubmit={handleSaveExpense} className="space-y-4">
-             {/* Simplified form for brevity - functionality maintained in state logic */}
-             <Input label="Valor" type="number" value={amount} onChange={(e: any) => setAmount(e.target.value)} required />
-             <Input label="Descrição" value={desc} onChange={(e: any) => setDesc(e.target.value)} />
-             <Button type="submit" fullWidth isLoading={submitLoading}>Salvar</Button>
+      {/* ADD/EDIT EXPENSE MODAL */}
+      <Modal isOpen={isExpenseModalOpen} onClose={() => setIsExpenseModalOpen(false)} title={editingExpenseId ? "Editar Despesa" : "Nova Despesa"}>
+         <form onSubmit={handleSaveExpense} className="space-y-5">
+           
+           {/* General Info */}
+           <div className="space-y-3">
+              <Input
+                label="Valor (R$)"
+                type="number"
+                step="0.01"
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                required
+                placeholder="0.00"
+                className="text-lg font-bold"
+              />
+              
+              <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Categoria</label>
+                    <select
+                      className="w-full rounded-lg border border-gray-300 px-3 py-2 bg-white"
+                      value={category}
+                      onChange={(e) => setCategory(e.target.value)}
+                    >
+                      <option value="food">🍽️ Alimentação</option>
+                      <option value="transport">🚗 Transporte</option>
+                      <option value="accommodation">🏨 Hospedagem</option>
+                      <option value="activity">🎬 Atividade</option>
+                      <option value="utilities">💡 Contas</option>
+                      <option value="shopping">🛍️ Compras</option>
+                      <option value="other">💰 Outros</option>
+                    </select>
+                  </div>
+                  <Input
+                    label="Data"
+                    type="date"
+                    value={date}
+                    onChange={(e) => setDate(e.target.value)}
+                  />
+              </div>
+
+              <Input
+                label="Descrição"
+                value={desc}
+                onChange={(e) => setDesc(e.target.value)}
+                placeholder="Ex: Jantar no centro"
+              />
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Quem pagou?</label>
+                <select
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 bg-white"
+                  value={payerId}
+                  onChange={(e) => setPayerId(e.target.value)}
+                >
+                  {members.map(m => (
+                    <option key={m.user_id} value={m.user_id}>
+                      {getMemberName(m.user_id)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+           </div>
+
+           <hr className="border-gray-200" />
+
+           {/* Split Section */}
+           <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Divisão</label>
+              
+              {/* Split Tabs */}
+              <div className="flex bg-gray-100 rounded-lg p-1 mb-3">
+                <button
+                  type="button"
+                  onClick={() => setSplitMode('equal')}
+                  className={`flex-1 py-1.5 text-sm font-medium rounded-md transition-all ${splitMode === 'equal' ? 'bg-white shadow-sm text-brand-600' : 'text-gray-500 hover:text-gray-700'}`}
+                >
+                  Igual
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSplitMode('amount')}
+                  className={`flex-1 py-1.5 text-sm font-medium rounded-md transition-all ${splitMode === 'amount' ? 'bg-white shadow-sm text-brand-600' : 'text-gray-500 hover:text-gray-700'}`}
+                >
+                  Valor (R$)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSplitMode('percentage')}
+                  className={`flex-1 py-1.5 text-sm font-medium rounded-md transition-all ${splitMode === 'percentage' ? 'bg-white shadow-sm text-brand-600' : 'text-gray-500 hover:text-gray-700'}`}
+                >
+                  %
+                </button>
+              </div>
+
+              {/* Members List */}
+              <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                {members.map(m => {
+                  const name = getMemberName(m.user_id);
+                  const isSelected = splitValues[m.user_id] === 1;
+                  
+                  return (
+                    <div key={m.user_id} className="flex items-center justify-between p-2 rounded border border-gray-100 hover:bg-gray-50">
+                      <div className="flex items-center gap-2 overflow-hidden">
+                        {splitMode === 'equal' && (
+                           <input 
+                              type="checkbox" 
+                              checked={isSelected} 
+                              onChange={() => toggleMemberSelection(m.user_id)}
+                              className="w-4 h-4 text-brand-600 rounded border-gray-300 focus:ring-brand-500"
+                           />
+                        )}
+                        <span className={`text-sm truncate ${splitMode === 'equal' && !isSelected ? 'text-gray-400' : 'text-gray-700'}`}>
+                           {name}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        {splitMode === 'equal' ? (
+                           isSelected ? (
+                             <span className="text-sm font-medium text-gray-900">
+                               R$ {((totalAmount / Math.max(1, Object.values(splitValues).filter(v => v === 1).length))).toFixed(2)}
+                             </span>
+                           ) : <span className="text-xs text-gray-400">-</span>
+                        ) : (
+                           <div className="relative">
+                              <span className="absolute left-2 top-1.5 text-xs text-gray-400">
+                                {splitMode === 'amount' ? 'R$' : '%'}
+                              </span>
+                              <input
+                                type="number"
+                                step={splitMode === 'amount' ? "0.01" : "1"}
+                                value={splitValues[m.user_id] || ''}
+                                onChange={(e) => handleSplitValueChange(m.user_id, e.target.value)}
+                                className="w-24 pl-6 pr-2 py-1 text-right text-sm border rounded focus:ring-1 focus:ring-brand-500 outline-none"
+                                placeholder="0"
+                              />
+                           </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              
+              {/* Validation Feedback */}
+              <div className={`mt-2 text-sm text-right font-medium ${isSplitValid ? 'text-green-600' : 'text-red-500'}`}>
+                 {splitMessage}
+              </div>
+           </div>
+
+           <div className="flex justify-end gap-3 pt-2">
+             <Button type="button" variant="ghost" onClick={() => setIsExpenseModalOpen(false)}>Cancelar</Button>
+             <Button type="submit" isLoading={submitLoading} disabled={!isSplitValid}>Salvar</Button>
+           </div>
          </form>
       </Modal>
 
+      {/* PAYMENT INFO MODAL */}
       <Modal isOpen={isPaymentModalOpen} onClose={() => setIsPaymentModalOpen(false)} title={`Pagamento - ${viewingMemberName}`}>
          <div className="space-y-4">
             {loadingPayments ? (
@@ -454,7 +659,6 @@ const DivvyDetailContent: React.FC = () => {
                               <p>Titular: {method.account_holder_name}</p>
                            </>
                         )}
-                        {/* If RPC returns full data (can_view_details), we could show more, but masked is safe default */}
                      </div>
                   </div>
                ))
