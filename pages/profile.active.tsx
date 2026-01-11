@@ -4,11 +4,13 @@ import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
+import { Modal } from '../components/ui/Modal';
 import { ProtectedRoute } from '../components/ProtectedRoute';
 import toast from 'react-hot-toast';
-import { User, CreditCard, Plus, Trash2, Star, Pencil, X, Camera, Loader2, Copy, QrCode } from 'lucide-react';
+import { User, CreditCard, Plus, Trash2, Star, Pencil, X, Camera, Loader2, AlertTriangle, LogOut, ShieldAlert } from 'lucide-react';
 import { PaymentMethod, Bank } from '../types';
 import { POPULAR_BANKS } from '../lib/constants';
+import { useRouter } from 'next/router';
 
 // Mapeamento para exibição amigável
 const pixTypeMap: Record<string, string> = {
@@ -27,7 +29,8 @@ const accountTypeMap: Record<string, string> = {
 };
 
 function ProfileContent() {
-  const { user } = useAuth();
+  const { user, signOut } = useAuth();
+  const router = useRouter();
   
   // Profile State
   const [name, setName] = useState('');
@@ -57,6 +60,13 @@ function ProfileContent() {
   const [accountType, setAccountType] = useState('checking');
   const [holderName, setHolderName] = useState('');
   const [holderDoc, setHolderDoc] = useState('');
+
+  // Danger Zone State
+  const [dangerModalOpen, setDangerModalOpen] = useState(false);
+  const [dangerAction, setDangerAction] = useState<'leave_groups' | 'delete_account' | null>(null);
+  const [dangerStep, setDangerStep] = useState<1 | 2>(1);
+  const [deleteConfirmationInput, setDeleteConfirmationInput] = useState('');
+  const [dangerLoading, setDangerLoading] = useState(false);
 
   useEffect(() => {
     if (user) {
@@ -200,8 +210,6 @@ function ProfileContent() {
     setProfileLoading(true);
 
     try {
-      // Atualiza tanto full_name quanto nickname com o mesmo valor
-      // para garantir consistência na exibição em todo o app
       const { error: authError } = await supabase.auth.updateUser({
         data: {
           full_name: name,
@@ -268,7 +276,6 @@ function ProfileContent() {
     setPaymentLoading(true);
 
     try {
-      // Se for o primeiro método, ele é Primary e Visible por padrão.
       const isFirst = paymentMethods.length === 0;
 
       const payload: any = {
@@ -346,7 +353,6 @@ function ProfileContent() {
     e.stopPropagation();
     if (!user) return;
     
-    // Toggle Logic
     const newStatus = !currentStatus;
     const loadingToast = toast.loading(newStatus ? 'Definindo como principal...' : 'Removendo principal...');
 
@@ -382,6 +388,55 @@ function ProfileContent() {
     setSelectedBankId('');
     setMethodType('pix');
   };
+
+  // --- DANGER ZONE HANDLERS ---
+  const handleOpenDangerModal = (action: 'leave_groups' | 'delete_account') => {
+    setDangerAction(action);
+    setDangerStep(1);
+    setDeleteConfirmationInput('');
+    setDangerModalOpen(true);
+  };
+
+  const handleDangerConfirm = async () => {
+    if (!dangerAction) return;
+
+    // First Step Confirmation
+    if (dangerStep === 1) {
+      setDangerStep(2);
+      return;
+    }
+
+    // Second Step Execution
+    setDangerLoading(true);
+    try {
+      if (dangerAction === 'leave_groups') {
+        const { error } = await supabase.rpc('delete_all_my_divvies');
+        if (error) throw error;
+        toast.success("Você saiu de todos os grupos e excluiu os seus.");
+        setDangerModalOpen(false);
+      } else if (dangerAction === 'delete_account') {
+        if (deleteConfirmationInput !== 'DELETAR') {
+           toast.error("Digite DELETAR para confirmar.");
+           setDangerLoading(false);
+           return;
+        }
+        
+        const { error } = await supabase.rpc('delete_my_account');
+        if (error) throw error;
+        
+        await signOut();
+        toast.success("Conta excluída. Até logo!");
+        router.push('/');
+        return;
+      }
+    } catch (error: any) {
+      toast.error("Erro ao executar ação: " + error.message);
+      setDangerModalOpen(false); // Close on error to reset
+    } finally {
+      setDangerLoading(false);
+    }
+  };
+
 
   return (
     <div className="max-w-4xl mx-auto space-y-8 pb-12">
@@ -733,6 +788,111 @@ function ProfileContent() {
           )}
         </div>
       </div>
+
+      {/* --- DANGER ZONE --- */}
+      <div className="bg-white rounded-xl shadow-sm border border-red-200 p-6 md:p-8">
+         <h2 className="text-xl font-bold text-red-600 mb-6 flex items-center gap-2">
+            <AlertTriangle size={24} />
+            Zona de Perigo
+         </h2>
+         <p className="text-gray-600 mb-6 text-sm">
+            Estas ações são destrutivas e não podem ser desfeitas. Prossiga com cuidado.
+         </p>
+
+         <div className="space-y-4">
+             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-4 bg-red-50 rounded-lg border border-red-100 gap-4">
+                <div>
+                    <h3 className="font-bold text-gray-900">Sair de todos os grupos</h3>
+                    <p className="text-sm text-gray-500">
+                        Você sairá de grupos onde é membro e <span className="font-bold">excluirá</span> grupos que você criou.
+                    </p>
+                </div>
+                <Button variant="outline" className="text-red-600 border-red-200 hover:bg-red-100 whitespace-nowrap" onClick={() => handleOpenDangerModal('leave_groups')}>
+                    <LogOut size={16} className="mr-2" />
+                    Sair de todos
+                </Button>
+             </div>
+
+             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-4 bg-red-50 rounded-lg border border-red-100 gap-4">
+                <div>
+                    <h3 className="font-bold text-gray-900">Excluir Conta</h3>
+                    <p className="text-sm text-gray-500">
+                        Exclui permanentemente sua conta e todos os seus dados.
+                    </p>
+                </div>
+                <Button variant="danger" className="whitespace-nowrap" onClick={() => handleOpenDangerModal('delete_account')}>
+                    <Trash2 size={16} className="mr-2" />
+                    Excluir Conta
+                </Button>
+             </div>
+         </div>
+      </div>
+
+      {/* --- CONFIRMATION MODAL FOR DANGER ACTIONS --- */}
+      <Modal 
+        isOpen={dangerModalOpen} 
+        onClose={() => setDangerModalOpen(false)} 
+        title="Confirmação de Segurança"
+      >
+        <div className="space-y-4">
+           {dangerStep === 1 && (
+               <div className="text-center">
+                   <ShieldAlert className="w-16 h-16 text-red-500 mx-auto mb-4" />
+                   <h3 className="text-lg font-bold text-gray-900 mb-2">Tem certeza absoluta?</h3>
+                   <p className="text-gray-600 mb-6">
+                      {dangerAction === 'leave_groups' 
+                        ? 'Esta ação removerá você de todos os grupos e excluirá permanentemente os grupos que você criou.' 
+                        : 'Esta ação excluirá sua conta, perfil, grupos criados e histórico de pagamentos permanentemente.'}
+                   </p>
+                   <div className="flex gap-3 justify-center">
+                       <Button variant="outline" onClick={() => setDangerModalOpen(false)}>Cancelar</Button>
+                       <Button variant="danger" onClick={handleDangerConfirm}>Continuar</Button>
+                   </div>
+               </div>
+           )}
+
+           {dangerStep === 2 && (
+               <div className="text-center animate-fade-in-down">
+                   <div className="w-12 h-12 rounded-full bg-red-100 flex items-center justify-center mx-auto mb-4">
+                       <AlertTriangle className="text-red-600" size={24} />
+                   </div>
+                   <h3 className="text-lg font-bold text-gray-900 mb-2">
+                       {dangerAction === 'delete_account' ? 'Última confirmação' : 'Confirmar Saída'}
+                   </h3>
+                   
+                   {dangerAction === 'delete_account' ? (
+                       <>
+                           <p className="text-gray-600 mb-4 text-sm">
+                               Para confirmar, digite <span className="font-mono font-bold select-all">DELETAR</span> no campo abaixo.
+                           </p>
+                           <Input 
+                               value={deleteConfirmationInput} 
+                               onChange={(e) => setDeleteConfirmationInput(e.target.value)}
+                               placeholder="DELETAR"
+                               className="mb-6 text-center uppercase"
+                           />
+                       </>
+                   ) : (
+                       <p className="text-gray-600 mb-6 text-sm">
+                           Clique em confirmar para limpar seus grupos. Não há como desfazer.
+                       </p>
+                   )}
+
+                   <div className="flex gap-3 justify-center">
+                       <Button variant="outline" onClick={() => setDangerModalOpen(false)} disabled={dangerLoading}>Cancelar</Button>
+                       <Button 
+                            variant="danger" 
+                            onClick={handleDangerConfirm} 
+                            isLoading={dangerLoading}
+                            disabled={dangerAction === 'delete_account' && deleteConfirmationInput !== 'DELETAR'}
+                        >
+                           {dangerAction === 'delete_account' ? 'Excluir Definitivamente' : 'Confirmar'}
+                       </Button>
+                   </div>
+               </div>
+           )}
+        </div>
+      </Modal>
     </div>
   );
 }
