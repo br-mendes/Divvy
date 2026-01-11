@@ -3,7 +3,7 @@ import React, { useEffect, useState, useMemo } from 'react';
 import { useRouter } from 'next/router';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../context/AuthContext';
-import { Divvy, DivvyMember, Expense, ExpenseSplit, PaymentMethod } from '../../types';
+import { Divvy, DivvyMember, Expense, ExpenseSplit, PaymentMethod, Settlement } from '../../types';
 import { Button } from '../../components/ui/Button';
 import { Modal } from '../../components/ui/Modal';
 import { Input } from '../../components/ui/Input';
@@ -12,7 +12,7 @@ import DivvyHeader from '../../components/divvy/DivvyHeader';
 import InviteModal from '../../components/invite/InviteModal';
 import LoadingSpinner from '../../components/ui/LoadingSpinner';
 import EmptyState from '../../components/ui/EmptyState';
-import { Plus, UserPlus, Receipt, PieChart, Users, Pencil, Trash2, CreditCard, Lock, Copy, QrCode, Check, ArrowRight, Wallet, TrendingUp, TrendingDown, ShieldAlert } from 'lucide-react';
+import { Plus, UserPlus, Receipt, PieChart, Users, CreditCard, Lock, Copy, QrCode, Check, ArrowRight, Wallet, TrendingUp, TrendingDown, ShieldAlert, Clock, XCircle, CheckCircle } from 'lucide-react';
 import { ProtectedRoute } from '../../components/ProtectedRoute';
 import toast from 'react-hot-toast';
 import QRCode from 'qrcode';
@@ -32,6 +32,7 @@ const DivvyDetailContent: React.FC = () => {
   const [members, setMembers] = useState<DivvyMember[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [allSplits, setAllSplits] = useState<ExpenseSplit[]>([]);
+  const [settlements, setSettlements] = useState<Settlement[]>([]);
   const [loading, setLoading] = useState(true);
   const [accessDenied, setAccessDenied] = useState(false);
   
@@ -50,6 +51,7 @@ const DivvyDetailContent: React.FC = () => {
   // --- Payment Info State ---
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
   const [viewingMemberName, setViewingMemberName] = useState('');
+  const [payingToId, setPayingToId] = useState<string | null>(null); // New: Track who we are paying
   const [memberPaymentMethods, setMemberPaymentMethods] = useState<PaymentMethod[]>([]);
   const [loadingPayments, setLoadingPayments] = useState(false);
   
@@ -96,6 +98,7 @@ const DivvyDetailContent: React.FC = () => {
       setMembers(data.members || []);
       setExpenses(data.expenses || []);
       setAllSplits(data.splits || []);
+      setSettlements(data.settlements || []);
 
     } catch (error: any) {
       console.error("Fetch Error:", error);
@@ -116,7 +119,6 @@ const DivvyDetailContent: React.FC = () => {
   /** Helper: Format Date preventing Timezone Shift */
   const formatDate = (dateString: string) => {
     if (!dateString) return '';
-    // Pega apenas a parte da data YYYY-MM-DD e divide manualmente
     const [year, month, day] = dateString.split('T')[0].split('-');
     return `${day}/${month}/${year}`;
   };
@@ -160,7 +162,7 @@ const DivvyDetailContent: React.FC = () => {
         totalConsumed[m.user_id] = 0;
     });
 
-    // 1. Credit Payer
+    // 1. Credit Payer (Expenses)
     expenses.forEach(exp => {
         const amount = exp.amount;
         if (totalPaid[exp.paid_by_user_id] !== undefined) {
@@ -169,7 +171,7 @@ const DivvyDetailContent: React.FC = () => {
         }
     });
 
-    // 2. Debit Consumers
+    // 2. Debit Consumers (Splits)
     allSplits.forEach(split => {
         const val = split.amount_owed || 0;
         if (totalConsumed[split.participant_user_id] !== undefined) {
@@ -178,7 +180,17 @@ const DivvyDetailContent: React.FC = () => {
         }
     });
 
-    // 3. Minimize Debt Algo
+    // 3. Process CONFIRMED Settlements (Treat as payments)
+    settlements.forEach(s => {
+      if (s.status === 'confirmed') {
+        // Payer sent money (Paid debt), so their balance increases (debt reduces)
+        if (balances[s.payer_id] !== undefined) balances[s.payer_id] += s.amount;
+        // Receiver got money (Claimed credit), so their balance decreases (credit reduces)
+        if (balances[s.receiver_id] !== undefined) balances[s.receiver_id] -= s.amount;
+      }
+    });
+
+    // 4. Minimize Debt Algo
     const debtors: { id: string, amount: number }[] = [];
     const creditors: { id: string, amount: number }[] = [];
 
@@ -209,7 +221,7 @@ const DivvyDetailContent: React.FC = () => {
     }
 
     return { balances, totalPaid, totalConsumed, plan };
-  }, [expenses, allSplits, members]);
+  }, [expenses, allSplits, members, settlements]);
 
   // --- HANDLERS ---
   const handleViewExpense = async (exp: Expense) => {
@@ -264,8 +276,6 @@ const DivvyDetailContent: React.FC = () => {
     setAmount(String(exp.amount)); 
     setCategory(exp.category);
     setDesc(exp.description);
-    // Para edição, use o valor direto do banco (YYYY-MM-DD) para o input type="date"
-    // Isso evita problemas de fuso no formulário
     setDate(String(exp.date).split('T')[0]); 
     setPayerId(exp.paid_by_user_id);
 
@@ -299,6 +309,50 @@ const DivvyDetailContent: React.FC = () => {
     }
     setIsExpenseModalOpen(true);
   };
+
+  // --- Payment / Settlement Handlers ---
+  const handleMarkAsPaid = async (receiverId: string, amount: number) => {
+     if (!confirm(`Confirmar que você pagou ${formatMoney(amount)} para ${getMemberName(receiverId, false)}?`)) return;
+     if (!user) return;
+
+     const loadingToast = toast.loading('Processando...');
+     try {
+       const { error } = await supabase.from('settlements').insert({
+          divvy_id: divvyId,
+          payer_id: user.id,
+          receiver_id: receiverId,
+          amount: amount,
+          status: 'pending'
+       });
+
+       if (error) throw error;
+       
+       toast.success('Marcado como pago! Aguardando confirmação.', { id: loadingToast });
+       fetchDivvyData();
+     } catch (e: any) {
+       toast.error(e.message, { id: loadingToast });
+     }
+  };
+
+  const handleUpdateSettlement = async (settlementId: string, newStatus: 'confirmed' | 'rejected') => {
+      const action = newStatus === 'confirmed' ? 'Confirmar' : 'Rejeitar';
+      if (!confirm(`Deseja ${action} este pagamento?`)) return;
+
+      const loadingToast = toast.loading(`${action} recebimento...`);
+      try {
+        const { error } = await supabase.from('settlements')
+          .update({ status: newStatus, updated_at: new Date().toISOString() })
+          .eq('id', settlementId);
+
+        if (error) throw error;
+        
+        toast.success(`Pagamento ${newStatus === 'confirmed' ? 'confirmado' : 'rejeitado'}!`, { id: loadingToast });
+        fetchDivvyData();
+      } catch (e: any) {
+         toast.error(e.message, { id: loadingToast });
+      }
+  };
+
 
   // --- Split Logic Handlers ---
   const totalAmount = parseFloat(amount) || 0;
@@ -428,6 +482,7 @@ const DivvyDetailContent: React.FC = () => {
   const handleOpenPaymentInfo = async (memberId: string) => {
     setLoadingPayments(true);
     setViewingMemberName(getMemberName(memberId, false));
+    setPayingToId(memberId);
     setIsPaymentModalOpen(true);
     setMemberPaymentMethods([]);
     setGeneratedQrCode(null);
@@ -464,6 +519,12 @@ const DivvyDetailContent: React.FC = () => {
       toast.error("Erro ao gerar QR Code");
     }
   };
+
+  // --- DERIVED: Pending Approvals ---
+  const pendingApprovals = useMemo(() => {
+     if (!user) return [];
+     return settlements.filter(s => s.receiver_id === user.id && s.status === 'pending');
+  }, [settlements, user]);
 
   // --- RENDER ---
   if (loading) return <div className="flex justify-center p-12"><LoadingSpinner /></div>;
@@ -566,6 +627,37 @@ const DivvyDetailContent: React.FC = () => {
         {/* TAB 2: BALANCES (GASTOS) */}
         {activeTab === 'balances' && (
             <div className="space-y-8 animate-fade-in-down">
+                
+                {/* Pending Approvals Section */}
+                {pendingApprovals.length > 0 && (
+                   <div className="bg-yellow-50 p-6 rounded-xl border border-yellow-200 shadow-sm">
+                      <h3 className="text-lg font-bold text-yellow-800 mb-4 flex items-center gap-2">
+                          <Clock size={20} />
+                          Aprovações Pendentes
+                      </h3>
+                      <div className="space-y-3">
+                        {pendingApprovals.map(s => (
+                           <div key={s.id} className="flex flex-col sm:flex-row items-center justify-between p-4 bg-white rounded-lg border border-yellow-100 shadow-sm">
+                              <div className="mb-2 sm:mb-0">
+                                 <p className="text-gray-900 font-medium">
+                                    <span className="font-bold">{getMemberName(s.payer_id, false)}</span> disse que pagou <span className="font-bold text-green-600">{formatMoney(s.amount)}</span> para você.
+                                 </p>
+                                 <p className="text-xs text-gray-500">{new Date(s.created_at).toLocaleDateString('pt-BR')}</p>
+                              </div>
+                              <div className="flex gap-2">
+                                 <Button size="sm" variant="outline" className="text-red-600 border-red-200 hover:bg-red-50" onClick={() => handleUpdateSettlement(s.id, 'rejected')}>
+                                    <XCircle size={16} className="mr-1" /> Rejeitar
+                                 </Button>
+                                 <Button size="sm" className="bg-green-600 hover:bg-green-700 text-white" onClick={() => handleUpdateSettlement(s.id, 'confirmed')}>
+                                    <CheckCircle size={16} className="mr-1" /> Confirmar
+                                 </Button>
+                              </div>
+                           </div>
+                        ))}
+                      </div>
+                   </div>
+                )}
+
                 {/* Section 1: Debt Settlement Plan */}
                 <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
                     <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
@@ -581,9 +673,19 @@ const DivvyDetailContent: React.FC = () => {
                         </div>
                     ) : (
                         <div className="space-y-3">
-                            {calculateBalances.plan.map((transfer, idx) => (
-                                <div key={idx} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg border border-gray-100 hover:border-brand-200 transition-colors">
-                                    <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                            {calculateBalances.plan.map((transfer, idx) => {
+                                // Check if there's a pending settlement for this pair
+                                const myPending = settlements.find(s => 
+                                    s.payer_id === transfer.from && 
+                                    s.receiver_id === transfer.to && 
+                                    s.status === 'pending'
+                                );
+
+                                const isMeDebtor = transfer.from === user?.id;
+
+                                return (
+                                <div key={idx} className="flex flex-col sm:flex-row items-center justify-between p-4 bg-gray-50 rounded-lg border border-gray-100 hover:border-brand-200 transition-colors">
+                                    <div className="flex flex-col sm:flex-row sm:items-center gap-2 w-full sm:w-auto mb-3 sm:mb-0">
                                         <div className="flex items-center gap-2">
                                             <div className="w-8 h-8 rounded-full bg-red-100 flex items-center justify-center text-red-600 text-xs font-bold">
                                                 {getMemberName(transfer.from, false).charAt(0)}
@@ -604,18 +706,41 @@ const DivvyDetailContent: React.FC = () => {
                                             <span className="font-medium text-gray-900">{getMemberName(transfer.to, false)}</span>
                                         </div>
                                     </div>
-                                    <div className="flex items-center gap-3 pl-4 border-l border-gray-200">
+                                    
+                                    <div className="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-end pl-0 sm:pl-4 sm:border-l border-gray-200">
                                         <span className="font-bold text-lg text-brand-600">{formatMoney(transfer.amount)}</span>
-                                        <button 
-                                            onClick={() => handleOpenPaymentInfo(transfer.to)}
-                                            className="p-2 text-gray-400 hover:text-brand-600 hover:bg-white rounded-full transition-colors"
-                                            title="Ver dados bancários"
-                                        >
-                                            <CreditCard size={18} />
-                                        </button>
+                                        
+                                        <div className="flex gap-2">
+                                           {/* Botão de Ver Dados Bancários */}
+                                            <button 
+                                                onClick={() => handleOpenPaymentInfo(transfer.to)}
+                                                className="p-2 text-gray-400 hover:text-brand-600 hover:bg-white rounded-full transition-colors"
+                                                title="Ver dados bancários"
+                                            >
+                                                <CreditCard size={18} />
+                                            </button>
+
+                                            {/* Logica do Botão de Pagar */}
+                                            {isMeDebtor && (
+                                               myPending ? (
+                                                  <span className="text-xs font-medium text-yellow-600 bg-yellow-50 px-2 py-1 rounded border border-yellow-200 flex items-center gap-1">
+                                                     <Clock size={12} /> Aguardando
+                                                  </span>
+                                               ) : (
+                                                  <Button 
+                                                    size="sm" 
+                                                    onClick={() => handleMarkAsPaid(transfer.to, transfer.amount)}
+                                                    title="Marcar como pago"
+                                                    className="bg-green-600 hover:bg-green-700 text-white border-none h-8"
+                                                  >
+                                                     Pagar
+                                                  </Button>
+                                               )
+                                            )}
+                                        </div>
                                     </div>
                                 </div>
-                            ))}
+                            )})}
                         </div>
                     )}
                 </div>
@@ -878,6 +1003,19 @@ const DivvyDetailContent: React.FC = () => {
                     </div>
                   );
                })}
+            
+            {/* Atalho para marcar como pago direto do modal */}
+            {payingToId && payingToId !== user?.id && !divvy?.is_archived && (
+               <Button 
+                 variant="primary" 
+                 fullWidth 
+                 className="mt-4" 
+                 onClick={() => { setIsPaymentModalOpen(false); setActiveTab('balances'); toast("Use o botão 'Pagar' na aba Gastos", { icon: '💡' }); }}
+               >
+                 Ir para Pagamentos
+               </Button>
+            )}
+
             <Button variant="outline" fullWidth onClick={() => setIsPaymentModalOpen(false)}>Fechar</Button>
          </div>
       </Modal>

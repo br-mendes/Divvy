@@ -29,17 +29,16 @@ export interface Divvy {
   end_date?: string;
   is_archived: boolean;
   members?: DivvyMember[];
-  member_count?: number; // Added field for list display
+  member_count?: number; 
 }
 
 export interface DivvyMember {
   id: string;
   divvy_id: string;
   user_id: string;
-  email: string; // Mantido para fallback
+  email: string; 
   role: 'admin' | 'member';
   joined_at: string;
-  // Dados unidos da tabela profiles
   profiles?: Profile;
 }
 
@@ -73,14 +72,14 @@ export interface ExpenseSplit {
   created_at: string;
 }
 
-export interface Transaction {
+// Transaction is conceptually internal logic, Settlement is the DB table
+export interface Settlement {
   id: string;
   divvy_id: string;
-  from_user_id: string;
-  to_user_id: string;
+  payer_id: string;
+  receiver_id: string;
   amount: number;
-  status: 'pending' | 'paid';
-  paid_at?: string;
+  status: 'pending' | 'confirmed' | 'rejected';
   created_at: string;
 }
 
@@ -118,7 +117,7 @@ export interface PaymentMethod {
   
   // Bank Account
   bank_id?: string;
-  bank_name?: string; // Fallback or joined
+  bank_name?: string; 
   agency?: string;
   account_number?: string;
   account_digit?: string;
