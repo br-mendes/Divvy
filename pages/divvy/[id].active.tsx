@@ -12,7 +12,7 @@ import DivvyHeader from '../../components/divvy/DivvyHeader';
 import InviteModal from '../../components/invite/InviteModal';
 import LoadingSpinner from '../../components/ui/LoadingSpinner';
 import EmptyState from '../../components/ui/EmptyState';
-import { Plus, UserPlus, Receipt, PieChart, Users, Pencil, Trash2, CreditCard, Lock, Copy, QrCode, Check, Eye, Wallet, ArrowRight } from 'lucide-react';
+import { Plus, UserPlus, Receipt, PieChart, Users, Pencil, Trash2, CreditCard, Lock, Copy, QrCode, Check, ArrowRight, Wallet } from 'lucide-react';
 import { ProtectedRoute } from '../../components/ProtectedRoute';
 import toast from 'react-hot-toast';
 import QRCode from 'qrcode';
@@ -742,6 +742,7 @@ const DivvyDetailContent: React.FC = () => {
             {members.map(member => {
               const avatar = member.profiles?.avatar_url;
               const name = getMemberName(member.user_id);
+              const roleLabel = divvy.creator_id === member.user_id ? "Criador e Membro" : "Membro";
               
               return (
                 <div key={member.id} className="bg-white p-4 rounded-lg border border-gray-100 flex items-center justify-between">
@@ -755,7 +756,7 @@ const DivvyDetailContent: React.FC = () => {
                     )}
                     <div>
                       <p className="font-medium text-gray-900">{name}</p>
-                      <p className="text-xs text-gray-500 capitalize">{member.role}</p>
+                      <p className="text-xs text-gray-500 capitalize">{roleLabel}</p>
                     </div>
                   </div>
                   
