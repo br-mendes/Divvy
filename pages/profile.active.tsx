@@ -54,18 +54,18 @@ function ProfileContent() {
     if (!user) return;
     
     // First try to load from public profiles table (source of truth for groups)
-    const { data: profile } = await supabase
+    const { data: profile, error } = await supabase
       .from('profiles')
       .select('full_name, nickname, avatar_url')
       .eq('id', user.id)
       .single();
 
-    if (profile) {
+    if (profile && !error) {
       setName(profile.full_name || user.user_metadata?.full_name || '');
       setNickname(profile.nickname || user.user_metadata?.nickname || '');
       setAvatarUrl(profile.avatar_url || user.user_metadata?.avatar_url || null);
     } else {
-      // Fallback to auth metadata
+      // Fallback to auth metadata if profile row doesn't exist yet
       setName(user.user_metadata?.full_name || '');
       setNickname(user.user_metadata?.nickname || '');
       setAvatarUrl(user.user_metadata?.avatar_url || null);
@@ -103,13 +103,15 @@ function ProfileContent() {
         .getPublicUrl(filePath);
 
       // 3. Atualizar Tabela Profiles e Auth Metadata
+      // Usamos upsert para garantir que crie a linha caso ela não exista
       const { error: updateError } = await supabase
         .from('profiles')
-        .update({ 
+        .upsert({ 
+            id: user.id,
+            email: user.email,
             avatar_url: publicUrl,
             updated_at: new Date().toISOString()
-        })
-        .eq('id', user.id);
+        });
 
       if (updateError) throw updateError;
       
@@ -121,6 +123,7 @@ function ProfileContent() {
       setAvatarUrl(publicUrl);
       toast.success('Avatar atualizado!');
     } catch (error: any) {
+      console.error(error);
       toast.error('Erro ao fazer upload: ' + error.message);
     } finally {
       setAvatarLoading(false);
@@ -135,18 +138,15 @@ function ProfileContent() {
       
       setAvatarLoading(true);
       try {
-          // Nota: Não é estritamente necessário deletar do storage se quisermos manter histórico,
-          // mas para limpar espaço é bom. Pular a deleção do arquivo físico para simplificar 
-          // (já que o nome do arquivo antigo não está armazenado explicitamente, apenas a URL completa).
-          // O foco aqui é limpar a referência no banco.
-
+          // Upsert com avatar_url null
           const { error } = await supabase
             .from('profiles')
-            .update({ 
+            .upsert({ 
+                id: user.id,
+                email: user.email,
                 avatar_url: null,
                 updated_at: new Date().toISOString()
-            })
-            .eq('id', user.id);
+            });
 
           if (error) throw error;
           
