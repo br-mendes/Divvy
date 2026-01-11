@@ -31,7 +31,6 @@ function ProfileContent() {
   
   // Profile State
   const [name, setName] = useState('');
-  const [nickname, setNickname] = useState('');
   const [email, setEmail] = useState('');
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [profileLoading, setProfileLoading] = useState(false);
@@ -77,13 +76,12 @@ function ProfileContent() {
       .single();
 
     if (profile && !error) {
-      setName(profile.full_name || user.user_metadata?.full_name || '');
-      setNickname(profile.nickname || user.user_metadata?.nickname || '');
+      // Priorizamos o nickname se existir, pois é como ele "se vê", senão o nome completo
+      setName(profile.nickname || profile.full_name || user.user_metadata?.full_name || '');
       setAvatarUrl(profile.avatar_url || user.user_metadata?.avatar_url || null);
     } else {
       // Fallback to auth metadata if profile row doesn't exist yet
-      setName(user.user_metadata?.full_name || '');
-      setNickname(user.user_metadata?.nickname || '');
+      setName(user.user_metadata?.nickname || user.user_metadata?.full_name || '');
       setAvatarUrl(user.user_metadata?.avatar_url || null);
     }
     setEmail(user.email || '');
@@ -202,10 +200,12 @@ function ProfileContent() {
     setProfileLoading(true);
 
     try {
+      // Atualiza tanto full_name quanto nickname com o mesmo valor
+      // para garantir consistência na exibição em todo o app
       const { error: authError } = await supabase.auth.updateUser({
         data: {
           full_name: name,
-          nickname: nickname,
+          nickname: name,
         }
       });
       if (authError) throw authError;
@@ -216,7 +216,7 @@ function ProfileContent() {
           id: user.id,
           email: user.email,
           full_name: name,
-          nickname: nickname,
+          nickname: name,
           updated_at: new Date().toISOString()
         });
 
@@ -436,18 +436,15 @@ function ProfileContent() {
 
         <form onSubmit={handleUpdateProfile} className="space-y-6">
           <div className="grid md:grid-cols-2 gap-6">
-            <Input
-              label="Nome Completo"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              required
-            />
-            <Input
-              label="Apelido (Como será visto nos grupos)"
-              value={nickname}
-              onChange={(e) => setNickname(e.target.value)}
-              placeholder="Ex: Jhonny"
-            />
+            <div>
+                <Input
+                  label="Nome ou Apelido"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  required
+                />
+                <p className="text-xs text-gray-500 mt-1">Como será visto nos grupos</p>
+            </div>
             <Input
               label="Email"
               value={email}
