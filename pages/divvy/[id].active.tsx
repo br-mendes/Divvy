@@ -997,7 +997,7 @@ const DivvyDetailContent: React.FC = () => {
       </Modal>
 
       {/* PAYMENT INFO MODAL */}
-      <Modal isOpen={isPaymentModalOpen} onClose={() => setIsPaymentModalOpen(false)} title={`Pagamento - ${viewingMemberName}`}>
+      <Modal isOpen={isPaymentModalOpen} onClose={() => setIsPaymentModalOpen(false)} title={`Pagamento para ${viewingMemberName}`}>
          <div className="space-y-4">
             {loadingPayments ? (
                <LoadingSpinner />
@@ -1014,12 +1014,15 @@ const DivvyDetailContent: React.FC = () => {
                     !!method.raw_pix_key;
 
                   const pixKey = method.raw_pix_key || method.pix_key || method.pix_key_masked;
+                  const displayText = method.display_text 
+                     ? method.display_text.replace(/\bcpf\b/gi, 'CPF').replace(/\bcnpj\b/gi, 'CNPJ')
+                     : (isPix ? 'Pix' : 'Conta Bancária');
                   
                   return (
                     <div key={method.id} className="border border-gray-200 rounded-lg p-4 bg-gray-50">
                        <div className="flex items-center gap-3 mb-2">
                           <span className="text-2xl">{isPix ? '💠' : '🏦'}</span>
-                          <h4 className="font-bold text-gray-900">{method.display_text}</h4>
+                          <h4 className="font-bold text-gray-900">{displayText}</h4>
                        </div>
                        
                        <div className="space-y-3 mt-3">
@@ -1063,7 +1066,11 @@ const DivvyDetailContent: React.FC = () => {
                              <div className="text-sm text-gray-600 bg-white p-3 rounded border border-gray-200 space-y-1">
                                 <p><span className="font-semibold">Banco:</span> {method.bank_name || method.banks?.name || 'N/A'}</p>
                                 <p><span className="font-semibold">Agência:</span> {method.raw_agency || method.agency || method.agency_masked || '-'}</p>
-                                <p><span className="font-semibold">Conta:</span> {method.raw_account_number || method.account_number || method.account_number_masked || '-'}</p>
+                                <p>
+                                    <span className="font-semibold">Conta:</span>{' '}
+                                    {method.raw_account_number || method.account_number || method.account_number_masked || '-'}
+                                    {(method.raw_account_digit || method.account_digit) ? `-${method.raw_account_digit || method.account_digit}` : ''}
+                                </p>
                                 <p><span className="font-semibold">Titular:</span> {method.account_holder_name || '-'}</p>
                              </div>
                           )}
