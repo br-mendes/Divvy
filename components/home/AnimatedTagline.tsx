@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 
 const taglines = [
@@ -31,7 +32,7 @@ export default function AnimatedTagline() {
     <>
       Despesas em grupo
       <span
-        className={`text-primary block transition-opacity duration-300 ${
+        className={`text-primary block transition-opacity duration-300 whitespace-nowrap overflow-hidden text-ellipsis ${
           isTransitioning ? 'opacity-0' : 'opacity-100'
         }`}
       >
