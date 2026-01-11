@@ -24,7 +24,6 @@ const DivvyDetailContent: React.FC = () => {
   const { id } = router.query;
   const { user } = useAuth();
   
-  // Ensure id is a string
   const divvyId = typeof id === 'string' ? id : '';
   
   // Data State
@@ -40,7 +39,7 @@ const DivvyDetailContent: React.FC = () => {
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
   const [submitLoading, setSubmitLoading] = useState(false);
 
-  // View Expense State (Read Only)
+  // View Expense State
   const [isViewModalOpen, setIsViewModalOpen] = useState(false);
   const [viewingExpense, setViewingExpense] = useState<Expense | null>(null);
   const [viewingSplits, setViewingSplits] = useState<ExpenseSplit[]>([]);
@@ -52,7 +51,7 @@ const DivvyDetailContent: React.FC = () => {
   const [memberPaymentMethods, setMemberPaymentMethods] = useState<PaymentMethod[]>([]);
   const [loadingPayments, setLoadingPayments] = useState(false);
   
-  // Pix QR Code & Copy State
+  // QR Code State
   const [generatedQrCode, setGeneratedQrCode] = useState<string | null>(null);
   const [activeQrMethodId, setActiveQrMethodId] = useState<string | null>(null);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
@@ -77,9 +76,11 @@ const DivvyDetailContent: React.FC = () => {
 
   const fetchDivvyData = async () => {
     try {
+      // 1. Fetch Divvy Info
       const { data: divvyData } = await supabase.from('divvies').select('*').eq('id', divvyId).single();
       setDivvy(divvyData);
 
+      // 2. Fetch Members AND explicitly fetch their Profiles to guarantee names
       const { data: memberData } = await supabase
         .from('divvy_members')
         .select('*')
@@ -88,18 +89,18 @@ const DivvyDetailContent: React.FC = () => {
       if (memberData && memberData.length > 0) {
         const userIds = memberData.map(m => m.user_id);
         
-        // Fetch profiles. Note: If RLS is enabled and not configured for public read, this might fail for other users.
-        // The "Hard Fix" SQL script provided in the response addresses this.
+        // BUSCA EXPLÍCITA NA TABELA PROFILES
         const { data: profilesData } = await supabase
           .from('profiles')
           .select('*')
           .in('id', userIds);
 
+        // Merge manual para garantir consistência
         const mergedMembers = memberData.map(member => {
             const profile = profilesData?.find(p => p.id === member.user_id);
             return {
                 ...member,
-                profiles: profile || null 
+                profiles: profile || undefined 
             };
         });
         setMembers(mergedMembers);
@@ -107,6 +108,7 @@ const DivvyDetailContent: React.FC = () => {
         setMembers([]);
       }
 
+      // 3. Fetch Expenses
       const { data: expenseData } = await supabase
         .from('expenses')
         .select('*')
@@ -115,7 +117,7 @@ const DivvyDetailContent: React.FC = () => {
       
       setExpenses(expenseData || []);
 
-      // Fetch ALL splits for balance calculation
+      // 4. Fetch All Splits
       if (expenseData && expenseData.length > 0) {
         const expenseIds = expenseData.map(e => e.id);
         const { data: splitsData } = await supabase
@@ -129,13 +131,17 @@ const DivvyDetailContent: React.FC = () => {
 
     } catch (error) {
       console.error(error);
+      toast.error("Erro ao carregar dados do grupo.");
     } finally {
       setLoading(false);
     }
   };
 
-  // Centralized Name Logic: Nickname > Full Name > Email
-  const getMemberName = (userId: string) => {
+  /**
+   * CORE FUNCTION: Gets the best display name possible.
+   * Priority: Nickname > Full Name > Email Username
+   */
+  const getMemberName = (userId: string, includeYouSuffix = true) => {
     const member = members.find(m => m.user_id === userId);
     if (!member) return 'Desconhecido';
     
@@ -143,6 +149,7 @@ const DivvyDetailContent: React.FC = () => {
     const profile = member.profiles;
     let displayName = '';
 
+    // Lógica estrita solicitada: Apelido OU Nome Completo
     if (profile?.nickname && profile.nickname.trim() !== '') {
       displayName = profile.nickname;
     } else if (profile?.full_name && profile.full_name.trim() !== '') {
@@ -153,8 +160,10 @@ const DivvyDetailContent: React.FC = () => {
       displayName = 'Membro';
     }
     
-    // Always append (Você) for current user for clarity
-    return isMe ? `${displayName} (Você)` : displayName;
+    if (isMe && includeYouSuffix) {
+        return `${displayName} (Você)`;
+    }
+    return displayName;
   };
 
   // --- BALANCE CALCULATION LOGIC ---
@@ -217,7 +226,6 @@ const DivvyDetailContent: React.FC = () => {
     return { balances, totalPaid, totalConsumed, plan };
   }, [expenses, allSplits, members]);
 
-
   const handleViewExpense = async (exp: Expense) => {
     setViewingExpense(exp);
     setIsViewModalOpen(true);
@@ -241,7 +249,7 @@ const DivvyDetailContent: React.FC = () => {
   const handleOpenAddExpense = () => {
     if (!user) return;
     if (divvy?.is_archived) {
-       toast.error("Grupo arquivado. Não é possível adicionar despesas.");
+       toast.error("Grupo arquivado.");
        return;
     }
     setEditingExpenseId(null);
@@ -255,13 +263,11 @@ const DivvyDetailContent: React.FC = () => {
     const initialSplits: Record<string, string> = {};
     members.forEach(m => initialSplits[m.user_id] = "1");
     setSplitValues(initialSplits);
-
     setIsExpenseModalOpen(true);
   };
 
   const handleOpenEditExpense = async (exp: Expense) => {
     if (divvy?.is_archived) return;
-
     setIsViewModalOpen(false);
 
     setEditingExpenseId(exp.id);
@@ -299,15 +305,27 @@ const DivvyDetailContent: React.FC = () => {
         members.forEach(m => initialSplits[m.user_id] = "1");
         setSplitValues(initialSplits);
     }
-
     setIsExpenseModalOpen(true);
   };
 
   const totalAmount = parseFloat(amount) || 0;
   
+  const toggleMemberSelection = (userId: string) => {
+      setSplitValues(prev => ({
+          ...prev,
+          [userId]: prev[userId] === "1" ? "0" : "1"
+      }));
+  };
+
+  const handleSplitValueChange = (userId: string, value: string) => {
+      setSplitValues(prev => ({
+          ...prev,
+          [userId]: value
+      }));
+  };
+
   const getSplitSummary = (): { isValid: boolean; message: string } => {
       if (totalAmount <= 0) return { isValid: false, message: 'Insira um valor válido' };
-
       const numericValues = Object.entries(splitValues).reduce((acc, [key, val]) => {
           acc[key] = parseFloat(val as string) || 0;
           return acc;
@@ -321,33 +339,22 @@ const DivvyDetailContent: React.FC = () => {
       } 
       
       const currentSum = Object.values(numericValues).reduce((a, b) => a + b, 0);
-      
       if (splitMode === 'amount') {
           const diff = totalAmount - currentSum;
           const isValid = Math.abs(diff) < 0.05; 
           if (isValid) return { isValid: true, message: 'Total fechado corretamente' };
           return { isValid: false, message: diff > 0 ? `Faltam R$ ${Math.abs(diff).toFixed(2)}` : `Passou R$ ${Math.abs(diff).toFixed(2)}` };
       }
-
       if (splitMode === 'percentage') {
           const diff = 100 - currentSum;
           const isValid = Math.abs(diff) < 0.1;
           if (isValid) return { isValid: true, message: 'Total: 100%' };
           return { isValid: false, message: diff > 0 ? `Faltam ${Math.abs(diff).toFixed(1)}%` : `Passou ${Math.abs(diff).toFixed(1)}%` };
       }
-
       return { isValid: false, message: '' };
   };
 
   const { isValid: isSplitValid, message: splitMessage } = getSplitSummary();
-
-  const handleSplitValueChange = (userId: string, value: string) => {
-    setSplitValues(prev => ({ ...prev, [userId]: value }));
-  };
-
-  const toggleMemberSelection = (userId: string) => {
-    setSplitValues(prev => ({ ...prev, [userId]: prev[userId] === "1" ? "0" : "1" }));
-  };
 
   const handleSaveExpense = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -375,7 +382,6 @@ const DivvyDetailContent: React.FC = () => {
 
       if (expenseId) {
         await supabase.from('expense_splits').delete().eq('expense_id', expenseId);
-        
         let splitsToInsert: any[] = [];
         const numericValues = Object.entries(splitValues).reduce((acc, [key, val]) => {
           acc[key] = parseFloat(val as string) || 0;
@@ -391,17 +397,13 @@ const DivvyDetailContent: React.FC = () => {
             amount_owed: amountPerPerson
           }));
         } else if (splitMode === 'amount') {
-          splitsToInsert = members
-            .filter(m => numericValues[m.user_id] > 0)
-            .map(m => ({
+          splitsToInsert = members.filter(m => numericValues[m.user_id] > 0).map(m => ({
               expense_id: expenseId,
               participant_user_id: m.user_id,
               amount_owed: numericValues[m.user_id]
             }));
         } else if (splitMode === 'percentage') {
-           splitsToInsert = members
-            .filter(m => numericValues[m.user_id] > 0)
-            .map(m => ({
+           splitsToInsert = members.filter(m => numericValues[m.user_id] > 0).map(m => ({
               expense_id: expenseId,
               participant_user_id: m.user_id,
               amount_owed: totalAmount * (numericValues[m.user_id] / 100)
@@ -417,7 +419,6 @@ const DivvyDetailContent: React.FC = () => {
       setIsExpenseModalOpen(false);
       fetchDivvyData();
     } catch (error: any) {
-      console.error('Error adding expense:', error);
       toast.error('Erro ao salvar despesa: ' + error.message);
     } finally {
       setSubmitLoading(false);
@@ -427,13 +428,13 @@ const DivvyDetailContent: React.FC = () => {
   const handleDeleteExpense = async (expenseId: string) => {
       if (!confirm('Excluir despesa?')) return;
       await supabase.from('expenses').delete().eq('id', expenseId);
-      setIsViewModalOpen(false); // Fecha modal de visualização se estiver aberto
+      setIsViewModalOpen(false);
       fetchDivvyData();
   };
 
   const handleOpenPaymentInfo = async (memberId: string) => {
     setLoadingPayments(true);
-    setViewingMemberName(getMemberName(memberId).replace(' (Você)', ''));
+    setViewingMemberName(getMemberName(memberId, false));
     setIsPaymentModalOpen(true);
     setMemberPaymentMethods([]);
     setGeneratedQrCode(null);
@@ -441,15 +442,11 @@ const DivvyDetailContent: React.FC = () => {
     setCopiedKey(null);
 
     try {
-        const { data, error } = await supabase.rpc('get_divvy_members_payment_methods', {
-            p_divvy_id: divvyId
-        });
-
+        const { data, error } = await supabase.rpc('get_divvy_members_payment_methods', { p_divvy_id: divvyId });
         if (error) throw error;
         const memberMethods = (data || []).filter((m: any) => m.member_id === memberId);
         setMemberPaymentMethods(memberMethods);
     } catch (error: any) {
-        console.error("Error fetching payment info:", error);
         toast.error("Erro ao carregar dados de pagamento.");
     } finally {
         setLoadingPayments(false);
@@ -471,28 +468,8 @@ const DivvyDetailContent: React.FC = () => {
       setGeneratedQrCode(url);
       setActiveQrMethodId(methodId);
     } catch (err) {
-      console.error("QR Error", err);
       toast.error("Erro ao gerar QR Code");
     }
-  };
-
-  const formatExpenseDate = (dateStr: string) => {
-    if (!dateStr) return '';
-    const cleanDate = dateStr.split('T')[0];
-    const [year, month, day] = cleanDate.split('-');
-    return `${day}/${month}/${year}`;
-  };
-
-  const formatDocument = (doc: string) => {
-    if (!doc) return '-';
-    const clean = doc.replace(/\D/g, '');
-    if (clean.length === 11) {
-      return clean.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4');
-    }
-    if (clean.length === 14) {
-      return clean.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, '$1.$2.$3/$4-$5');
-    }
-    return doc;
   };
 
   const accountTypeMap: Record<string, string> = {
@@ -514,7 +491,7 @@ const DivvyDetailContent: React.FC = () => {
           <Lock size={20} />
           <div>
             <p className="font-bold">Este grupo está arquivado.</p>
-            <p className="text-sm">Não é possível adicionar ou editar despesas, mas você pode visualizar o histórico.</p>
+            <p className="text-sm">Somente leitura.</p>
           </div>
         </div>
       )}
@@ -524,11 +501,7 @@ const DivvyDetailContent: React.FC = () => {
           <UserPlus size={18} className="mr-2" />
           Convidar
         </Button>
-        <Button 
-           onClick={handleOpenAddExpense} 
-           disabled={divvy.is_archived}
-           className={divvy.is_archived ? "opacity-50 cursor-not-allowed" : ""}
-        >
+        <Button onClick={handleOpenAddExpense} disabled={divvy.is_archived} className={divvy.is_archived ? "opacity-50 cursor-not-allowed" : ""}>
           <Plus size={18} className="mr-2" />
           Nova Despesa
         </Button>
@@ -536,38 +509,20 @@ const DivvyDetailContent: React.FC = () => {
 
       <div className="border-b border-gray-200">
         <nav className="-mb-px flex space-x-8 overflow-x-auto">
-          <button
-            onClick={() => setActiveTab('expenses')}
-            className={`pb-4 px-1 border-b-2 font-medium text-sm flex items-center gap-2 whitespace-nowrap ${
-              activeTab === 'expenses' ? 'border-brand-500 text-brand-600' : 'border-transparent text-gray-500 hover:text-gray-700'
-            }`}
-          >
-            <Receipt size={16} /> Despesas
-          </button>
-          <button
-            onClick={() => setActiveTab('balances')}
-            className={`pb-4 px-1 border-b-2 font-medium text-sm flex items-center gap-2 whitespace-nowrap ${
-              activeTab === 'balances' ? 'border-brand-500 text-brand-600' : 'border-transparent text-gray-500 hover:text-gray-700'
-            }`}
-          >
-            <Wallet size={16} /> Gastos
-          </button>
-          <button
-            onClick={() => setActiveTab('charts')}
-            className={`pb-4 px-1 border-b-2 font-medium text-sm flex items-center gap-2 whitespace-nowrap ${
-              activeTab === 'charts' ? 'border-brand-500 text-brand-600' : 'border-transparent text-gray-500 hover:text-gray-700'
-            }`}
-          >
-            <PieChart size={16} /> Análise
-          </button>
-          <button
-            onClick={() => setActiveTab('members')}
-            className={`pb-4 px-1 border-b-2 font-medium text-sm flex items-center gap-2 whitespace-nowrap ${
-              activeTab === 'members' ? 'border-brand-500 text-brand-600' : 'border-transparent text-gray-500 hover:text-gray-700'
-            }`}
-          >
-            <Users size={16} /> Membros ({members.length})
-          </button>
+          {['expenses', 'balances', 'charts', 'members'].map((tab) => (
+             <button
+                key={tab}
+                onClick={() => setActiveTab(tab as any)}
+                className={`pb-4 px-1 border-b-2 font-medium text-sm flex items-center gap-2 whitespace-nowrap ${
+                  activeTab === tab ? 'border-brand-500 text-brand-600' : 'border-transparent text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                {tab === 'expenses' && <><Receipt size={16} /> Despesas</>}
+                {tab === 'balances' && <><Wallet size={16} /> Gastos</>}
+                {tab === 'charts' && <><PieChart size={16} /> Análise</>}
+                {tab === 'members' && <><Users size={16} /> Membros ({members.length})</>}
+              </button>
+          ))}
         </nav>
       </div>
 
@@ -582,45 +537,24 @@ const DivvyDetailContent: React.FC = () => {
                >
                  <div className="flex items-center gap-4 flex-1">
                     <div className="h-10 w-10 rounded-full bg-brand-50 flex items-center justify-center text-xl group-hover:scale-110 transition-transform">
-                      {exp.category === 'food' ? '🍽️' : 
-                       exp.category === 'transport' ? '🚗' : 
-                       exp.category === 'accommodation' ? '🏨' : 
-                       exp.category === 'activity' ? '🎬' : 
-                       exp.category === 'utilities' ? '💡' :
-                       exp.category === 'shopping' ? '🛍️' : '💰'}
+                      {exp.category === 'food' ? '🍽️' : exp.category === 'transport' ? '🚗' : exp.category === 'accommodation' ? '🏨' : exp.category === 'activity' ? '🎬' : '💰'}
                     </div>
                     <div>
                         <p className="font-medium text-gray-900">{exp.description || exp.category}</p>
-                        <p className="text-sm text-gray-500">{formatExpenseDate(exp.date)} • {getMemberName(exp.paid_by_user_id)}</p>
+                        <p className="text-sm text-gray-500">
+                            {new Date(exp.date).toLocaleDateString('pt-BR')} • {getMemberName(exp.paid_by_user_id)}
+                        </p>
                     </div>
                  </div>
                  <div className="flex items-center gap-4 w-full sm:w-auto justify-between sm:justify-end">
                     <span className="font-bold text-gray-900">R$ {exp.amount.toFixed(2)}</span>
-                    {!divvy.is_archived && (
-                        <div className="flex gap-1">
-                           <button 
-                             onClick={(e) => { e.stopPropagation(); handleOpenEditExpense(exp); }} 
-                             className="p-2 hover:bg-gray-200 text-gray-400 hover:text-brand-600 rounded-full transition-colors"
-                             title="Editar Rápido"
-                           >
-                              <Pencil size={16} />
-                           </button>
-                           <button 
-                             onClick={(e) => { e.stopPropagation(); handleDeleteExpense(exp.id); }} 
-                             className="p-2 hover:bg-red-50 text-gray-400 hover:text-red-500 rounded-full transition-colors"
-                             title="Excluir Rápido"
-                           >
-                              <Trash2 size={16} />
-                           </button>
-                        </div>
-                    )}
                  </div>
                </div>
             ))}
           </div>
         )}
 
-        {/* --- BALANCES / GASTOS TAB --- */}
+        {/* BALANCES */}
         {activeTab === 'balances' && (
             <div className="space-y-8 animate-fade-in-down">
                 <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
@@ -633,83 +567,50 @@ const DivvyDetailContent: React.FC = () => {
                         <div className="flex flex-col items-center justify-center py-8 text-center bg-gray-50 rounded-lg">
                             <Check size={48} className="text-green-500 mb-3" />
                             <p className="text-gray-900 font-medium">Tudo quitado!</p>
-                            <p className="text-sm text-gray-500">Ninguém deve nada para ninguém.</p>
                         </div>
                     ) : (
                         <div className="space-y-3">
                             {calculateBalances.plan.map((transfer, idx) => (
                                 <div key={idx} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg border border-gray-100">
-                                    <div className="flex items-center gap-3">
-                                        <div className="flex items-center gap-2">
-                                            <span className="font-medium text-gray-900">{getMemberName(transfer.from)}</span>
-                                            <span className="text-gray-400 text-xs">deve pagar</span>
-                                            <span className="font-medium text-gray-900">{getMemberName(transfer.to)}</span>
-                                        </div>
+                                    <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                                        <span className="font-medium text-gray-900">{getMemberName(transfer.from)}</span>
+                                        <span className="text-gray-400 text-xs px-2">deve pagar</span>
+                                        <span className="font-medium text-gray-900">{getMemberName(transfer.to)}</span>
                                     </div>
                                     <div className="flex items-center gap-3">
                                         <span className="font-bold text-lg text-brand-600">R$ {transfer.amount.toFixed(2)}</span>
                                         <button 
                                             onClick={() => handleOpenPaymentInfo(transfer.to)}
                                             className="p-2 text-gray-400 hover:text-brand-600 hover:bg-white rounded-full transition-colors"
-                                            title="Ver dados bancários"
                                         >
                                             <CreditCard size={18} />
                                         </button>
                                     </div>
                                 </div>
                             ))}
-                            <p className="text-xs text-gray-500 mt-2 text-center">
-                                * Cálculo otimizado para reduzir o número de transações necessárias.
-                            </p>
                         </div>
                     )}
                 </div>
 
-                <div className="grid md:grid-cols-2 gap-6">
-                    <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
-                        <h3 className="text-lg font-bold text-gray-900 mb-4">Resumo de Saldos</h3>
-                        <div className="space-y-4">
-                            {members.map(m => {
-                                const balance = calculateBalances.balances[m.user_id] || 0;
-                                const isPositive = balance > 0;
-                                const isZero = Math.abs(balance) < 0.01;
-
-                                return (
-                                    <div key={m.user_id} className="flex items-center justify-between border-b border-gray-50 pb-2 last:border-0 last:pb-0">
-                                        <div className="flex items-center gap-3">
-                                            <div className={`w-2 h-2 rounded-full ${isZero ? 'bg-gray-300' : isPositive ? 'bg-green-500' : 'bg-red-500'}`}></div>
-                                            <span className="text-gray-700">{getMemberName(m.user_id)}</span>
-                                        </div>
-                                        <div className={`font-medium ${isZero ? 'text-gray-400' : isPositive ? 'text-green-600' : 'text-red-500'}`}>
-                                            {isZero ? 'Zerado' : (isPositive ? `recebe R$ ${balance.toFixed(2)}` : `deve R$ ${Math.abs(balance).toFixed(2)}`)}
-                                        </div>
+                <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
+                    <h3 className="text-lg font-bold text-gray-900 mb-4">Resumo de Saldos</h3>
+                    <div className="space-y-4">
+                        {members.map(m => {
+                            const balance = calculateBalances.balances[m.user_id] || 0;
+                            const isPositive = balance > 0;
+                            const isZero = Math.abs(balance) < 0.01;
+                            return (
+                                <div key={m.user_id} className="flex items-center justify-between border-b border-gray-50 pb-2 last:border-0 last:pb-0">
+                                    <div className="flex items-center gap-3">
+                                        <div className={`w-2 h-2 rounded-full ${isZero ? 'bg-gray-300' : isPositive ? 'bg-green-500' : 'bg-red-500'}`}></div>
+                                        <span className="text-gray-700">{getMemberName(m.user_id)}</span>
                                     </div>
-                                );
-                            })}
-                        </div>
-                    </div>
-
-                    <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
-                        <h3 className="text-lg font-bold text-gray-900 mb-4">Quem pagou o quê (Total)</h3>
-                        <div className="space-y-4">
-                            {members.map(m => {
-                                const paid = calculateBalances.totalPaid[m.user_id] || 0;
-                                const consumed = calculateBalances.totalConsumed[m.user_id] || 0;
-                                
-                                return (
-                                    <div key={m.user_id} className="space-y-1 border-b border-gray-50 pb-2 last:border-0 last:pb-0">
-                                        <div className="flex justify-between items-center">
-                                            <span className="font-medium text-gray-900">{getMemberName(m.user_id)}</span>
-                                            <span className="font-bold text-gray-900">R$ {paid.toFixed(2)}</span>
-                                        </div>
-                                        <div className="flex justify-between items-center text-xs text-gray-500">
-                                            <span>Sua parte nas despesas:</span>
-                                            <span>R$ {consumed.toFixed(2)}</span>
-                                        </div>
+                                    <div className={`font-medium ${isZero ? 'text-gray-400' : isPositive ? 'text-green-600' : 'text-red-500'}`}>
+                                        {isZero ? 'Zerado' : (isPositive ? `recebe R$ ${balance.toFixed(2)}` : `deve R$ ${Math.abs(balance).toFixed(2)}`)}
                                     </div>
-                                );
-                            })}
-                        </div>
+                                </div>
+                            );
+                        })}
                     </div>
                 </div>
             </div>
@@ -725,8 +626,8 @@ const DivvyDetailContent: React.FC = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {members.map(member => {
               const avatar = member.profiles?.avatar_url;
-              const name = getMemberName(member.user_id);
-              // Lógica corrigida para exibir o cargo corretamente
+              const name = getMemberName(member.user_id, false); // No "Você" suffix here
+              // LÓGICA DE CARGOS CORRIGIDA
               const roleLabel = divvy.creator_id === member.user_id ? "Criador e Membro" : "Membro";
               
               return (
@@ -744,11 +645,9 @@ const DivvyDetailContent: React.FC = () => {
                       <p className="text-xs text-gray-500 capitalize">{roleLabel}</p>
                     </div>
                   </div>
-                  
                   <button 
                      onClick={() => handleOpenPaymentInfo(member.user_id)}
                      className="text-brand-600 hover:bg-brand-50 p-2 rounded-full transition-colors"
-                     title="Ver dados de pagamento"
                   >
                      <CreditCard size={20} />
                   </button>
@@ -759,49 +658,25 @@ const DivvyDetailContent: React.FC = () => {
         )}
       </div>
 
-      {/* VIEW EXPENSE MODAL (READ ONLY) */}
-      <Modal 
-        isOpen={isViewModalOpen} 
-        onClose={() => setIsViewModalOpen(false)} 
-        title="Detalhes da Despesa"
-      >
+      {/* MODALS */}
+      <Modal isOpen={isViewModalOpen} onClose={() => setIsViewModalOpen(false)} title="Detalhes da Despesa">
         {viewingExpense && (
           <div className="space-y-6">
             <div className="flex items-center justify-between">
-               <div className="flex items-center gap-3">
-                  <div className="h-12 w-12 rounded-full bg-brand-100 flex items-center justify-center text-2xl">
-                    {viewingExpense.category === 'food' ? '🍽️' : 
-                     viewingExpense.category === 'transport' ? '🚗' : 
-                     viewingExpense.category === 'accommodation' ? '🏨' : 
-                     viewingExpense.category === 'activity' ? '🎬' : '💰'}
-                  </div>
-                  <div>
-                    <h3 className="text-lg font-bold text-gray-900">{viewingExpense.description || viewingExpense.category}</h3>
-                    <p className="text-sm text-gray-500">{formatExpenseDate(viewingExpense.date)}</p>
-                  </div>
-               </div>
+               <h3 className="text-lg font-bold text-gray-900">{viewingExpense.description || viewingExpense.category}</h3>
                <div className="text-right">
                   <p className="text-2xl font-bold text-brand-600">R$ {viewingExpense.amount.toFixed(2)}</p>
                   <p className="text-xs text-gray-500">Pago por {getMemberName(viewingExpense.paid_by_user_id)}</p>
                </div>
             </div>
-
             <div className="border-t border-gray-100 pt-4">
-               <h4 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                 <Users size={16} className="text-gray-500" />
-                 Como foi dividido:
-               </h4>
-               
-               {loadingView ? (
-                 <div className="py-4 flex justify-center"><LoadingSpinner /></div>
-               ) : (
+               <h4 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2"><Users size={16} /> Como foi dividido:</h4>
+               {loadingView ? <LoadingSpinner /> : (
                  <div className="bg-gray-50 rounded-lg p-3 space-y-2 max-h-48 overflow-y-auto">
                     {members.map(m => {
                        const split = viewingSplits.find(s => s.participant_user_id === m.user_id);
                        const amountOwed = split ? split.amount_owed : 0;
-                       
                        if (amountOwed <= 0) return null;
-
                        return (
                          <div key={m.user_id} className="flex justify-between items-center text-sm">
                             <span className="text-gray-700">{getMemberName(m.user_id)}</span>
@@ -812,63 +687,27 @@ const DivvyDetailContent: React.FC = () => {
                  </div>
                )}
             </div>
-
             <div className="flex gap-3 pt-2">
                {!divvy.is_archived && (
                  <>
-                  <Button 
-                    variant="danger" 
-                    className="flex-1"
-                    onClick={() => handleDeleteExpense(viewingExpense.id)}
-                  >
-                    Excluir
-                  </Button>
-                  <Button 
-                    variant="primary" 
-                    className="flex-1"
-                    onClick={() => handleOpenEditExpense(viewingExpense)}
-                  >
-                    Editar
-                  </Button>
+                  <Button variant="danger" className="flex-1" onClick={() => handleDeleteExpense(viewingExpense.id)}>Excluir</Button>
+                  <Button variant="primary" className="flex-1" onClick={() => handleOpenEditExpense(viewingExpense)}>Editar</Button>
                  </>
                )}
-               <Button 
-                  variant="outline" 
-                  className={divvy.is_archived ? "w-full" : ""}
-                  onClick={() => setIsViewModalOpen(false)}
-               >
-                  Fechar
-               </Button>
+               <Button variant="outline" className={divvy.is_archived ? "w-full" : ""} onClick={() => setIsViewModalOpen(false)}>Fechar</Button>
             </div>
           </div>
         )}
       </Modal>
 
-      {/* ADD/EDIT EXPENSE MODAL */}
       <Modal isOpen={isExpenseModalOpen} onClose={() => setIsExpenseModalOpen(false)} title={editingExpenseId ? "Editar Despesa" : "Nova Despesa"}>
          <form onSubmit={handleSaveExpense} className="space-y-5">
-           
-           {/* General Info */}
            <div className="space-y-3">
-              <Input
-                label="Valor (R$)"
-                type="number"
-                step="0.01"
-                value={amount}
-                onChange={(e) => setAmount(e.target.value)}
-                required
-                placeholder="0.00"
-                className="text-lg font-bold"
-              />
-              
+              <Input label="Valor (R$)" type="number" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} required placeholder="0.00" className="text-lg font-bold" />
               <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Categoria</label>
-                    <select
-                      className="w-full rounded-lg border border-gray-300 px-3 py-2 bg-white"
-                      value={category}
-                      onChange={(e) => setCategory(e.target.value)}
-                    >
+                    <select className="w-full rounded-lg border border-gray-300 px-3 py-2 bg-white" value={category} onChange={(e) => setCategory(e.target.value)}>
                       <option value="food">🍽️ Alimentação</option>
                       <option value="transport">🚗 Transporte</option>
                       <option value="accommodation">🏨 Hospedagem</option>
@@ -878,124 +717,50 @@ const DivvyDetailContent: React.FC = () => {
                       <option value="other">💰 Outros</option>
                     </select>
                   </div>
-                  <Input
-                    label="Data"
-                    type="date"
-                    value={date}
-                    onChange={(e) => setDate(e.target.value)}
-                  />
+                  <Input label="Data" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
               </div>
-
-              <Input
-                label="Descrição"
-                value={desc}
-                onChange={(e) => setDesc(e.target.value)}
-                placeholder="Ex: Jantar no centro"
-              />
-
+              <Input label="Descrição" value={desc} onChange={(e) => setDesc(e.target.value)} placeholder="Ex: Jantar no centro" />
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Quem pagou?</label>
-                <select
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 bg-white"
-                  value={payerId}
-                  onChange={(e) => setPayerId(e.target.value)}
-                >
+                <select className="w-full rounded-lg border border-gray-300 px-3 py-2 bg-white" value={payerId} onChange={(e) => setPayerId(e.target.value)}>
                   {members.map(m => (
-                    <option key={m.user_id} value={m.user_id}>
-                      {getMemberName(m.user_id)}
-                    </option>
+                    <option key={m.user_id} value={m.user_id}>{getMemberName(m.user_id)}</option>
                   ))}
                 </select>
               </div>
            </div>
-
            <hr className="border-gray-200" />
-
-           {/* Split Section */}
            <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Divisão</label>
-              
-              {/* Split Tabs */}
               <div className="flex bg-gray-100 rounded-lg p-1 mb-3">
-                <button
-                  type="button"
-                  onClick={() => setSplitMode('equal')}
-                  className={`flex-1 py-1.5 text-sm font-medium rounded-md transition-all ${splitMode === 'equal' ? 'bg-white shadow-sm text-brand-600' : 'text-gray-500 hover:text-gray-700'}`}
-                >
-                  Igual
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setSplitMode('amount')}
-                  className={`flex-1 py-1.5 text-sm font-medium rounded-md transition-all ${splitMode === 'amount' ? 'bg-white shadow-sm text-brand-600' : 'text-gray-500 hover:text-gray-700'}`}
-                >
-                  Valor (R$)
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setSplitMode('percentage')}
-                  className={`flex-1 py-1.5 text-sm font-medium rounded-md transition-all ${splitMode === 'percentage' ? 'bg-white shadow-sm text-brand-600' : 'text-gray-500 hover:text-gray-700'}`}
-                >
-                  %
-                </button>
+                <button type="button" onClick={() => setSplitMode('equal')} className={`flex-1 py-1.5 text-sm font-medium rounded-md ${splitMode === 'equal' ? 'bg-white shadow-sm text-brand-600' : 'text-gray-500'}`}>Igual</button>
+                <button type="button" onClick={() => setSplitMode('amount')} className={`flex-1 py-1.5 text-sm font-medium rounded-md ${splitMode === 'amount' ? 'bg-white shadow-sm text-brand-600' : 'text-gray-500'}`}>Valor (R$)</button>
+                <button type="button" onClick={() => setSplitMode('percentage')} className={`flex-1 py-1.5 text-sm font-medium rounded-md ${splitMode === 'percentage' ? 'bg-white shadow-sm text-brand-600' : 'text-gray-500'}`}>%</button>
               </div>
-
-              {/* Members List */}
               <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
                 {members.map(m => {
-                  const name = getMemberName(m.user_id);
                   const isSelected = splitValues[m.user_id] === "1";
-                  
                   return (
                     <div key={m.user_id} className="flex items-center justify-between p-2 rounded border border-gray-100 hover:bg-gray-50">
                       <div className="flex items-center gap-2 overflow-hidden">
                         {splitMode === 'equal' && (
-                           <input 
-                              type="checkbox" 
-                              checked={isSelected} 
-                              onChange={() => toggleMemberSelection(m.user_id)}
-                              className="w-4 h-4 text-brand-600 rounded border-gray-300 focus:ring-brand-500"
-                           />
+                           <input type="checkbox" checked={isSelected} onChange={() => toggleMemberSelection(m.user_id)} className="w-4 h-4 text-brand-600 rounded border-gray-300" />
                         )}
-                        <span className={`text-sm truncate ${splitMode === 'equal' && !isSelected ? 'text-gray-400' : 'text-gray-700'}`}>
-                           {name}
-                        </span>
+                        <span className={`text-sm truncate ${splitMode === 'equal' && !isSelected ? 'text-gray-400' : 'text-gray-700'}`}>{getMemberName(m.user_id)}</span>
                       </div>
-
                       <div className="flex items-center gap-2">
                         {splitMode === 'equal' ? (
-                           isSelected ? (
-                             <span className="text-sm font-medium text-gray-900">
-                               R$ {((totalAmount / Math.max(1, Object.values(splitValues).filter(v => v === "1").length))).toFixed(2)}
-                             </span>
-                           ) : <span className="text-xs text-gray-400">-</span>
+                           isSelected ? <span className="text-sm font-medium text-gray-900">R$ {((totalAmount / Math.max(1, Object.values(splitValues).filter(v => v === "1").length))).toFixed(2)}</span> : <span className="text-xs text-gray-400">-</span>
                         ) : (
-                           <div className="relative">
-                              <span className="absolute left-2 top-1.5 text-xs text-gray-400">
-                                {splitMode === 'amount' ? 'R$' : '%'}
-                              </span>
-                              <input
-                                type="number"
-                                step={splitMode === 'amount' ? "0.01" : "1"}
-                                value={splitValues[m.user_id] || ''}
-                                onChange={(e) => handleSplitValueChange(m.user_id, e.target.value)}
-                                className="w-24 pl-6 pr-2 py-1 text-right text-sm border rounded focus:ring-1 focus:ring-brand-500 outline-none"
-                                placeholder="0"
-                              />
-                           </div>
+                           <input type="number" step={splitMode === 'amount' ? "0.01" : "1"} value={splitValues[m.user_id] || ''} onChange={(e) => handleSplitValueChange(m.user_id, e.target.value)} className="w-24 pl-2 py-1 text-right text-sm border rounded" placeholder="0" />
                         )}
                       </div>
                     </div>
                   );
                 })}
               </div>
-              
-              {/* Validation Feedback */}
-              <div className={`mt-2 text-sm text-right font-medium ${isSplitValid ? 'text-green-600' : 'text-red-500'}`}>
-                 {splitMessage}
-              </div>
+              <div className={`mt-2 text-sm text-right font-medium ${isSplitValid ? 'text-green-600' : 'text-red-500'}`}>{splitMessage}</div>
            </div>
-
            <div className="flex justify-end gap-3 pt-2">
              <Button type="button" variant="ghost" onClick={() => setIsExpenseModalOpen(false)}>Cancelar</Button>
              <Button type="submit" isLoading={submitLoading} disabled={!isSplitValid}>Salvar</Button>
@@ -1003,45 +768,18 @@ const DivvyDetailContent: React.FC = () => {
          </form>
       </Modal>
 
-      {/* PAYMENT INFO MODAL */}
       <Modal isOpen={isPaymentModalOpen} onClose={() => setIsPaymentModalOpen(false)} title={`Pagamento para ${viewingMemberName}`}>
          <div className="space-y-4">
-            {loadingPayments ? (
-               <LoadingSpinner />
-            ) : memberPaymentMethods.length === 0 ? (
-               <p className="text-gray-500 text-center py-4">Nenhum método de pagamento disponível.</p>
-            ) : (
-               memberPaymentMethods.map(method => {
-                  const isPix = 
-                    method.method_type === 'pix' || 
-                    method.type === 'pix' || 
-                    (method.display_text && method.display_text.toLowerCase().includes('pix')) ||
-                    !!method.pix_key ||
-                    !!method.raw_pix_key;
-
+            {loadingPayments ? <LoadingSpinner /> : memberPaymentMethods.length === 0 ? <p className="text-gray-500 text-center py-4">Nenhum método de pagamento disponível.</p> : memberPaymentMethods.map(method => {
+                  const isPix = method.method_type === 'pix' || method.type === 'pix' || !!method.pix_key;
                   const pixKey = method.raw_pix_key || method.pix_key || method.pix_key_masked;
                   
                   let headerTitle = 'Conta Bancária';
-                  if (isPix) {
-                     headerTitle = 'Pix';
-                  } else {
+                  if (isPix) headerTitle = 'Pix';
+                  else {
                      const accType = (method as any).account_type || 'checking';
                      headerTitle = accountTypeMap[accType] || 'Conta Bancária';
                   }
-
-                  const bankCode = (method as any).bank_code || method.banks?.code || '';
-                  const bankName = method.bank_name || method.banks?.name || 'N/A';
-                  const bankDisplay = bankCode ? `${bankCode} - ${bankName}` : bankName;
-
-                  const agency = method.raw_agency || method.agency || method.agency_masked || '-';
-                  
-                  const accNum = method.raw_account_number || method.account_number || method.account_number_masked || '-';
-                  const accDigit = (method as any).account_digit || method.raw_account_digit;
-                  
-                  const accountDisplay = accDigit ? `${accNum}-${accDigit}` : accNum;
-
-                  const holderName = method.account_holder_name || '-';
-                  const holderDoc = (method as any).account_holder_document || '-';
 
                   return (
                     <div key={method.id} className="border border-gray-200 rounded-lg p-4 bg-gray-50">
@@ -1054,53 +792,30 @@ const DivvyDetailContent: React.FC = () => {
                           {isPix ? (
                              <div className="space-y-3">
                                 <div className="flex items-center gap-2">
-                                  <input 
-                                    readOnly 
-                                    value={pixKey || 'Chave indisponível'}
-                                    className="flex-1 bg-white p-3 rounded border border-gray-200 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-brand-100"
-                                  />
-                                  <button 
-                                     onClick={() => handleCopy(pixKey || '', method.id)}
-                                     className="p-3 bg-white border border-gray-200 rounded hover:bg-gray-50 text-gray-600 transition-colors"
-                                     title="Copiar chave"
-                                  >
+                                  <input readOnly value={pixKey || 'Chave indisponível'} className="flex-1 bg-white p-3 rounded border border-gray-200 font-mono text-sm" />
+                                  <button onClick={() => handleCopy(pixKey || '', method.id)} className="p-3 bg-white border border-gray-200 rounded hover:bg-gray-50">
                                      {copiedKey === method.id ? <Check size={20} className="text-green-600" /> : <Copy size={20} />}
                                   </button>
                                 </div>
-                                
-                                <Button 
-                                  variant="outline" 
-                                  size="sm" 
-                                  fullWidth 
-                                  onClick={() => handleGenerateQR(pixKey || '', method.id)}
-                                  className="flex items-center justify-center gap-2"
-                                  disabled={!pixKey}
-                                >
-                                  <QrCode size={16} />
-                                  Gerar QR Code
-                                </Button>
-                                
+                                <Button variant="outline" size="sm" fullWidth onClick={() => handleGenerateQR(pixKey || '', method.id)} disabled={!pixKey} className="flex items-center justify-center gap-2"><QrCode size={16} /> Gerar QR Code</Button>
                                 {activeQrMethodId === method.id && generatedQrCode && (
-                                   <div className="flex flex-col items-center justify-center p-4 bg-white rounded border border-gray-200 animate-fade-in-down">
+                                   <div className="flex flex-col items-center justify-center p-4 bg-white rounded border border-gray-200">
                                       <img src={generatedQrCode} alt="QR Code Pix" className="w-48 h-48" />
-                                      <p className="text-xs text-gray-500 mt-2">Escaneie para pagar</p>
                                    </div>
                                 )}
                              </div>
                           ) : (
                              <div className="text-sm text-gray-600 bg-white p-3 rounded border border-gray-200 space-y-1">
-                                <p><span className="font-semibold">Banco:</span> {bankDisplay}</p>
-                                <p><span className="font-semibold">Agência:</span> {agency}</p>
-                                <p><span className="font-semibold">Conta:</span> {accountDisplay}</p>
-                                <p><span className="font-semibold">Titular:</span> {holderName}</p>
-                                <p><span className="font-semibold">CPF/CNPJ:</span> {formatDocument(holderDoc)}</p>
+                                <p><span className="font-semibold">Banco:</span> {(method as any).bank_code} - {method.bank_name}</p>
+                                <p><span className="font-semibold">Agência:</span> {method.agency || method.raw_agency}</p>
+                                <p><span className="font-semibold">Conta:</span> {method.account_number || method.raw_account_number}-{(method as any).account_digit || method.raw_account_digit}</p>
+                                <p><span className="font-semibold">Titular:</span> {method.account_holder_name}</p>
                              </div>
                           )}
                        </div>
                     </div>
                   );
-               })
-            )}
+               })}
             <Button variant="outline" fullWidth onClick={() => setIsPaymentModalOpen(false)}>Fechar</Button>
          </div>
       </Modal>
