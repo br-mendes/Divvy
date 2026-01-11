@@ -27,57 +27,30 @@ const DashboardContent: React.FC = () => {
     try {
       if (!user) return;
       
-      // ESTRATÉGIA ROBUSTA: Buscar IDs separadamente para evitar erros de Join/RLS
-
-      // 1. Buscar IDs dos grupos onde sou criador
-      const { data: createdIdsData, error: createdError } = await supabase
+      // COM RLS ATIVO:
+      // Apenas solicitamos os divvies. O Supabase filtrará automaticamente
+      // retornando apenas aqueles que o usuário criou ou é membro.
+      const { data: divviesData, error: divviesError } = await supabase
         .from('divvies')
-        .select('id')
-        .eq('creator_id', user.id);
+        .select('*')
+        .order('created_at', { ascending: false });
 
-      if (createdError) {
-        console.error('Error fetching created:', createdError);
-        throw createdError;
-      }
-      const createdIds = (createdIdsData || []).map(d => d.id);
+      if (divviesError) throw divviesError;
 
-      // 2. Buscar IDs dos grupos onde sou membro
-      const { data: memberIdsData, error: memberError } = await supabase
-        .from('divvy_members')
-        .select('divvy_id')
-        .eq('user_id', user.id);
-
-      if (memberError) {
-        console.error('Error fetching memberships:', memberError);
-        throw memberError;
-      }
-      const memberIds = (memberIdsData || []).map(d => d.divvy_id);
-
-      // 3. Unificar IDs únicos
-      const allIds = Array.from(new Set([...createdIds, ...memberIds]));
-
-      if (allIds.length === 0) {
+      if (!divviesData || divviesData.length === 0) {
         setDivvies([]);
         setLoading(false);
         return;
       }
 
-      // 4. Buscar dados completos dos grupos baseados nos IDs
-      const { data: divviesData, error: divviesError } = await supabase
-        .from('divvies')
-        .select('*')
-        .in('id', allIds)
-        .order('created_at', { ascending: false });
-
-      if (divviesError) throw divviesError;
-
-      // 5. Buscar contagem de membros para esses grupos (separadamente)
+      // Buscar contagem de membros para os grupos retornados
+      const divvyIds = divviesData.map(d => d.id);
+      
       const { data: membersCountData, error: countError } = await supabase
         .from('divvy_members')
         .select('divvy_id')
-        .in('divvy_id', allIds);
+        .in('divvy_id', divvyIds);
 
-      // Agrega contagem localmente
       const counts: Record<string, number> = {};
       if (membersCountData && !countError) {
         membersCountData.forEach((row: any) => {
@@ -85,8 +58,7 @@ const DashboardContent: React.FC = () => {
         });
       }
 
-      // 6. Montar objeto final com contagem
-      const finalDivvies = (divviesData || []).map((d: any) => ({
+      const finalDivvies = divviesData.map((d: any) => ({
          ...d,
          member_count: counts[d.id] || 1
       }));
@@ -95,8 +67,10 @@ const DashboardContent: React.FC = () => {
 
     } catch (err: any) {
       console.error("Fetch Divvies Error:", err);
-      // Mostra o erro técnico no console e um amigável no toast
-      toast.error('Não foi possível sincronizar os grupos.');
+      // Ignora erro de cancelamento de fetch se ocorrer
+      if (err.code !== 'PGRST000') { 
+          toast.error('Não foi possível sincronizar os grupos.');
+      }
     } finally {
       setLoading(false);
     }
