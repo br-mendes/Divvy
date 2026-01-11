@@ -45,7 +45,7 @@ const DivvyCard: React.FC<DivvyCardProps> = ({ divvy, onRefresh }) => {
       )}
 
       <div className="flex gap-4 text-sm text-gray-500 mb-4 border-t border-gray-200 pt-4 mt-auto">
-        <span>👥 {divvy.members?.length || 1} membros</span>
+        <span>👥 {divvy.member_count || divvy.members?.length || 1} membros</span>
         <span>📅 {new Date(divvy.created_at).toLocaleDateString('pt-BR')}</span>
       </div>
 

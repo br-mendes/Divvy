@@ -26,14 +26,43 @@ const DashboardContent: React.FC = () => {
   async function fetchDivvies() {
     try {
       if (!user) return;
-      const { data: created } = await supabase.from('divvies').select('*').eq('creator_id', user.id);
-      const { data: memberData } = await supabase.from('divvy_members').select('divvies(*)').eq('user_id', user.id);
-      const shared = memberData?.map((d: any) => d.divvies).filter(Boolean) || [];
-      const combined = [...(created || []), ...shared];
+      
+      // Fetch Created Divvies with member count
+      const { data: createdData } = await supabase
+        .from('divvies')
+        .select('*, divvy_members(count)')
+        .eq('creator_id', user.id);
+
+      const created = (createdData || []).map((d: any) => ({
+         ...d,
+         member_count: d.divvy_members?.[0]?.count || 1
+      }));
+
+      // Fetch Shared Divvies (where user is a member) with member count
+      const { data: memberData } = await supabase
+        .from('divvy_members')
+        .select('divvies(*, divvy_members(count))')
+        .eq('user_id', user.id);
+      
+      const shared = (memberData || [])
+        .map((d: any) => {
+            if (!d.divvies) return null;
+            return {
+                ...d.divvies,
+                member_count: d.divvies.divvy_members?.[0]?.count || 1
+            };
+        })
+        .filter(Boolean);
+
+      const combined = [...created, ...shared];
+      
+      // Deduplicate by ID
       const unique = Array.from(new Map(combined.map(item => [item.id, item])).values())
         .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+        
       setDivvies(unique);
     } catch (err) {
+      console.error(err);
       toast.error('Erro ao carregar Divvies');
     } finally {
       setLoading(false);

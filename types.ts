@@ -1,5 +1,4 @@
 
-
 export interface User {
   id: string;
   email: string;
@@ -30,6 +29,7 @@ export interface Divvy {
   end_date?: string;
   is_archived: boolean;
   members?: DivvyMember[];
+  member_count?: number; // Added field for list display
 }
 
 export interface DivvyMember {
