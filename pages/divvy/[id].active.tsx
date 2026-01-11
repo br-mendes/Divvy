@@ -80,9 +80,6 @@ const DivvyDetailContent: React.FC = () => {
     try {
       setAccessDenied(false);
       
-      // SOLUÇÃO DEFINITIVA: Usar RPC Mestra
-      // Busca Grupo, Membros, Despesas e Divisões em UMA chamada segura.
-      // Isso evita qualquer problema de recursão de RLS.
       const { data, error } = await supabase.rpc('get_divvy_details_complete', {
          p_divvy_id: divvyId
       });
@@ -90,7 +87,6 @@ const DivvyDetailContent: React.FC = () => {
       if (error) throw error;
 
       if (!data) {
-         // A função retorna NULL se o acesso for negado
          setAccessDenied(true);
          setLoading(false);
          return;
@@ -107,6 +103,22 @@ const DivvyDetailContent: React.FC = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  /** Helper: Format Currency pt-BR */
+  const formatMoney = (val: number) => {
+    return new Intl.NumberFormat('pt-BR', {
+      style: 'currency',
+      currency: 'BRL',
+    }).format(val);
+  };
+
+  /** Helper: Format Date preventing Timezone Shift */
+  const formatDate = (dateString: string) => {
+    if (!dateString) return '';
+    // Pega apenas a parte da data YYYY-MM-DD e divide manualmente
+    const [year, month, day] = dateString.split('T')[0].split('-');
+    return `${day}/${month}/${year}`;
   };
 
   /** Helper: Get Member Name Display */
@@ -206,13 +218,12 @@ const DivvyDetailContent: React.FC = () => {
     setLoadingView(true);
     setViewingSplits([]);
     
-    // Local Splits lookup (faster since we already have allSplits)
+    // Local Splits lookup
     const splits = allSplits.filter(s => s.expense_id === exp.id);
     if (splits.length > 0) {
         setViewingSplits(splits);
         setLoadingView(false);
     } else {
-        // Fallback fetch only if needed
         try {
             const { data } = await supabase.from('expense_splits').select('*').eq('expense_id', exp.id);
             if (data) setViewingSplits(data);
@@ -253,13 +264,13 @@ const DivvyDetailContent: React.FC = () => {
     setAmount(String(exp.amount)); 
     setCategory(exp.category);
     setDesc(exp.description);
-    setDate(exp.date);
+    // Para edição, use o valor direto do banco (YYYY-MM-DD) para o input type="date"
+    // Isso evita problemas de fuso no formulário
+    setDate(String(exp.date).split('T')[0]); 
     setPayerId(exp.paid_by_user_id);
 
-    // Filter from local state first
     let splits = allSplits.filter(s => s.expense_id === exp.id);
     
-    // If not found, fetch
     if (splits.length === 0) {
         const { data } = await supabase.from('expense_splits').select('*').eq('expense_id', exp.id);
         if (data) splits = data;
@@ -317,7 +328,7 @@ const DivvyDetailContent: React.FC = () => {
           const selectedCount = Object.values(numericValues).filter(v => v === 1).length;
           if (selectedCount === 0) return { isValid: false, message: 'Selecione alguém' };
           const perPerson = totalAmount / selectedCount;
-          return { isValid: true, message: `R$ ${perPerson.toFixed(2)} / pessoa` };
+          return { isValid: true, message: `${formatMoney(perPerson)} / pessoa` };
       } 
       
       const currentSum = Object.values(numericValues).reduce((a, b) => a + b, 0);
@@ -325,7 +336,7 @@ const DivvyDetailContent: React.FC = () => {
           const diff = totalAmount - currentSum;
           const isValid = Math.abs(diff) < 0.05; 
           if (isValid) return { isValid: true, message: 'OK' };
-          return { isValid: false, message: diff > 0 ? `Faltam R$ ${Math.abs(diff).toFixed(2)}` : `Sobraram R$ ${Math.abs(diff).toFixed(2)}` };
+          return { isValid: false, message: diff > 0 ? `Faltam ${formatMoney(Math.abs(diff))}` : `Sobraram ${formatMoney(Math.abs(diff))}` };
       }
       if (splitMode === 'percentage') {
           const diff = 100 - currentSum;
@@ -540,12 +551,12 @@ const DivvyDetailContent: React.FC = () => {
                     <div>
                         <p className="font-medium text-gray-900">{exp.description || exp.category}</p>
                         <p className="text-sm text-gray-500">
-                            {new Date(exp.date).toLocaleDateString('pt-BR')} • Pago por <strong>{getMemberName(exp.paid_by_user_id, false)}</strong>
+                            {formatDate(exp.date)} • Pago por <strong>{getMemberName(exp.paid_by_user_id, false)}</strong>
                         </p>
                     </div>
                  </div>
                  <div className="flex items-center gap-4 w-full sm:w-auto justify-between sm:justify-end">
-                    <span className="font-bold text-gray-900">R$ {exp.amount.toFixed(2)}</span>
+                    <span className="font-bold text-gray-900">{formatMoney(exp.amount)}</span>
                  </div>
                </div>
             ))}
@@ -594,7 +605,7 @@ const DivvyDetailContent: React.FC = () => {
                                         </div>
                                     </div>
                                     <div className="flex items-center gap-3 pl-4 border-l border-gray-200">
-                                        <span className="font-bold text-lg text-brand-600">R$ {transfer.amount.toFixed(2)}</span>
+                                        <span className="font-bold text-lg text-brand-600">{formatMoney(transfer.amount)}</span>
                                         <button 
                                             onClick={() => handleOpenPaymentInfo(transfer.to)}
                                             className="p-2 text-gray-400 hover:text-brand-600 hover:bg-white rounded-full transition-colors"
@@ -625,7 +636,7 @@ const DivvyDetailContent: React.FC = () => {
                                         <div className="flex justify-between items-center text-sm">
                                             <span className="font-medium text-gray-700">{getMemberName(m.user_id)}</span>
                                             <span className={`font-bold ${isPositive ? 'text-green-600' : isNegative ? 'text-red-500' : 'text-gray-400'}`}>
-                                                {isZero ? 'Zerado' : (isPositive ? `+ R$ ${balance.toFixed(2)}` : `- R$ ${Math.abs(balance).toFixed(2)}`)}
+                                                {isZero ? 'Zerado' : (isPositive ? `+ ${formatMoney(balance)}` : `- ${formatMoney(Math.abs(balance))}`)}
                                             </span>
                                         </div>
                                         {/* Visual Bar */}
@@ -654,11 +665,11 @@ const DivvyDetailContent: React.FC = () => {
                                         </div>
                                         <div className="flex justify-between text-xs text-gray-600 mt-2">
                                             <span className="flex items-center gap-1"><TrendingUp size={12} className="text-green-500"/> Pagou:</span>
-                                            <span className="font-medium">R$ {paid.toFixed(2)}</span>
+                                            <span className="font-medium">{formatMoney(paid)}</span>
                                         </div>
                                         <div className="flex justify-between text-xs text-gray-600 mt-1">
                                             <span className="flex items-center gap-1"><TrendingDown size={12} className="text-red-500"/> Consumiu:</span>
-                                            <span className="font-medium">R$ {consumed.toFixed(2)}</span>
+                                            <span className="font-medium">{formatMoney(consumed)}</span>
                                         </div>
                                     </div>
                                 );
@@ -721,7 +732,7 @@ const DivvyDetailContent: React.FC = () => {
             <div className="flex items-center justify-between">
                <h3 className="text-lg font-bold text-gray-900">{viewingExpense.description || viewingExpense.category}</h3>
                <div className="text-right">
-                  <p className="text-2xl font-bold text-brand-600">R$ {viewingExpense.amount.toFixed(2)}</p>
+                  <p className="text-2xl font-bold text-brand-600">{formatMoney(viewingExpense.amount)}</p>
                   <p className="text-xs text-gray-500">Pago por {getMemberName(viewingExpense.paid_by_user_id)}</p>
                </div>
             </div>
@@ -736,7 +747,7 @@ const DivvyDetailContent: React.FC = () => {
                        return (
                          <div key={m.user_id} className="flex justify-between items-center text-sm">
                             <span className="text-gray-700">{getMemberName(m.user_id)}</span>
-                            <span className="font-medium text-gray-900">R$ {amountOwed.toFixed(2)}</span>
+                            <span className="font-medium text-gray-900">{formatMoney(amountOwed)}</span>
                          </div>
                        );
                     })}
@@ -797,6 +808,7 @@ const DivvyDetailContent: React.FC = () => {
               <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
                 {members.map(m => {
                   const isSelected = splitValues[m.user_id] === "1";
+                  const equalValue = totalAmount / Math.max(1, Object.values(splitValues).filter(v => v === "1").length);
                   return (
                     <div key={m.user_id} className="flex items-center justify-between p-2 rounded border border-gray-100 hover:bg-gray-50">
                       <div className="flex items-center gap-2 overflow-hidden">
@@ -807,7 +819,7 @@ const DivvyDetailContent: React.FC = () => {
                       </div>
                       <div className="flex items-center gap-2">
                         {splitMode === 'equal' ? (
-                           isSelected ? <span className="text-sm font-medium text-gray-900">R$ {((totalAmount / Math.max(1, Object.values(splitValues).filter(v => v === "1").length))).toFixed(2)}</span> : <span className="text-xs text-gray-400">-</span>
+                           isSelected ? <span className="text-sm font-medium text-gray-900">{formatMoney(equalValue)}</span> : <span className="text-xs text-gray-400">-</span>
                         ) : (
                            <input type="number" step={splitMode === 'amount' ? "0.01" : "1"} value={splitValues[m.user_id] || ''} onChange={(e) => handleSplitValueChange(m.user_id, e.target.value)} className="w-24 pl-2 py-1 text-right text-sm border rounded" placeholder="0" />
                         )}

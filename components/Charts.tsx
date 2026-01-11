@@ -17,6 +17,13 @@ const categoryTranslations: Record<string, string> = {
   other: 'Outros',
 };
 
+const formatMoney = (val: number) => {
+  return new Intl.NumberFormat('pt-BR', {
+    style: 'currency',
+    currency: 'BRL',
+  }).format(val);
+};
+
 export const ExpenseCharts: React.FC<ExpenseChartsProps> = ({ expenses }) => {
   const totalSpent = expenses.reduce((sum, exp) => sum + exp.amount, 0);
 
@@ -60,7 +67,7 @@ export const ExpenseCharts: React.FC<ExpenseChartsProps> = ({ expenses }) => {
             </Pie>
             <Tooltip 
               formatter={(value: number, name: string, props: any) => [
-                `R$ ${value.toFixed(2)} (${props.payload.percentage.toFixed(1)}%)`, 
+                `${formatMoney(value)} (${props.payload.percentage.toFixed(1)}%)`, 
                 name
               ]} 
               contentStyle={{ backgroundColor: '#fff', borderRadius: '8px', border: '1px solid #e5e7eb', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
@@ -72,7 +79,7 @@ export const ExpenseCharts: React.FC<ExpenseChartsProps> = ({ expenses }) => {
          <h3 className="text-lg font-semibold text-gray-900 mb-4">Resumo de Gastos</h3>
          <div className="bg-gray-50 rounded-lg p-4 mb-4 border border-gray-100">
             <p className="text-sm text-gray-500">Total Gasto</p>
-            <p className="text-3xl font-bold text-brand-600">R$ {totalSpent.toFixed(2)}</p>
+            <p className="text-3xl font-bold text-brand-600">{formatMoney(totalSpent)}</p>
          </div>
          <div className="space-y-3">
             {categoryData.map((item, idx) => (
@@ -82,7 +89,7 @@ export const ExpenseCharts: React.FC<ExpenseChartsProps> = ({ expenses }) => {
                        <span className="w-3 h-3 rounded-full" style={{ backgroundColor: COLORS[idx % COLORS.length] }}></span>
                        {item.name}
                     </span>
-                    <span className="font-bold text-gray-900">R$ {item.value.toFixed(2)}</span>
+                    <span className="font-bold text-gray-900">{formatMoney(item.value)}</span>
                  </div>
                  <div className="flex justify-between items-center text-xs text-gray-400 pl-5">
                     <div className="w-full bg-gray-100 rounded-full h-1.5 mr-3 max-w-[100px]">

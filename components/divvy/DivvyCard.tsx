@@ -24,6 +24,17 @@ const DivvyCard: React.FC<DivvyCardProps> = ({ divvy, onRefresh }) => {
     general: 'Geral',
   };
 
+  // Helper simples para formatar data (YYYY-MM-DD -> DD/MM/YYYY)
+  const formatDate = (dateStr: string) => {
+    if (!dateStr) return '';
+    try {
+        const [year, month, day] = dateStr.split('T')[0].split('-');
+        return `${day}/${month}/${year}`;
+    } catch {
+        return '';
+    }
+  };
+
   return (
     <div className="bg-white p-6 rounded-lg border border-gray-200 hover:shadow-lg transition flex flex-col h-full">
       <div className="flex justify-between items-start mb-2">
@@ -46,7 +57,8 @@ const DivvyCard: React.FC<DivvyCardProps> = ({ divvy, onRefresh }) => {
 
       <div className="flex gap-4 text-sm text-gray-500 mb-4 border-t border-gray-200 pt-4 mt-auto">
         <span>👥 {divvy.member_count || divvy.members?.length || 1} membros</span>
-        <span>📅 {new Date(divvy.created_at).toLocaleDateString('pt-BR')}</span>
+        {/* Usa a data de criação formatada manualmente para evitar divergências de fuso */}
+        <span>📅 {formatDate(divvy.created_at)}</span>
       </div>
 
       <Link href={`/divvy/${divvy.id}`} className="block w-full">
