@@ -12,7 +12,7 @@ import DivvyHeader from '../../components/divvy/DivvyHeader';
 import InviteModal from '../../components/invite/InviteModal';
 import LoadingSpinner from '../../components/ui/LoadingSpinner';
 import EmptyState from '../../components/ui/EmptyState';
-import { Plus, UserPlus, Receipt, PieChart, Users, Pencil, Trash2, CreditCard, Lock, Copy, QrCode, Check, ArrowRight, Wallet } from 'lucide-react';
+import { Plus, UserPlus, Receipt, PieChart, Users, Pencil, Trash2, CreditCard, Lock, Copy, QrCode, Check, ArrowRight, Wallet, TrendingUp, TrendingDown } from 'lucide-react';
 import { ProtectedRoute } from '../../components/ProtectedRoute';
 import toast from 'react-hot-toast';
 import QRCode from 'qrcode';
@@ -26,44 +26,44 @@ const DivvyDetailContent: React.FC = () => {
   
   const divvyId = typeof id === 'string' ? id : '';
   
-  // Data State
+  // --- Data State ---
   const [divvy, setDivvy] = useState<Divvy | null>(null);
   const [members, setMembers] = useState<DivvyMember[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [allSplits, setAllSplits] = useState<ExpenseSplit[]>([]);
   const [loading, setLoading] = useState(true);
   
-  // UI State
+  // --- UI State ---
   const [activeTab, setActiveTab] = useState<'expenses' | 'balances' | 'charts' | 'members'>('expenses');
   const [isExpenseModalOpen, setIsExpenseModalOpen] = useState(false);
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
   const [submitLoading, setSubmitLoading] = useState(false);
 
-  // View Expense State
+  // --- View Expense State ---
   const [isViewModalOpen, setIsViewModalOpen] = useState(false);
   const [viewingExpense, setViewingExpense] = useState<Expense | null>(null);
   const [viewingSplits, setViewingSplits] = useState<ExpenseSplit[]>([]);
   const [loadingView, setLoadingView] = useState(false);
 
-  // Payment View State
+  // --- Payment Info State ---
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
   const [viewingMemberName, setViewingMemberName] = useState('');
   const [memberPaymentMethods, setMemberPaymentMethods] = useState<PaymentMethod[]>([]);
   const [loadingPayments, setLoadingPayments] = useState(false);
   
-  // QR Code State
+  // --- QR Code State ---
   const [generatedQrCode, setGeneratedQrCode] = useState<string | null>(null);
   const [activeQrMethodId, setActiveQrMethodId] = useState<string | null>(null);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
 
-  // Expense Form State
+  // --- Expense Form State ---
   const [editingExpenseId, setEditingExpenseId] = useState<string | null>(null);
   const [amount, setAmount] = useState('');
   const [category, setCategory] = useState('food');
   const [desc, setDesc] = useState('');
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   
-  // Advanced Split Logic State
+  // --- Advanced Split Logic State ---
   const [payerId, setPayerId] = useState('');
   const [splitMode, setSplitMode] = useState<SplitMode>('equal');
   const [splitValues, setSplitValues] = useState<Record<string, string>>({});
@@ -76,26 +76,31 @@ const DivvyDetailContent: React.FC = () => {
 
   const fetchDivvyData = async () => {
     try {
-      // 1. Fetch Divvy Info
-      const { data: divvyData } = await supabase.from('divvies').select('*').eq('id', divvyId).single();
+      // 1. Fetch Divvy Details
+      const { data: divvyData, error: divvyError } = await supabase.from('divvies').select('*').eq('id', divvyId).single();
+      if (divvyError) throw divvyError;
       setDivvy(divvyData);
 
-      // 2. Fetch Members AND explicitly fetch their Profiles to guarantee names
-      const { data: memberData } = await supabase
+      // 2. Fetch Members
+      const { data: memberData, error: memberError } = await supabase
         .from('divvy_members')
         .select('*')
         .eq('divvy_id', divvyId);
         
+      if (memberError) throw memberError;
+
       if (memberData && memberData.length > 0) {
         const userIds = memberData.map(m => m.user_id);
         
-        // BUSCA EXPLÍCITA NA TABELA PROFILES
-        const { data: profilesData } = await supabase
+        // 3. FETCH PROFILES EXPLICITLY (Crucial for Names)
+        const { data: profilesData, error: profilesError } = await supabase
           .from('profiles')
           .select('*')
           .in('id', userIds);
 
-        // Merge manual para garantir consistência
+        if (profilesError) console.error("Error fetching profiles:", profilesError);
+
+        // Merge profiles into members
         const mergedMembers = memberData.map(member => {
             const profile = profilesData?.find(p => p.id === member.user_id);
             return {
@@ -108,7 +113,7 @@ const DivvyDetailContent: React.FC = () => {
         setMembers([]);
       }
 
-      // 3. Fetch Expenses
+      // 4. Fetch Expenses
       const { data: expenseData } = await supabase
         .from('expenses')
         .select('*')
@@ -117,7 +122,7 @@ const DivvyDetailContent: React.FC = () => {
       
       setExpenses(expenseData || []);
 
-      // 4. Fetch All Splits
+      // 5. Fetch All Splits for Balances
       if (expenseData && expenseData.length > 0) {
         const expenseIds = expenseData.map(e => e.id);
         const { data: splitsData } = await supabase
@@ -129,44 +134,46 @@ const DivvyDetailContent: React.FC = () => {
         setAllSplits([]);
       }
 
-    } catch (error) {
-      console.error(error);
-      toast.error("Erro ao carregar dados do grupo.");
+    } catch (error: any) {
+      console.error("Fetch Error:", error);
+      toast.error("Erro ao carregar dados: " + error.message);
     } finally {
       setLoading(false);
     }
   };
 
   /**
-   * CORE FUNCTION: Gets the best display name possible.
-   * Priority: Nickname > Full Name > Email Username
+   * Helper: Get Member Name Display
+   * Priority: Nickname -> Full Name -> Email Username
    */
   const getMemberName = (userId: string, includeYouSuffix = true) => {
     const member = members.find(m => m.user_id === userId);
-    if (!member) return 'Desconhecido';
+    if (!member) return 'Usuário Desconhecido';
     
     const isMe = userId === user?.id;
     const profile = member.profiles;
     let displayName = '';
 
-    // Lógica estrita solicitada: Apelido OU Nome Completo
-    if (profile?.nickname && profile.nickname.trim() !== '') {
+    if (profile?.nickname && profile.nickname.trim()) {
       displayName = profile.nickname;
-    } else if (profile?.full_name && profile.full_name.trim() !== '') {
+    } else if (profile?.full_name && profile.full_name.trim()) {
       displayName = profile.full_name;
     } else if (member.email) {
-      displayName = member.email.split('@')[0];
+      displayName = member.email.split('@')[0]; // Fallback to email username
     } else {
       displayName = 'Membro';
     }
     
+    // Capitalize first letter
+    displayName = displayName.charAt(0).toUpperCase() + displayName.slice(1);
+
     if (isMe && includeYouSuffix) {
         return `${displayName} (Você)`;
     }
     return displayName;
   };
 
-  // --- BALANCE CALCULATION LOGIC ---
+  // --- LOGIC: Balance Calculation ---
   const calculateBalances = useMemo(() => {
     const balances: Record<string, number> = {};
     const totalPaid: Record<string, number> = {};
@@ -178,6 +185,7 @@ const DivvyDetailContent: React.FC = () => {
         totalConsumed[m.user_id] = 0;
     });
 
+    // 1. Credit Payer
     expenses.forEach(exp => {
         const amount = exp.amount;
         if (totalPaid[exp.paid_by_user_id] !== undefined) {
@@ -186,6 +194,7 @@ const DivvyDetailContent: React.FC = () => {
         }
     });
 
+    // 2. Debit Consumers
     allSplits.forEach(split => {
         const amount = split.amount_owed;
         if (totalConsumed[split.participant_user_id] !== undefined) {
@@ -194,6 +203,7 @@ const DivvyDetailContent: React.FC = () => {
         }
     });
 
+    // 3. Minimize Debt Algo
     const debtors: { id: string, amount: number }[] = [];
     const creditors: { id: string, amount: number }[] = [];
 
@@ -226,25 +236,7 @@ const DivvyDetailContent: React.FC = () => {
     return { balances, totalPaid, totalConsumed, plan };
   }, [expenses, allSplits, members]);
 
-  const handleViewExpense = async (exp: Expense) => {
-    setViewingExpense(exp);
-    setIsViewModalOpen(true);
-    setLoadingView(true);
-    setViewingSplits([]);
-
-    try {
-      const { data } = await supabase
-        .from('expense_splits')
-        .select('*')
-        .eq('expense_id', exp.id);
-      
-      setViewingSplits(data || []);
-    } catch (err) {
-      console.error("Erro ao carregar divisão", err);
-    } finally {
-      setLoadingView(false);
-    }
-  };
+  // --- HANDLERS ---
 
   const handleOpenAddExpense = () => {
     if (!user) return;
@@ -259,10 +251,12 @@ const DivvyDetailContent: React.FC = () => {
     setDate(new Date().toISOString().split('T')[0]);
     setPayerId(user.id);
     
+    // Default split: Equal, all selected
     setSplitMode('equal');
     const initialSplits: Record<string, string> = {};
     members.forEach(m => initialSplits[m.user_id] = "1");
     setSplitValues(initialSplits);
+
     setIsExpenseModalOpen(true);
   };
 
@@ -277,6 +271,7 @@ const DivvyDetailContent: React.FC = () => {
     setDate(exp.date);
     setPayerId(exp.paid_by_user_id);
 
+    // Fetch existing splits to populate form
     const { data: splitsData } = await supabase
       .from('expense_splits')
       .select('*')
@@ -287,6 +282,7 @@ const DivvyDetailContent: React.FC = () => {
     if (splits && splits.length > 0) {
       const loadedSplits: Record<string, string> = {};
       const firstAmount = splits[0].amount_owed;
+      // Heuristic: if all splits roughly equal, assume equal mode
       const isRoughlyEqual = splits.every(s => Math.abs(s.amount_owed - firstAmount) < 0.05);
       
       if (isRoughlyEqual) {
@@ -308,6 +304,30 @@ const DivvyDetailContent: React.FC = () => {
     setIsExpenseModalOpen(true);
   };
 
+  const handleViewExpense = async (exp: Expense) => {
+    setViewingExpense(exp);
+    setIsViewModalOpen(true);
+    setLoadingView(true);
+    setViewingSplits([]);
+    
+    try {
+      const { data: splits } = await supabase
+        .from('expense_splits')
+        .select('*')
+        .eq('expense_id', exp.id);
+      
+      if (splits) {
+        setViewingSplits(splits);
+      }
+    } catch (error: any) {
+      console.error("Error fetching splits for view:", error);
+      toast.error("Erro ao carregar detalhes da divisão.");
+    } finally {
+      setLoadingView(false);
+    }
+  };
+
+  // --- Split Logic Handlers (Restored) ---
   const totalAmount = parseFloat(amount) || 0;
   
   const toggleMemberSelection = (userId: string) => {
@@ -333,23 +353,23 @@ const DivvyDetailContent: React.FC = () => {
 
       if (splitMode === 'equal') {
           const selectedCount = Object.values(numericValues).filter(v => v === 1).length;
-          if (selectedCount === 0) return { isValid: false, message: 'Selecione pelo menos uma pessoa' };
+          if (selectedCount === 0) return { isValid: false, message: 'Selecione alguém' };
           const perPerson = totalAmount / selectedCount;
-          return { isValid: true, message: `R$ ${perPerson.toFixed(2)} por pessoa` };
+          return { isValid: true, message: `R$ ${perPerson.toFixed(2)} / pessoa` };
       } 
       
       const currentSum = Object.values(numericValues).reduce((a, b) => a + b, 0);
       if (splitMode === 'amount') {
           const diff = totalAmount - currentSum;
           const isValid = Math.abs(diff) < 0.05; 
-          if (isValid) return { isValid: true, message: 'Total fechado corretamente' };
-          return { isValid: false, message: diff > 0 ? `Faltam R$ ${Math.abs(diff).toFixed(2)}` : `Passou R$ ${Math.abs(diff).toFixed(2)}` };
+          if (isValid) return { isValid: true, message: 'OK' };
+          return { isValid: false, message: diff > 0 ? `Faltam R$ ${Math.abs(diff).toFixed(2)}` : `Sobraram R$ ${Math.abs(diff).toFixed(2)}` };
       }
       if (splitMode === 'percentage') {
           const diff = 100 - currentSum;
           const isValid = Math.abs(diff) < 0.1;
           if (isValid) return { isValid: true, message: 'Total: 100%' };
-          return { isValid: false, message: diff > 0 ? `Faltam ${Math.abs(diff).toFixed(1)}%` : `Passou ${Math.abs(diff).toFixed(1)}%` };
+          return { isValid: false, message: diff > 0 ? `Faltam ${Math.abs(diff).toFixed(1)}%` : `Sobraram ${Math.abs(diff).toFixed(1)}%` };
       }
       return { isValid: false, message: '' };
   };
@@ -415,18 +435,18 @@ const DivvyDetailContent: React.FC = () => {
         }
       }
 
-      toast.success(editingExpenseId ? 'Despesa atualizada!' : 'Despesa adicionada!');
+      toast.success(editingExpenseId ? 'Despesa salva!' : 'Despesa criada!');
       setIsExpenseModalOpen(false);
       fetchDivvyData();
     } catch (error: any) {
-      toast.error('Erro ao salvar despesa: ' + error.message);
+      toast.error('Erro ao salvar: ' + error.message);
     } finally {
       setSubmitLoading(false);
     }
   };
 
   const handleDeleteExpense = async (expenseId: string) => {
-      if (!confirm('Excluir despesa?')) return;
+      if (!confirm('Excluir esta despesa permanentemente?')) return;
       await supabase.from('expenses').delete().eq('id', expenseId);
       setIsViewModalOpen(false);
       fetchDivvyData();
@@ -447,7 +467,7 @@ const DivvyDetailContent: React.FC = () => {
         const memberMethods = (data || []).filter((m: any) => m.member_id === memberId);
         setMemberPaymentMethods(memberMethods);
     } catch (error: any) {
-        toast.error("Erro ao carregar dados de pagamento.");
+        toast.error("Erro ao buscar dados de pagamento.");
     } finally {
         setLoadingPayments(false);
     }
@@ -457,8 +477,8 @@ const DivvyDetailContent: React.FC = () => {
     if (!text) return;
     navigator.clipboard.writeText(text);
     setCopiedKey(id);
-    toast.success("Chave copiada!");
-    setTimeout(() => setCopiedKey(null), 3000);
+    toast.success("Copiado!");
+    setTimeout(() => setCopiedKey(null), 2000);
   };
 
   const handleGenerateQR = async (text: string, methodId: string) => {
@@ -472,13 +492,7 @@ const DivvyDetailContent: React.FC = () => {
     }
   };
 
-  const accountTypeMap: Record<string, string> = {
-      checking: 'Conta Corrente',
-      savings: 'Conta Poupança',
-      salary: 'Conta Salário',
-      payment: 'Conta de Pagamento'
-  };
-
+  // --- RENDER ---
   if (loading) return <div className="flex justify-center p-12"><LoadingSpinner /></div>;
   if (!divvy) return <div className="text-center p-12">Divvy não encontrado</div>;
 
@@ -490,12 +504,13 @@ const DivvyDetailContent: React.FC = () => {
         <div className="bg-gray-100 border border-gray-300 text-gray-700 p-4 rounded-lg flex items-center gap-3">
           <Lock size={20} />
           <div>
-            <p className="font-bold">Este grupo está arquivado.</p>
-            <p className="text-sm">Somente leitura.</p>
+            <p className="font-bold">Grupo Arquivado</p>
+            <p className="text-sm">Você pode visualizar, mas não pode editar.</p>
           </div>
         </div>
       )}
 
+      {/* Action Buttons */}
       <div className="flex justify-end gap-3 px-1">
         <Button variant="outline" onClick={() => setIsInviteModalOpen(true)}>
           <UserPlus size={18} className="mr-2" />
@@ -507,32 +522,38 @@ const DivvyDetailContent: React.FC = () => {
         </Button>
       </div>
 
+      {/* Tabs */}
       <div className="border-b border-gray-200">
         <nav className="-mb-px flex space-x-8 overflow-x-auto">
-          {['expenses', 'balances', 'charts', 'members'].map((tab) => (
+          {[
+            { id: 'expenses', label: 'Despesas', icon: Receipt },
+            { id: 'balances', label: 'Gastos', icon: Wallet },
+            { id: 'charts', label: 'Análise', icon: PieChart },
+            { id: 'members', label: `Membros (${members.length})`, icon: Users },
+          ].map((tab) => (
              <button
-                key={tab}
-                onClick={() => setActiveTab(tab as any)}
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id as any)}
                 className={`pb-4 px-1 border-b-2 font-medium text-sm flex items-center gap-2 whitespace-nowrap ${
-                  activeTab === tab ? 'border-brand-500 text-brand-600' : 'border-transparent text-gray-500 hover:text-gray-700'
+                  activeTab === tab.id ? 'border-brand-500 text-brand-600' : 'border-transparent text-gray-500 hover:text-gray-700'
                 }`}
               >
-                {tab === 'expenses' && <><Receipt size={16} /> Despesas</>}
-                {tab === 'balances' && <><Wallet size={16} /> Gastos</>}
-                {tab === 'charts' && <><PieChart size={16} /> Análise</>}
-                {tab === 'members' && <><Users size={16} /> Membros ({members.length})</>}
+                <tab.icon size={16} /> {tab.label}
               </button>
           ))}
         </nav>
       </div>
 
+      {/* --- CONTENT AREA --- */}
       <div className="min-h-[400px]">
+        
+        {/* TAB 1: EXPENSES */}
         {activeTab === 'expenses' && (
           <div className="space-y-4">
             {expenses.length === 0 ? <EmptyState /> : expenses.map((exp) => (
                <div 
                  key={exp.id} 
-                 onClick={() => handleViewExpense(exp)}
+                 onClick={() => { handleViewExpense(exp); }}
                  className="bg-white p-4 rounded-lg shadow-sm border border-gray-100 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 cursor-pointer hover:bg-gray-50 transition-colors group"
                >
                  <div className="flex items-center gap-4 flex-1">
@@ -542,7 +563,7 @@ const DivvyDetailContent: React.FC = () => {
                     <div>
                         <p className="font-medium text-gray-900">{exp.description || exp.category}</p>
                         <p className="text-sm text-gray-500">
-                            {new Date(exp.date).toLocaleDateString('pt-BR')} • {getMemberName(exp.paid_by_user_id)}
+                            {new Date(exp.date).toLocaleDateString('pt-BR')} • Pago por <strong>{getMemberName(exp.paid_by_user_id, false)}</strong>
                         </p>
                     </div>
                  </div>
@@ -554,34 +575,53 @@ const DivvyDetailContent: React.FC = () => {
           </div>
         )}
 
-        {/* BALANCES */}
+        {/* TAB 2: BALANCES (GASTOS) - REDESIGNED */}
         {activeTab === 'balances' && (
             <div className="space-y-8 animate-fade-in-down">
+                {/* Section 1: Debt Settlement Plan (Who owes Whom) */}
                 <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
                     <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
                         <ArrowRight size={20} className="text-brand-600" />
-                        Como quitar as dívidas
+                        Plano de Pagamentos
                     </h3>
                     
                     {calculateBalances.plan.length === 0 ? (
-                        <div className="flex flex-col items-center justify-center py-8 text-center bg-gray-50 rounded-lg">
+                        <div className="flex flex-col items-center justify-center py-8 text-center bg-gray-50 rounded-lg border border-dashed border-gray-200">
                             <Check size={48} className="text-green-500 mb-3" />
                             <p className="text-gray-900 font-medium">Tudo quitado!</p>
+                            <p className="text-sm text-gray-500">Ninguém deve nada para ninguém.</p>
                         </div>
                     ) : (
                         <div className="space-y-3">
                             {calculateBalances.plan.map((transfer, idx) => (
-                                <div key={idx} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg border border-gray-100">
+                                <div key={idx} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg border border-gray-100 hover:border-brand-200 transition-colors">
                                     <div className="flex flex-col sm:flex-row sm:items-center gap-2">
-                                        <span className="font-medium text-gray-900">{getMemberName(transfer.from)}</span>
-                                        <span className="text-gray-400 text-xs px-2">deve pagar</span>
-                                        <span className="font-medium text-gray-900">{getMemberName(transfer.to)}</span>
+                                        <div className="flex items-center gap-2">
+                                            <div className="w-8 h-8 rounded-full bg-red-100 flex items-center justify-center text-red-600 text-xs font-bold">
+                                                {getMemberName(transfer.from, false).charAt(0)}
+                                            </div>
+                                            <span className="font-medium text-gray-900">{getMemberName(transfer.from, false)}</span>
+                                        </div>
+                                        
+                                        <div className="hidden sm:flex flex-col items-center px-4">
+                                            <span className="text-xs text-gray-400">paga para</span>
+                                            <ArrowRight size={14} className="text-gray-400" />
+                                        </div>
+                                        <div className="sm:hidden text-xs text-gray-400 pl-10">paga para</div>
+
+                                        <div className="flex items-center gap-2">
+                                            <div className="w-8 h-8 rounded-full bg-green-100 flex items-center justify-center text-green-600 text-xs font-bold">
+                                                {getMemberName(transfer.to, false).charAt(0)}
+                                            </div>
+                                            <span className="font-medium text-gray-900">{getMemberName(transfer.to, false)}</span>
+                                        </div>
                                     </div>
-                                    <div className="flex items-center gap-3">
+                                    <div className="flex items-center gap-3 pl-4 border-l border-gray-200">
                                         <span className="font-bold text-lg text-brand-600">R$ {transfer.amount.toFixed(2)}</span>
                                         <button 
                                             onClick={() => handleOpenPaymentInfo(transfer.to)}
                                             className="p-2 text-gray-400 hover:text-brand-600 hover:bg-white rounded-full transition-colors"
+                                            title="Ver dados bancários"
                                         >
                                             <CreditCard size={18} />
                                         </button>
@@ -592,42 +632,79 @@ const DivvyDetailContent: React.FC = () => {
                     )}
                 </div>
 
-                <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
-                    <h3 className="text-lg font-bold text-gray-900 mb-4">Resumo de Saldos</h3>
-                    <div className="space-y-4">
-                        {members.map(m => {
-                            const balance = calculateBalances.balances[m.user_id] || 0;
-                            const isPositive = balance > 0;
-                            const isZero = Math.abs(balance) < 0.01;
-                            return (
-                                <div key={m.user_id} className="flex items-center justify-between border-b border-gray-50 pb-2 last:border-0 last:pb-0">
-                                    <div className="flex items-center gap-3">
-                                        <div className={`w-2 h-2 rounded-full ${isZero ? 'bg-gray-300' : isPositive ? 'bg-green-500' : 'bg-red-500'}`}></div>
-                                        <span className="text-gray-700">{getMemberName(m.user_id)}</span>
+                {/* Section 2: Visual Net Balance */}
+                <div className="grid md:grid-cols-2 gap-6">
+                    <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
+                        <h3 className="text-lg font-bold text-gray-900 mb-4">Balanço Geral</h3>
+                        <div className="space-y-4">
+                            {members.map(m => {
+                                const balance = calculateBalances.balances[m.user_id] || 0;
+                                const isPositive = balance > 0.01;
+                                const isNegative = balance < -0.01;
+                                const isZero = !isPositive && !isNegative;
+
+                                return (
+                                    <div key={m.user_id} className="flex flex-col gap-1">
+                                        <div className="flex justify-between items-center text-sm">
+                                            <span className="font-medium text-gray-700">{getMemberName(m.user_id)}</span>
+                                            <span className={`font-bold ${isPositive ? 'text-green-600' : isNegative ? 'text-red-500' : 'text-gray-400'}`}>
+                                                {isZero ? 'Zerado' : (isPositive ? `+ R$ ${balance.toFixed(2)}` : `- R$ ${Math.abs(balance).toFixed(2)}`)}
+                                            </span>
+                                        </div>
+                                        {/* Visual Bar */}
+                                        <div className="w-full bg-gray-100 h-2 rounded-full overflow-hidden flex">
+                                            {isPositive && <div className="h-full bg-green-500" style={{ width: '100%' }}></div>}
+                                            {isNegative && <div className="h-full bg-red-500" style={{ width: '100%' }}></div>}
+                                            {isZero && <div className="h-full bg-gray-300 w-full"></div>}
+                                        </div>
                                     </div>
-                                    <div className={`font-medium ${isZero ? 'text-gray-400' : isPositive ? 'text-green-600' : 'text-red-500'}`}>
-                                        {isZero ? 'Zerado' : (isPositive ? `recebe R$ ${balance.toFixed(2)}` : `deve R$ ${Math.abs(balance).toFixed(2)}`)}
+                                );
+                            })}
+                        </div>
+                    </div>
+
+                    <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
+                        <h3 className="text-lg font-bold text-gray-900 mb-4">Detalhes de Consumo</h3>
+                        <div className="space-y-4 max-h-[300px] overflow-y-auto pr-2">
+                            {members.map(m => {
+                                const paid = calculateBalances.totalPaid[m.user_id] || 0;
+                                const consumed = calculateBalances.totalConsumed[m.user_id] || 0;
+                                
+                                return (
+                                    <div key={m.user_id} className="p-3 bg-gray-50 rounded-lg border border-gray-100">
+                                        <div className="flex justify-between items-center mb-1">
+                                            <span className="font-bold text-gray-900">{getMemberName(m.user_id, false)}</span>
+                                        </div>
+                                        <div className="flex justify-between text-xs text-gray-600 mt-2">
+                                            <span className="flex items-center gap-1"><TrendingUp size={12} className="text-green-500"/> Pagou:</span>
+                                            <span className="font-medium">R$ {paid.toFixed(2)}</span>
+                                        </div>
+                                        <div className="flex justify-between text-xs text-gray-600 mt-1">
+                                            <span className="flex items-center gap-1"><TrendingDown size={12} className="text-red-500"/> Consumiu:</span>
+                                            <span className="font-medium">R$ {consumed.toFixed(2)}</span>
+                                        </div>
                                     </div>
-                                </div>
-                            );
-                        })}
+                                );
+                            })}
+                        </div>
                     </div>
                 </div>
             </div>
         )}
 
+        {/* TAB 3: CHARTS */}
         {activeTab === 'charts' && (
           <div className="bg-white p-6 rounded-xl border border-gray-100">
              <ExpenseCharts expenses={expenses} />
           </div>
         )}
 
+        {/* TAB 4: MEMBERS */}
         {activeTab === 'members' && (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {members.map(member => {
               const avatar = member.profiles?.avatar_url;
-              const name = getMemberName(member.user_id, false); // No "Você" suffix here
-              // LÓGICA DE CARGOS CORRIGIDA
+              const name = getMemberName(member.user_id, false); 
               const roleLabel = divvy.creator_id === member.user_id ? "Criador e Membro" : "Membro";
               
               return (
@@ -658,7 +735,9 @@ const DivvyDetailContent: React.FC = () => {
         )}
       </div>
 
-      {/* MODALS */}
+      {/* --- MODALS --- */}
+      
+      {/* View Expense Detail Modal */}
       <Modal isOpen={isViewModalOpen} onClose={() => setIsViewModalOpen(false)} title="Detalhes da Despesa">
         {viewingExpense && (
           <div className="space-y-6">
@@ -700,6 +779,7 @@ const DivvyDetailContent: React.FC = () => {
         )}
       </Modal>
 
+      {/* Add/Edit Expense Modal */}
       <Modal isOpen={isExpenseModalOpen} onClose={() => setIsExpenseModalOpen(false)} title={editingExpenseId ? "Editar Despesa" : "Nova Despesa"}>
          <form onSubmit={handleSaveExpense} className="space-y-5">
            <div className="space-y-3">
@@ -768,24 +848,18 @@ const DivvyDetailContent: React.FC = () => {
          </form>
       </Modal>
 
+      {/* Payment Info Modal */}
       <Modal isOpen={isPaymentModalOpen} onClose={() => setIsPaymentModalOpen(false)} title={`Pagamento para ${viewingMemberName}`}>
          <div className="space-y-4">
             {loadingPayments ? <LoadingSpinner /> : memberPaymentMethods.length === 0 ? <p className="text-gray-500 text-center py-4">Nenhum método de pagamento disponível.</p> : memberPaymentMethods.map(method => {
                   const isPix = method.method_type === 'pix' || method.type === 'pix' || !!method.pix_key;
                   const pixKey = method.raw_pix_key || method.pix_key || method.pix_key_masked;
                   
-                  let headerTitle = 'Conta Bancária';
-                  if (isPix) headerTitle = 'Pix';
-                  else {
-                     const accType = (method as any).account_type || 'checking';
-                     headerTitle = accountTypeMap[accType] || 'Conta Bancária';
-                  }
-
                   return (
                     <div key={method.id} className="border border-gray-200 rounded-lg p-4 bg-gray-50">
                        <div className="flex items-center gap-3 mb-2">
                           <span className="text-2xl">{isPix ? '💠' : '🏦'}</span>
-                          <h4 className="font-bold text-gray-900">{headerTitle}</h4>
+                          <h4 className="font-bold text-gray-900">{isPix ? 'Pix' : 'Conta Bancária'}</h4>
                        </div>
                        
                        <div className="space-y-3 mt-3">
@@ -808,8 +882,7 @@ const DivvyDetailContent: React.FC = () => {
                              <div className="text-sm text-gray-600 bg-white p-3 rounded border border-gray-200 space-y-1">
                                 <p><span className="font-semibold">Banco:</span> {(method as any).bank_code} - {method.bank_name}</p>
                                 <p><span className="font-semibold">Agência:</span> {method.agency || method.raw_agency}</p>
-                                <p><span className="font-semibold">Conta:</span> {method.account_number || method.raw_account_number}-{(method as any).account_digit || method.raw_account_digit}</p>
-                                <p><span className="font-semibold">Titular:</span> {method.account_holder_name}</p>
+                                <p><span className="font-semibold">Conta:</span> {method.account_number || method.raw_account_number}</p>
                              </div>
                           )}
                        </div>
