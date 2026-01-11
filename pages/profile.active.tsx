@@ -10,6 +10,22 @@ import { User, CreditCard, Plus, Trash2, Star, Pencil, X, Camera, Loader2, Copy,
 import { PaymentMethod, Bank } from '../types';
 import { POPULAR_BANKS } from '../lib/constants';
 
+// Mapeamento para exibição amigável
+const pixTypeMap: Record<string, string> = {
+  cpf: 'CPF',
+  cnpj: 'CNPJ',
+  email: 'E-mail',
+  phone: 'Telefone',
+  random: 'Aleatória'
+};
+
+const accountTypeMap: Record<string, string> = {
+  checking: 'Corrente',
+  savings: 'Poupança',
+  salary: 'Salário',
+  payment: 'Pagamento'
+};
+
 function ProfileContent() {
   const { user } = useAuth();
   
@@ -330,21 +346,18 @@ function ProfileContent() {
     e.stopPropagation();
     if (!user) return;
     
-    // Toggle Logic: Se for true, vira false. Se for false, vira true (e desliga os outros).
+    // Toggle Logic
     const newStatus = !currentStatus;
     const loadingToast = toast.loading(newStatus ? 'Definindo como principal...' : 'Removendo principal...');
 
     try {
         if (newStatus) {
-            // Se estou ativando este, preciso desativar todos os outros primeiro
             await supabase
                 .from('user_payment_methods')
                 .update({ is_primary: false, is_visible_in_groups: false })
                 .eq('user_id', user.id);
         }
 
-        // Atualiza o alvo (seja para ligar ou desligar)
-        // Regra de negócio: Principal = Visível
         const { error } = await supabase
             .from('user_payment_methods')
             .update({ is_primary: newStatus, is_visible_in_groups: newStatus })
@@ -628,6 +641,16 @@ function ProfileContent() {
               const isPix = method.type === 'pix' || method.method_type === 'pix' || !!method.pix_key;
               const isPrimary = method.is_primary;
 
+              // Logic for Dynamic Titles
+              let title = '';
+              if (isPix) {
+                const typeLabel = pixTypeMap[method.pix_key_type as string] || 'Chave';
+                title = `Pix: ${typeLabel}`;
+              } else {
+                const typeLabel = accountTypeMap[method.account_type as string] || '';
+                title = `Conta ${typeLabel}`;
+              }
+
               return (
               <div 
                 key={method.id} 
@@ -655,20 +678,20 @@ function ProfileContent() {
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
-                      <h3 className="font-bold text-gray-900 truncate" title={method.display_text}>
-                          {method.display_text}
+                      <h3 className="font-bold text-gray-900 truncate" title={title}>
+                          {title}
                       </h3>
                     </div>
                     
                     {!isPix && (
-                        <p className="text-sm text-gray-500 mt-1">
-                           {method.bank_name || method.banks?.name}
+                        <p className="text-sm text-gray-600 mt-1">
+                           <span className="font-semibold text-gray-800">{method.bank_name || method.banks?.name}</span>
                            <br />
-                           Ag: {method.agency}
+                           Ag {method.agency} • CC {method.account_number}
                         </p>
                     )}
                     {isPix && (
-                        <p className="text-sm text-gray-500 font-mono mt-1 break-all">
+                        <p className="text-sm text-gray-600 font-mono mt-1 break-all bg-gray-50 px-2 py-1 rounded inline-block">
                            {method.pix_key || method.pix_key_masked}
                         </p>
                     )}
