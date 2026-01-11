@@ -365,6 +365,14 @@ const DivvyDetailContent: React.FC = () => {
     }
   };
 
+  const formatExpenseDate = (dateStr: string) => {
+    if (!dateStr) return '';
+    // Handle potential ISO strings just in case, though usually YYYY-MM-DD
+    const cleanDate = dateStr.split('T')[0];
+    const [year, month, day] = cleanDate.split('-');
+    return `${day}/${month}/${year}`;
+  };
+
   if (loading) return <div className="flex justify-center p-12"><LoadingSpinner /></div>;
   if (!divvy) return <div className="text-center p-12">Divvy não encontrado</div>;
 
@@ -442,7 +450,7 @@ const DivvyDetailContent: React.FC = () => {
                     </div>
                     <div>
                         <p className="font-medium text-gray-900">{exp.description || exp.category}</p>
-                        <p className="text-sm text-gray-500">{new Date(exp.date).toLocaleDateString()} • {getMemberName(exp.paid_by_user_id)}</p>
+                        <p className="text-sm text-gray-500">{formatExpenseDate(exp.date)} • {getMemberName(exp.paid_by_user_id)}</p>
                     </div>
                  </div>
                  <div className="flex items-center gap-4">
