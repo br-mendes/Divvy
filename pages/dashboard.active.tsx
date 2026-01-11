@@ -27,56 +27,62 @@ const DashboardContent: React.FC = () => {
     try {
       if (!user) return;
       
-      // 1. Fetch Created Divvies
-      // We fetch divvy_members(id) to count the length in JS, which is safer than 'count' in some RLS scenarios
+      // 1. Fetch Created Divvies (Basic Fetch)
       const { data: createdData, error: createdError } = await supabase
         .from('divvies')
-        .select('*, divvy_members(id)')
+        .select('*')
         .eq('creator_id', user.id);
 
       if (createdError) throw createdError;
 
-      const created = (createdData || []).map((d: any) => ({
-         ...d,
-         member_count: d.divvy_members?.length || 1
-      }));
-
-      // 2. Fetch Shared Divvies (where user is a member)
-      // Note: This often returns duplicates of 'Created' if the creator is also a member (which is standard)
+      // 2. Fetch Shared Divvies (Basic Fetch)
       const { data: memberData, error: memberError } = await supabase
         .from('divvy_members')
-        .select('divvies(*, divvy_members(id))')
+        .select('divvies(*)')
         .eq('user_id', user.id);
 
       if (memberError) throw memberError;
       
-      const shared = (memberData || [])
-        .map((d: any) => {
-            // divvies is a single object here due to Many-to-One from divvy_members -> divvies
-            const divvy = d.divvies; 
-            if (!divvy) return null;
-            
-            return {
-                ...divvy,
-                member_count: divvy.divvy_members?.length || 1
-            };
-        })
-        .filter(Boolean);
+      // Extract Divvies from memberData
+      const sharedDivvies = (memberData || [])
+        .map((d: any) => d.divvies)
+        .filter((d: any) => d !== null);
 
-      // 3. Combine and Deduplicate
-      const combined = [...created, ...shared];
+      // Combine and unique
+      const allDivvies = [...(createdData || []), ...sharedDivvies];
+      const uniqueDivviesMap = new Map();
+      allDivvies.forEach(d => uniqueDivviesMap.set(d.id, d));
+      const uniqueDivvies = Array.from(uniqueDivviesMap.values());
+
+      if (uniqueDivvies.length === 0) {
+        setDivvies([]);
+        setLoading(false);
+        return;
+      }
+
+      // 3. Fetch Member Counts in a separate query to avoid deep nesting issues
+      const divvyIds = uniqueDivvies.map((d: any) => d.id);
       
-      const uniqueMap = new Map();
-      combined.forEach(item => {
-        if (!uniqueMap.has(item.id)) {
-          uniqueMap.set(item.id, item);
-        }
-      });
-      
-      const unique = Array.from(uniqueMap.values())
-        .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+      const { data: membersCountData, error: countError } = await supabase
+        .from('divvy_members')
+        .select('divvy_id')
+        .in('divvy_id', divvyIds);
+
+      // Aggregate counts locally
+      const counts: Record<string, number> = {};
+      if (membersCountData && !countError) {
+        membersCountData.forEach((row: any) => {
+           counts[row.divvy_id] = (counts[row.divvy_id] || 0) + 1;
+        });
+      }
+
+      // Merge counts
+      const finalDivvies = uniqueDivvies.map((d: any) => ({
+         ...d,
+         member_count: counts[d.id] || 1
+      })).sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
         
-      setDivvies(unique);
+      setDivvies(finalDivvies);
     } catch (err: any) {
       console.error("Fetch Divvies Error:", err);
       toast.error('Erro ao carregar seus grupos.');
