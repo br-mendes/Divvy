@@ -12,7 +12,7 @@ import DivvyHeader from '../../components/divvy/DivvyHeader';
 import InviteModal from '../../components/invite/InviteModal';
 import LoadingSpinner from '../../components/ui/LoadingSpinner';
 import EmptyState from '../../components/ui/EmptyState';
-import { Plus, UserPlus, Receipt, PieChart, Users, Pencil, Trash2, CreditCard, Lock, Copy, QrCode, Check } from 'lucide-react';
+import { Plus, UserPlus, Receipt, PieChart, Users, Pencil, Trash2, CreditCard, Lock, Copy, QrCode, Check, Eye } from 'lucide-react';
 import { ProtectedRoute } from '../../components/ProtectedRoute';
 import toast from 'react-hot-toast';
 import QRCode from 'qrcode';
@@ -38,6 +38,12 @@ const DivvyDetailContent: React.FC = () => {
   const [isExpenseModalOpen, setIsExpenseModalOpen] = useState(false);
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
   const [submitLoading, setSubmitLoading] = useState(false);
+
+  // View Expense State (Read Only)
+  const [isViewModalOpen, setIsViewModalOpen] = useState(false);
+  const [viewingExpense, setViewingExpense] = useState<Expense | null>(null);
+  const [viewingSplits, setViewingSplits] = useState<ExpenseSplit[]>([]);
+  const [loadingView, setLoadingView] = useState(false);
 
   // Payment View State
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
@@ -129,6 +135,26 @@ const DivvyDetailContent: React.FC = () => {
     return isMe ? `${displayName} (Você)` : displayName;
   };
 
+  const handleViewExpense = async (exp: Expense) => {
+    setViewingExpense(exp);
+    setIsViewModalOpen(true);
+    setLoadingView(true);
+    setViewingSplits([]);
+
+    try {
+      const { data } = await supabase
+        .from('expense_splits')
+        .select('*')
+        .eq('expense_id', exp.id);
+      
+      setViewingSplits(data || []);
+    } catch (err) {
+      console.error("Erro ao carregar divisão", err);
+    } finally {
+      setLoadingView(false);
+    }
+  };
+
   const handleOpenAddExpense = () => {
     if (!user) return;
     if (divvy?.is_archived) {
@@ -153,6 +179,9 @@ const DivvyDetailContent: React.FC = () => {
 
   const handleOpenEditExpense = async (exp: Expense) => {
     if (divvy?.is_archived) return;
+
+    // Se estiver vindo do modal de visualização
+    setIsViewModalOpen(false);
 
     setEditingExpenseId(exp.id);
     setAmount(String(exp.amount)); 
@@ -317,6 +346,7 @@ const DivvyDetailContent: React.FC = () => {
   const handleDeleteExpense = async (expenseId: string) => {
       if (!confirm('Excluir despesa?')) return;
       await supabase.from('expenses').delete().eq('id', expenseId);
+      setIsViewModalOpen(false); // Fecha modal de visualização se estiver aberto
       fetchDivvyData();
   };
 
@@ -367,7 +397,6 @@ const DivvyDetailContent: React.FC = () => {
 
   const formatExpenseDate = (dateStr: string) => {
     if (!dateStr) return '';
-    // Handle potential ISO strings just in case, though usually YYYY-MM-DD
     const cleanDate = dateStr.split('T')[0];
     const [year, month, day] = cleanDate.split('-');
     return `${day}/${month}/${year}`;
@@ -438,9 +467,13 @@ const DivvyDetailContent: React.FC = () => {
         {activeTab === 'expenses' && (
           <div className="space-y-4">
             {expenses.length === 0 ? <EmptyState /> : expenses.map((exp) => (
-               <div key={exp.id} className="bg-white p-4 rounded-lg shadow-sm border border-gray-100 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+               <div 
+                 key={exp.id} 
+                 onClick={() => handleViewExpense(exp)}
+                 className="bg-white p-4 rounded-lg shadow-sm border border-gray-100 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 cursor-pointer hover:bg-gray-50 transition-colors group"
+               >
                  <div className="flex items-center gap-4 flex-1">
-                    <div className="h-10 w-10 rounded-full bg-brand-50 flex items-center justify-center text-xl">
+                    <div className="h-10 w-10 rounded-full bg-brand-50 flex items-center justify-center text-xl group-hover:scale-110 transition-transform">
                       {exp.category === 'food' ? '🍽️' : 
                        exp.category === 'transport' ? '🚗' : 
                        exp.category === 'accommodation' ? '🏨' : 
@@ -453,12 +486,24 @@ const DivvyDetailContent: React.FC = () => {
                         <p className="text-sm text-gray-500">{formatExpenseDate(exp.date)} • {getMemberName(exp.paid_by_user_id)}</p>
                     </div>
                  </div>
-                 <div className="flex items-center gap-4">
-                    <span className="font-bold">R$ {exp.amount.toFixed(2)}</span>
+                 <div className="flex items-center gap-4 w-full sm:w-auto justify-between sm:justify-end">
+                    <span className="font-bold text-gray-900">R$ {exp.amount.toFixed(2)}</span>
                     {!divvy.is_archived && (
                         <div className="flex gap-1">
-                           <button onClick={() => handleOpenEditExpense(exp)} className="p-2 hover:bg-gray-100 rounded-full"><Pencil size={16} /></button>
-                           <button onClick={() => handleDeleteExpense(exp.id)} className="p-2 hover:bg-red-50 text-red-500 rounded-full"><Trash2 size={16} /></button>
+                           <button 
+                             onClick={(e) => { e.stopPropagation(); handleOpenEditExpense(exp); }} 
+                             className="p-2 hover:bg-gray-200 text-gray-400 hover:text-brand-600 rounded-full transition-colors"
+                             title="Editar Rápido"
+                           >
+                              <Pencil size={16} />
+                           </button>
+                           <button 
+                             onClick={(e) => { e.stopPropagation(); handleDeleteExpense(exp.id); }} 
+                             className="p-2 hover:bg-red-50 text-gray-400 hover:text-red-500 rounded-full transition-colors"
+                             title="Excluir Rápido"
+                           >
+                              <Trash2 size={16} />
+                           </button>
                         </div>
                     )}
                  </div>
@@ -508,6 +553,91 @@ const DivvyDetailContent: React.FC = () => {
           </div>
         )}
       </div>
+
+      {/* VIEW EXPENSE MODAL (READ ONLY) */}
+      <Modal 
+        isOpen={isViewModalOpen} 
+        onClose={() => setIsViewModalOpen(false)} 
+        title="Detalhes da Despesa"
+      >
+        {viewingExpense && (
+          <div className="space-y-6">
+            <div className="flex items-center justify-between">
+               <div className="flex items-center gap-3">
+                  <div className="h-12 w-12 rounded-full bg-brand-100 flex items-center justify-center text-2xl">
+                    {viewingExpense.category === 'food' ? '🍽️' : 
+                     viewingExpense.category === 'transport' ? '🚗' : 
+                     viewingExpense.category === 'accommodation' ? '🏨' : 
+                     viewingExpense.category === 'activity' ? '🎬' : '💰'}
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-bold text-gray-900">{viewingExpense.description || viewingExpense.category}</h3>
+                    <p className="text-sm text-gray-500">{formatExpenseDate(viewingExpense.date)}</p>
+                  </div>
+               </div>
+               <div className="text-right">
+                  <p className="text-2xl font-bold text-brand-600">R$ {viewingExpense.amount.toFixed(2)}</p>
+                  <p className="text-xs text-gray-500">Pago por {getMemberName(viewingExpense.paid_by_user_id)}</p>
+               </div>
+            </div>
+
+            <div className="border-t border-gray-100 pt-4">
+               <h4 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                 <Users size={16} className="text-gray-500" />
+                 Como foi dividido:
+               </h4>
+               
+               {loadingView ? (
+                 <div className="py-4 flex justify-center"><LoadingSpinner /></div>
+               ) : (
+                 <div className="bg-gray-50 rounded-lg p-3 space-y-2 max-h-48 overflow-y-auto">
+                    {members.map(m => {
+                       const split = viewingSplits.find(s => s.participant_user_id === m.user_id);
+                       const amountOwed = split ? split.amount_owed : 0;
+                       
+                       if (amountOwed <= 0) return null;
+
+                       return (
+                         <div key={m.user_id} className="flex justify-between items-center text-sm">
+                            <span className="text-gray-700">{getMemberName(m.user_id)}</span>
+                            <span className="font-medium text-gray-900">R$ {amountOwed.toFixed(2)}</span>
+                         </div>
+                       );
+                    })}
+                 </div>
+               )}
+            </div>
+
+            <div className="flex gap-3 pt-2">
+               {!divvy.is_archived && (
+                 <>
+                  <Button 
+                    variant="danger" 
+                    className="flex-1"
+                    onClick={() => handleDeleteExpense(viewingExpense.id)}
+                  >
+                    Excluir
+                  </Button>
+                  <Button 
+                    variant="primary" 
+                    className="flex-1"
+                    onClick={() => handleOpenEditExpense(viewingExpense)}
+                  >
+                    Editar
+                  </Button>
+                 </>
+               )}
+               <Button 
+                  variant="outline" 
+                  className={divvy.is_archived ? "w-full" : ""}
+                  onClick={() => setIsViewModalOpen(false)}
+               >
+                  Fechar
+               </Button>
+            </div>
+          </div>
+        )}
+      </Modal>
 
       {/* ADD/EDIT EXPENSE MODAL */}
       <Modal isOpen={isExpenseModalOpen} onClose={() => setIsExpenseModalOpen(false)} title={editingExpenseId ? "Editar Despesa" : "Nova Despesa"}>
