@@ -494,6 +494,27 @@ const DivvyDetailContent: React.FC = () => {
     return `${day}/${month}/${year}`;
   };
 
+  // Helper to format CPF/CNPJ
+  const formatDocument = (doc: string) => {
+    if (!doc) return '-';
+    const clean = doc.replace(/\D/g, '');
+    if (clean.length === 11) {
+      return clean.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4');
+    }
+    if (clean.length === 14) {
+      return clean.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, '$1.$2.$3/$4-$5');
+    }
+    return doc;
+  };
+
+  // Helper map for Account Types
+  const accountTypeMap: Record<string, string> = {
+      checking: 'Conta Corrente',
+      savings: 'Conta Poupança',
+      salary: 'Conta Salário',
+      payment: 'Conta de Pagamento'
+  };
+
   if (loading) return <div className="flex justify-center p-12"><LoadingSpinner /></div>;
   if (!divvy) return <div className="text-center p-12">Divvy não encontrado</div>;
 
@@ -1005,7 +1026,7 @@ const DivvyDetailContent: React.FC = () => {
                <p className="text-gray-500 text-center py-4">Nenhum método de pagamento disponível.</p>
             ) : (
                memberPaymentMethods.map(method => {
-                  // Robust Pix detection checking both type fields and content
+                  // Robust Pix detection
                   const isPix = 
                     method.method_type === 'pix' || 
                     method.type === 'pix' || 
@@ -1014,29 +1035,39 @@ const DivvyDetailContent: React.FC = () => {
                     !!method.raw_pix_key;
 
                   const pixKey = method.raw_pix_key || method.pix_key || method.pix_key_masked;
-                  const displayText = method.display_text 
-                     ? method.display_text.replace(/\bcpf\b/gi, 'CPF').replace(/\bcnpj\b/gi, 'CNPJ')
-                     : (isPix ? 'Pix' : 'Conta Bancária');
                   
+                  // Card Header Title (Account Type or Pix)
+                  let headerTitle = 'Conta Bancária';
+                  if (isPix) {
+                     headerTitle = 'Pix';
+                  } else {
+                     // Translate account type
+                     const accType = (method as any).account_type || 'checking';
+                     headerTitle = accountTypeMap[accType] || 'Conta Bancária';
+                  }
+
                   // Bank Details Preparation
-                  const bankCode = method.banks?.code || (method as any).bank_code;
+                  const bankCode = (method as any).bank_code || method.banks?.code || '';
                   const bankName = method.bank_name || method.banks?.name || 'N/A';
+                  // Display as "260 - Nubank" or just "Nubank" if no code
                   const bankDisplay = bankCode ? `${bankCode} - ${bankName}` : bankName;
 
                   const agency = method.raw_agency || method.agency || method.agency_masked || '-';
                   
                   const accNum = method.raw_account_number || method.account_number || method.account_number_masked || '-';
-                  const accDigit = method.raw_account_digit || method.account_digit;
+                  const accDigit = (method as any).account_digit || method.raw_account_digit; // Use the digit from RPC
+                  
+                  // Display as "12345-6" if digit exists
                   const accountDisplay = accDigit ? `${accNum}-${accDigit}` : accNum;
 
                   const holderName = method.account_holder_name || '-';
-                  const holderDoc = method.account_holder_document || '-';
+                  const holderDoc = (method as any).account_holder_document || '-';
 
                   return (
                     <div key={method.id} className="border border-gray-200 rounded-lg p-4 bg-gray-50">
                        <div className="flex items-center gap-3 mb-2">
                           <span className="text-2xl">{isPix ? '💠' : '🏦'}</span>
-                          <h4 className="font-bold text-gray-900">{displayText}</h4>
+                          <h4 className="font-bold text-gray-900">{headerTitle}</h4>
                        </div>
                        
                        <div className="space-y-3 mt-3">
@@ -1082,7 +1113,7 @@ const DivvyDetailContent: React.FC = () => {
                                 <p><span className="font-semibold">Agência:</span> {agency}</p>
                                 <p><span className="font-semibold">Conta:</span> {accountDisplay}</p>
                                 <p><span className="font-semibold">Titular:</span> {holderName}</p>
-                                <p><span className="font-semibold">CPF/CNPJ:</span> {holderDoc}</p>
+                                <p><span className="font-semibold">CPF/CNPJ:</span> {formatDocument(holderDoc)}</p>
                              </div>
                           )}
                        </div>
