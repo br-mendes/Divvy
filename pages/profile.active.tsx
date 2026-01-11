@@ -6,7 +6,7 @@ import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { ProtectedRoute } from '../components/ProtectedRoute';
 import toast from 'react-hot-toast';
-import { User, CreditCard, Plus, Trash2, Star, Pencil, X, Camera, Upload, Loader2 } from 'lucide-react';
+import { User, CreditCard, Plus, Trash2, Star, Pencil, X, Camera, Loader2 } from 'lucide-react';
 import { PaymentMethod, Bank } from '../types';
 import { POPULAR_BANKS } from '../lib/constants';
 
@@ -84,25 +84,24 @@ function ProfileContent() {
 
       const file = event.target.files[0];
       const fileExt = file.name.split('.').pop();
-      // Nome do arquivo: userId/timestamp.ext (para evitar cache e organizar por usuário)
+      // Nome do arquivo: userId/timestamp.ext (timestamp evita cache do navegador)
       const fileName = `${user.id}/${Date.now()}.${fileExt}`;
-      const filePath = `${fileName}`;
 
       // 1. Upload para o Storage
       const { error: uploadError } = await supabase.storage
         .from('avatars')
-        .upload(filePath, file);
+        .upload(fileName, file, {
+           upsert: true
+        });
 
-      if (uploadError) {
-        throw uploadError;
-      }
+      if (uploadError) throw uploadError;
 
       // 2. Obter URL Pública
       const { data: { publicUrl } } = supabase.storage
         .from('avatars')
-        .getPublicUrl(filePath);
+        .getPublicUrl(fileName);
 
-      // 3. Atualizar Tabela Profiles e Auth Metadata
+      // 3. Atualizar Tabela Profiles (Persistência Real)
       // Usamos upsert para garantir que crie a linha caso ela não exista
       const { error: updateError } = await supabase
         .from('profiles')
@@ -115,13 +114,17 @@ function ProfileContent() {
 
       if (updateError) throw updateError;
       
-      // Update auth metadata as fallback/cache
+      // 4. Update auth metadata (Sessão Atual)
       await supabase.auth.updateUser({
         data: { avatar_url: publicUrl }
       });
 
       setAvatarUrl(publicUrl);
-      toast.success('Avatar atualizado!');
+      toast.success('Foto de perfil atualizada!');
+      
+      // Força um reload suave da página ou avisa componentes para atualizar se necessário
+      // (O layout deve reagir a mudança do user metadata ou fazer fetch do profile)
+      
     } catch (error: any) {
       console.error(error);
       toast.error('Erro ao fazer upload: ' + error.message);
@@ -138,7 +141,7 @@ function ProfileContent() {
       
       setAvatarLoading(true);
       try {
-          // Upsert com avatar_url null
+          // Atualiza tabela para null
           const { error } = await supabase
             .from('profiles')
             .upsert({ 
@@ -150,6 +153,7 @@ function ProfileContent() {
 
           if (error) throw error;
           
+          // Atualiza metadata
           await supabase.auth.updateUser({
              data: { avatar_url: null }
           });
@@ -307,12 +311,6 @@ function ProfileContent() {
 
       if (editingId) {
         // UPDATE
-        // Ao editar, não mudamos o status de is_primary a menos que fosse lógica explícita.
-        // Mantemos o que estava no banco (o update parcial do supabase cuidaria disso se não enviássemos,
-        // mas aqui estamos enviando o payload reconstruído, então cuidado).
-        
-        // Removemos is_primary/is_visible do payload de update para não sobrescrever o estado atual acidentalmente,
-        // a menos que queiramos forçar algo. Vamos deixar o usuário controlar isso pelo botão de estrela.
         delete payload.is_primary;
         delete payload.is_visible_in_groups;
 
@@ -348,7 +346,6 @@ function ProfileContent() {
       });
 
       if (error) {
-          // Fallback manual update
           await supabase.from('user_payment_methods').update({ is_active: false }).eq('id', id);
       }
       
@@ -359,7 +356,6 @@ function ProfileContent() {
     }
   };
 
-  // Regra de Negócio: O principal é o ÚNICO visível.
   const handleSetPrimary = async (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
     if (!user) return;
@@ -367,13 +363,11 @@ function ProfileContent() {
     const loadingToast = toast.loading('Definindo como principal...');
 
     try {
-        // 1. Define TODOS como não principais e NÃO visíveis
         await supabase
             .from('user_payment_methods')
             .update({ is_primary: false, is_visible_in_groups: false })
             .eq('user_id', user.id);
 
-        // 2. Define o ALVO como principal e VISÍVEL
         const { error } = await supabase
             .from('user_payment_methods')
             .update({ is_primary: true, is_visible_in_groups: true })

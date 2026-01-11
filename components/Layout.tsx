@@ -1,8 +1,9 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
 import { useAuth } from '../context/AuthContext';
+import { supabase } from '../lib/supabase'; // Make sure this import is here
 import DivvyLogo from './branding/DivvyLogo';
 import { 
   LogOut, 
@@ -17,6 +18,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
   const { signOut, user } = useAuth();
   const router = useRouter();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [liveAvatar, setLiveAvatar] = useState<string | null>(null);
 
   const isActive = (path: string) => router.pathname === path;
 
@@ -28,7 +30,34 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
   const displayName = nickname || fullName || emailName || 'Usuário';
   const displayEmail = user?.email;
 
-  const userAvatar = user?.user_metadata?.avatar_url;
+  // Use local state for avatar to ensure we show the latest DB version if available,
+  // preventing divergence from the Profile page.
+  useEffect(() => {
+    let mounted = true;
+    const fetchLiveProfile = async () => {
+        if (!user) return;
+        
+        // 1. Start with session metadata as instant fallback
+        setLiveAvatar(user.user_metadata?.avatar_url || null);
+
+        // 2. Fetch reliable data from DB
+        const { data } = await supabase
+            .from('profiles')
+            .select('avatar_url')
+            .eq('id', user.id)
+            .single();
+        
+        if (mounted && data) {
+            setLiveAvatar(data.avatar_url);
+        }
+    };
+
+    fetchLiveProfile();
+    return () => { mounted = false; };
+  }, [user]);
+
+  // Use liveAvatar if available, otherwise fall back to metadata or null
+  const userAvatar = liveAvatar;
   const userInitial = displayName.charAt(0).toUpperCase();
 
   const toggleMenu = () => setIsMobileMenuOpen(!isMobileMenuOpen);
