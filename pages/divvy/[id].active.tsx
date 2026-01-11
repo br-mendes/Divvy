@@ -113,14 +113,17 @@ const DivvyDetailContent: React.FC = () => {
     
     const isMe = userId === user?.id;
     const profile = member.profiles;
-    let displayName = member.email;
+    let displayName = '';
 
-    if (profile) {
-       displayName = profile.nickname || profile.full_name || profile.email || 'Membro';
-    }
-
-    if (displayName && displayName.includes('@')) {
-        displayName = displayName.split('@')[0];
+    // Priority: Nickname > Full Name > Email
+    if (profile?.nickname && profile.nickname.trim() !== '') {
+      displayName = profile.nickname;
+    } else if (profile?.full_name && profile.full_name.trim() !== '') {
+      displayName = profile.full_name;
+    } else if (member.email) {
+      displayName = member.email.split('@')[0];
+    } else {
+      displayName = 'Membro';
     }
     
     return isMe ? `${displayName} (Você)` : displayName;
@@ -343,6 +346,7 @@ const DivvyDetailContent: React.FC = () => {
   };
 
   const handleCopy = (text: string, id: string) => {
+    if (!text) return;
     navigator.clipboard.writeText(text);
     setCopiedKey(id);
     toast.success("Chave copiada!");
@@ -350,6 +354,7 @@ const DivvyDetailContent: React.FC = () => {
   };
 
   const handleGenerateQR = async (text: string, methodId: string) => {
+    if (!text) return;
     try {
       const url = await QRCode.toDataURL(text);
       setGeneratedQrCode(url);
@@ -685,9 +690,11 @@ const DivvyDetailContent: React.FC = () => {
                           {isPix ? (
                              <div className="space-y-3">
                                 <div className="flex items-center gap-2">
-                                  <div className="flex-1 bg-white p-3 rounded border border-gray-200 font-mono text-sm break-all flex items-center justify-between">
-                                      <span>{pixKey || 'Chave indisponível'}</span>
-                                  </div>
+                                  <input 
+                                    readOnly 
+                                    value={pixKey || 'Chave indisponível'}
+                                    className="flex-1 bg-white p-3 rounded border border-gray-200 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-brand-100"
+                                  />
                                   <button 
                                      onClick={() => handleCopy(pixKey || '', method.id)}
                                      className="p-3 bg-white border border-gray-200 rounded hover:bg-gray-50 text-gray-600 transition-colors"

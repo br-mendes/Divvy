@@ -40,13 +40,31 @@ function ProfileContent() {
 
   useEffect(() => {
     if (user) {
-      setName(user.user_metadata?.full_name || '');
-      setNickname(user.user_metadata?.nickname || '');
-      setEmail(user.email || '');
-      
+      loadProfileData();
       fetchPaymentData();
     }
   }, [user]);
+
+  const loadProfileData = async () => {
+    if (!user) return;
+    
+    // First try to load from public profiles table (source of truth for groups)
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('full_name, nickname')
+      .eq('id', user.id)
+      .single();
+
+    if (profile) {
+      setName(profile.full_name || user.user_metadata?.full_name || '');
+      setNickname(profile.nickname || user.user_metadata?.nickname || '');
+    } else {
+      // Fallback to auth metadata
+      setName(user.user_metadata?.full_name || '');
+      setNickname(user.user_metadata?.nickname || '');
+    }
+    setEmail(user.email || '');
+  };
 
   const fetchPaymentData = async () => {
     if (!user) return;
@@ -81,17 +99,32 @@ function ProfileContent() {
 
   const handleUpdateProfile = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!user) return;
     setProfileLoading(true);
 
     try {
-      const { error } = await supabase.auth.updateUser({
+      // 1. Update Auth Metadata (Used for session)
+      const { error: authError } = await supabase.auth.updateUser({
         data: {
           full_name: name,
           nickname: nickname,
         }
       });
+      if (authError) throw authError;
 
-      if (error) throw error;
+      // 2. Update Public Profiles Table (Used for Divvy Groups display)
+      const { error: profileError } = await supabase
+        .from('profiles')
+        .upsert({
+          id: user.id,
+          email: user.email,
+          full_name: name,
+          nickname: nickname,
+          updated_at: new Date().toISOString()
+        });
+
+      if (profileError) throw profileError;
+
       toast.success('Perfil atualizado com sucesso!');
     } catch (error: any) {
       toast.error('Erro ao atualizar perfil: ' + error.message);
