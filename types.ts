@@ -72,7 +72,6 @@ export interface ExpenseSplit {
   created_at: string;
 }
 
-// Transaction is conceptually internal logic, Settlement is the DB table
 export interface Settlement {
   id: string;
   divvy_id: string;
@@ -80,6 +79,17 @@ export interface Settlement {
   receiver_id: string;
   amount: number;
   status: 'pending' | 'confirmed' | 'rejected';
+  created_at: string;
+}
+
+export interface Notification {
+  id: string;
+  user_id: string;
+  divvy_id?: string;
+  title: string;
+  message: string;
+  type: 'info' | 'expense' | 'invite' | 'settlement' | 'system';
+  is_read: boolean;
   created_at: string;
 }
 

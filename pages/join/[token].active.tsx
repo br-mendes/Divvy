@@ -73,6 +73,27 @@ export default function JoinDivvy() {
       if (error) throw error;
 
       if (success) {
+        
+        // --- NOTIFICATION TRIGGER: Joined ---
+        await supabase.from('notifications').insert({
+             user_id: user.id,
+             divvy_id: inviteData.divvy_id,
+             title: 'Você entrou no grupo!',
+             message: `Você aceitou o convite para participar de "${inviteData.divvy_name}".`,
+             type: 'invite'
+        });
+
+        // Notify Inviter (Optional/Nice to have - handled by client for now)
+        if (inviteData.invited_by_user_id !== user.id) {
+           await supabase.from('notifications').insert({
+               user_id: inviteData.invited_by_user_id,
+               divvy_id: inviteData.divvy_id,
+               title: 'Novo membro!',
+               message: `${user.user_metadata.full_name || user.email} aceitou seu convite para entrar em "${inviteData.divvy_name}".`,
+               type: 'invite'
+           });
+        }
+
         toast.success(`Você entrou em ${inviteData.divvy_name}!`);
         router.push(`/divvy/${inviteData.divvy_id}`);
       } else {

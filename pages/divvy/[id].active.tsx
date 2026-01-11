@@ -327,6 +327,15 @@ const DivvyDetailContent: React.FC = () => {
 
        if (error) throw error;
        
+       // --- NOTIFICATION TRIGGER: Payment Sent ---
+       await supabase.from('notifications').insert({
+         user_id: receiverId,
+         divvy_id: divvyId,
+         title: 'Pagamento Recebido?',
+         message: `${getMemberName(user.id, false)} informou que pagou ${formatMoney(amount)}. Confirme o recebimento.`,
+         type: 'settlement'
+       });
+
        toast.success('Marcado como pago! Aguardando confirmação.', { id: loadingToast });
        fetchDivvyData();
      } catch (e: any) {
@@ -340,12 +349,30 @@ const DivvyDetailContent: React.FC = () => {
 
       const loadingToast = toast.loading(`${action} recebimento...`);
       try {
-        const { error } = await supabase.from('settlements')
+        const { data, error } = await supabase.from('settlements')
           .update({ status: newStatus, updated_at: new Date().toISOString() })
-          .eq('id', settlementId);
+          .eq('id', settlementId)
+          .select()
+          .single();
 
         if (error) throw error;
         
+        // --- NOTIFICATION TRIGGER: Payment Confirmed/Rejected ---
+        if (data) {
+           const title = newStatus === 'confirmed' ? 'Pagamento Confirmado!' : 'Pagamento Rejeitado';
+           const msg = newStatus === 'confirmed' 
+             ? `${getMemberName(user!.id, false)} confirmou seu pagamento de ${formatMoney(data.amount)}.`
+             : `${getMemberName(user!.id, false)} rejeitou seu informe de pagamento. Verifique o comprovante.`;
+
+           await supabase.from('notifications').insert({
+             user_id: data.payer_id,
+             divvy_id: divvyId,
+             title: title,
+             message: msg,
+             type: 'settlement'
+           });
+        }
+
         toast.success(`Pagamento ${newStatus === 'confirmed' ? 'confirmado' : 'rejeitado'}!`, { id: loadingToast });
         fetchDivvyData();
       } catch (e: any) {
@@ -459,6 +486,25 @@ const DivvyDetailContent: React.FC = () => {
 
         if (splitsToInsert.length > 0) {
            await supabase.from('expense_splits').insert(splitsToInsert);
+        }
+
+        // --- NOTIFICATION TRIGGER: New Expense (Only on creation) ---
+        if (!editingExpenseId) {
+           const payerName = getMemberName(payerId, false);
+           const otherMembers = members.filter(m => m.user_id !== user.id);
+           
+           // Batch insert notifications
+           const notifications = otherMembers.map(m => ({
+              user_id: m.user_id,
+              divvy_id: divvy.id,
+              title: 'Nova Despesa',
+              message: `${payerName} adicionou "${desc || category}" no valor de ${formatMoney(totalAmount)}.`,
+              type: 'expense'
+           }));
+           
+           if (notifications.length > 0) {
+              await supabase.from('notifications').insert(notifications);
+           }
         }
       }
 

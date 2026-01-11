@@ -5,6 +5,7 @@ import { useRouter } from 'next/router';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabase';
 import DivvyLogo from './branding/DivvyLogo';
+import Notifications from './ui/Notifications';
 import { 
   LogOut, 
   LayoutDashboard,
@@ -88,12 +89,15 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
               <span className="text-xl font-bold text-gray-900">Divvy</span>
             </Link>
 
-            <button 
-              className="md:hidden p-2 text-gray-600 hover:bg-gray-100 rounded-lg"
-              onClick={toggleMenu}
-            >
-              {isMobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
-            </button>
+            <div className="flex items-center gap-2 md:hidden">
+              <Notifications />
+              <button 
+                className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg"
+                onClick={toggleMenu}
+              >
+                {isMobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
+              </button>
+            </div>
 
             {/* Desktop Nav */}
             <nav className="hidden md:flex flex-col w-full gap-1">
@@ -124,6 +128,12 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
 
           {/* Desktop User Info & Logout */}
           <div className="hidden md:flex md:flex-col gap-2 md:w-full md:border-t border-gray-100 md:pt-4">
+             {/* Desktop Notification bell in sidebar footer area */}
+            <div className="px-3 mb-2 flex justify-between items-center">
+               <span className="text-xs font-semibold text-gray-400 uppercase">Notificações</span>
+               <Notifications />
+            </div>
+
             <Link href="/profile" className="flex items-center gap-3 px-3 py-3 mb-2 hover:bg-gray-50 rounded-lg transition-colors cursor-pointer group">
                <div className="h-8 w-8 rounded-full bg-brand-100 flex-shrink-0 overflow-hidden flex items-center justify-center text-brand-700 font-semibold border border-brand-200">
                   {userAvatar ? (

@@ -34,8 +34,6 @@ export default function DivvyForm({ onSuccess, initialData }: DivvyFormProps) {
       setDescription(initialData.description || '');
       setType(initialData.type);
       
-      // Importante: Supabase pode retornar ISO strings (ex: 2024-01-01T00:00:00).
-      // O input type="date" exige YYYY-MM-DD exato.
       const formatIsoDate = (isoStr?: string) => {
          if (!isoStr) return '';
          return String(isoStr).split('T')[0];
@@ -81,19 +79,25 @@ export default function DivvyForm({ onSuccess, initialData }: DivvyFormProps) {
         toast.success('Divvy atualizado com sucesso!');
       } else {
         // CREATE New Divvy
-        const { error } = await supabase.from('divvies').insert({
+        const { data, error } = await supabase.from('divvies').insert({
           ...payload,
           creator_id: user.id,
-          is_archived: false // Garante valor inicial
-        });
+          is_archived: false
+        }).select().single();
 
-        if (error) {
-           console.error('Erro ao criar divvy:', error);
-           if (error.code === '42501') {
-              throw new Error('Permissão negada. Verifique suas credenciais.');
-           }
-           throw new Error(`Erro ao criar grupo: ${error.message}`);
+        if (error) throw error;
+
+        // --- NOTIFICATION TRIGGER: Created Divvy ---
+        if (data) {
+           await supabase.from('notifications').insert({
+             user_id: user.id,
+             divvy_id: (data as any).id,
+             title: 'Grupo Criado!',
+             message: `Você criou o grupo "${name}". Convide seus amigos para começar a dividir.`,
+             type: 'system'
+           });
         }
+
         toast.success('Divvy criado com sucesso!');
       }
 
