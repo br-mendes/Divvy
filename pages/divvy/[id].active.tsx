@@ -12,7 +12,7 @@ import DivvyHeader from '../../components/divvy/DivvyHeader';
 import InviteModal from '../../components/invite/InviteModal';
 import LoadingSpinner from '../../components/ui/LoadingSpinner';
 import EmptyState from '../../components/ui/EmptyState';
-import { Plus, UserPlus, Receipt, PieChart, Users, Pencil, Trash2, CreditCard, Lock, Copy, QrCode, Check, Eye } from 'lucide-react';
+import { Plus, UserPlus, Receipt, PieChart, Users, Pencil, Trash2, CreditCard, Lock, Copy, QrCode, Check, Eye, Wallet, ArrowRight } from 'lucide-react';
 import { ProtectedRoute } from '../../components/ProtectedRoute';
 import toast from 'react-hot-toast';
 import QRCode from 'qrcode';
@@ -31,10 +31,11 @@ const DivvyDetailContent: React.FC = () => {
   const [divvy, setDivvy] = useState<Divvy | null>(null);
   const [members, setMembers] = useState<DivvyMember[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [allSplits, setAllSplits] = useState<ExpenseSplit[]>([]); // New state for global calculation
   const [loading, setLoading] = useState(true);
   
   // UI State
-  const [activeTab, setActiveTab] = useState<'expenses' | 'charts' | 'members'>('expenses');
+  const [activeTab, setActiveTab] = useState<'expenses' | 'balances' | 'charts' | 'members'>('expenses');
   const [isExpenseModalOpen, setIsExpenseModalOpen] = useState(false);
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
   const [submitLoading, setSubmitLoading] = useState(false);
@@ -103,8 +104,25 @@ const DivvyDetailContent: React.FC = () => {
         setMembers([]);
       }
 
-      const { data: expenseData } = await supabase.from('expenses').select('*').eq('divvy_id', divvyId).order('date', { ascending: false });
+      const { data: expenseData } = await supabase
+        .from('expenses')
+        .select('*')
+        .eq('divvy_id', divvyId)
+        .order('date', { ascending: false });
+      
       setExpenses(expenseData || []);
+
+      // Fetch ALL splits for balance calculation
+      if (expenseData && expenseData.length > 0) {
+        const expenseIds = expenseData.map(e => e.id);
+        const { data: splitsData } = await supabase
+            .from('expense_splits')
+            .select('*')
+            .in('expense_id', expenseIds);
+        setAllSplits(splitsData || []);
+      } else {
+        setAllSplits([]);
+      }
 
     } catch (error) {
       console.error(error);
@@ -134,6 +152,80 @@ const DivvyDetailContent: React.FC = () => {
     
     return isMe ? `${displayName} (Você)` : displayName;
   };
+
+  // --- BALANCE CALCULATION LOGIC ---
+  const calculateBalances = useMemo(() => {
+    const balances: Record<string, number> = {};
+    const totalPaid: Record<string, number> = {};
+    const totalConsumed: Record<string, number> = {};
+
+    // Initialize
+    members.forEach(m => {
+        balances[m.user_id] = 0;
+        totalPaid[m.user_id] = 0;
+        totalConsumed[m.user_id] = 0;
+    });
+
+    // 1. Add up what users PAID
+    expenses.forEach(exp => {
+        const amount = exp.amount;
+        if (totalPaid[exp.paid_by_user_id] !== undefined) {
+            totalPaid[exp.paid_by_user_id] += amount;
+            balances[exp.paid_by_user_id] += amount; // They are OWED this amount initially
+        }
+    });
+
+    // 2. Subtract what users CONSUMED (Splits)
+    allSplits.forEach(split => {
+        const amount = split.amount_owed;
+        if (totalConsumed[split.participant_user_id] !== undefined) {
+            totalConsumed[split.participant_user_id] += amount;
+            balances[split.participant_user_id] -= amount; // They OWE this amount
+        }
+    });
+
+    // 3. Calculate Debt Settlement Plan (Minimize Transactions)
+    const debtors: { id: string, amount: number }[] = [];
+    const creditors: { id: string, amount: number }[] = [];
+
+    Object.entries(balances).forEach(([id, amount]) => {
+        // Round to 2 decimals to avoid floating point issues
+        const rounded = Math.round(amount * 100) / 100;
+        if (rounded < -0.01) debtors.push({ id, amount: rounded });
+        if (rounded > 0.01) creditors.push({ id, amount: rounded });
+    });
+
+    debtors.sort((a, b) => a.amount - b.amount); // Most negative first
+    creditors.sort((a, b) => b.amount - a.amount); // Most positive first
+
+    const plan: { from: string, to: string, amount: number }[] = [];
+
+    let i = 0; // debtor index
+    let j = 0; // creditor index
+
+    while (i < debtors.length && j < creditors.length) {
+        const debtor = debtors[i];
+        const creditor = creditors[j];
+
+        // The amount to settle is the minimum of what debtor owes and creditor is owed
+        const amount = Math.min(Math.abs(debtor.amount), creditor.amount);
+        
+        if (amount > 0.01) {
+            plan.push({ from: debtor.id, to: creditor.id, amount });
+        }
+
+        // Adjust remaining amounts
+        debtor.amount += amount;
+        creditor.amount -= amount;
+
+        // Move indices if settled
+        if (Math.abs(debtor.amount) < 0.01) i++;
+        if (creditor.amount < 0.01) j++;
+    }
+
+    return { balances, totalPaid, totalConsumed, plan };
+  }, [expenses, allSplits, members]);
+
 
   const handleViewExpense = async (exp: Expense) => {
     setViewingExpense(exp);
@@ -445,6 +537,14 @@ const DivvyDetailContent: React.FC = () => {
             <Receipt size={16} /> Despesas
           </button>
           <button
+            onClick={() => setActiveTab('balances')}
+            className={`pb-4 px-1 border-b-2 font-medium text-sm flex items-center gap-2 whitespace-nowrap ${
+              activeTab === 'balances' ? 'border-brand-500 text-brand-600' : 'border-transparent text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            <Wallet size={16} /> Gastos
+          </button>
+          <button
             onClick={() => setActiveTab('charts')}
             className={`pb-4 px-1 border-b-2 font-medium text-sm flex items-center gap-2 whitespace-nowrap ${
               activeTab === 'charts' ? 'border-brand-500 text-brand-600' : 'border-transparent text-gray-500 hover:text-gray-700'
@@ -510,6 +610,104 @@ const DivvyDetailContent: React.FC = () => {
                </div>
             ))}
           </div>
+        )}
+
+        {/* --- BALANCES / GASTOS TAB --- */}
+        {activeTab === 'balances' && (
+            <div className="space-y-8 animate-fade-in-down">
+                {/* 1. Who Owes Whom (Settlement Plan) */}
+                <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
+                    <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
+                        <ArrowRight size={20} className="text-brand-600" />
+                        Como quitar as dívidas
+                    </h3>
+                    
+                    {calculateBalances.plan.length === 0 ? (
+                        <div className="flex flex-col items-center justify-center py-8 text-center bg-gray-50 rounded-lg">
+                            <Check size={48} className="text-green-500 mb-3" />
+                            <p className="text-gray-900 font-medium">Tudo quitado!</p>
+                            <p className="text-sm text-gray-500">Ninguém deve nada para ninguém.</p>
+                        </div>
+                    ) : (
+                        <div className="space-y-3">
+                            {calculateBalances.plan.map((transfer, idx) => (
+                                <div key={idx} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg border border-gray-100">
+                                    <div className="flex items-center gap-3">
+                                        <div className="flex items-center gap-2">
+                                            <span className="font-medium text-gray-900">{getMemberName(transfer.from)}</span>
+                                            <span className="text-gray-400 text-xs">deve pagar</span>
+                                            <span className="font-medium text-gray-900">{getMemberName(transfer.to)}</span>
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center gap-3">
+                                        <span className="font-bold text-lg text-brand-600">R$ {transfer.amount.toFixed(2)}</span>
+                                        <button 
+                                            onClick={() => handleOpenPaymentInfo(transfer.to)}
+                                            className="p-2 text-gray-400 hover:text-brand-600 hover:bg-white rounded-full transition-colors"
+                                            title="Ver dados bancários"
+                                        >
+                                            <CreditCard size={18} />
+                                        </button>
+                                    </div>
+                                </div>
+                            ))}
+                            <p className="text-xs text-gray-500 mt-2 text-center">
+                                * Cálculo otimizado para reduzir o número de transações necessárias.
+                            </p>
+                        </div>
+                    )}
+                </div>
+
+                {/* 2. Balance Summary */}
+                <div className="grid md:grid-cols-2 gap-6">
+                    <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
+                        <h3 className="text-lg font-bold text-gray-900 mb-4">Resumo de Saldos</h3>
+                        <div className="space-y-4">
+                            {members.map(m => {
+                                const balance = calculateBalances.balances[m.user_id] || 0;
+                                const isPositive = balance > 0;
+                                const isZero = Math.abs(balance) < 0.01;
+
+                                return (
+                                    <div key={m.user_id} className="flex items-center justify-between border-b border-gray-50 pb-2 last:border-0 last:pb-0">
+                                        <div className="flex items-center gap-3">
+                                            <div className={`w-2 h-2 rounded-full ${isZero ? 'bg-gray-300' : isPositive ? 'bg-green-500' : 'bg-red-500'}`}></div>
+                                            <span className="text-gray-700">{getMemberName(m.user_id)}</span>
+                                        </div>
+                                        <div className={`font-medium ${isZero ? 'text-gray-400' : isPositive ? 'text-green-600' : 'text-red-500'}`}>
+                                            {isZero ? 'Zerado' : (isPositive ? `recebe R$ ${balance.toFixed(2)}` : `deve R$ ${Math.abs(balance).toFixed(2)}`)}
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </div>
+
+                    {/* 3. Who Paid What (Total Volume) */}
+                    <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
+                        <h3 className="text-lg font-bold text-gray-900 mb-4">Quem pagou o quê (Total)</h3>
+                        <div className="space-y-4">
+                            {members.map(m => {
+                                const paid = calculateBalances.totalPaid[m.user_id] || 0;
+                                const consumed = calculateBalances.totalConsumed[m.user_id] || 0;
+                                
+                                return (
+                                    <div key={m.user_id} className="space-y-1 border-b border-gray-50 pb-2 last:border-0 last:pb-0">
+                                        <div className="flex justify-between items-center">
+                                            <span className="font-medium text-gray-900">{getMemberName(m.user_id)}</span>
+                                            <span className="font-bold text-gray-900">R$ {paid.toFixed(2)}</span>
+                                        </div>
+                                        <div className="flex justify-between items-center text-xs text-gray-500">
+                                            <span>Sua parte nas despesas:</span>
+                                            <span>R$ {consumed.toFixed(2)}</span>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </div>
+                </div>
+            </div>
         )}
 
         {activeTab === 'charts' && (
