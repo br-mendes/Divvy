@@ -27,43 +27,59 @@ const DashboardContent: React.FC = () => {
     try {
       if (!user) return;
       
-      // Fetch Created Divvies with member count
-      const { data: createdData } = await supabase
+      // 1. Fetch Created Divvies
+      // We fetch divvy_members(id) to count the length in JS, which is safer than 'count' in some RLS scenarios
+      const { data: createdData, error: createdError } = await supabase
         .from('divvies')
-        .select('*, divvy_members(count)')
+        .select('*, divvy_members(id)')
         .eq('creator_id', user.id);
+
+      if (createdError) throw createdError;
 
       const created = (createdData || []).map((d: any) => ({
          ...d,
-         member_count: d.divvy_members?.[0]?.count || 1
+         member_count: d.divvy_members?.length || 1
       }));
 
-      // Fetch Shared Divvies (where user is a member) with member count
-      const { data: memberData } = await supabase
+      // 2. Fetch Shared Divvies (where user is a member)
+      // Note: This often returns duplicates of 'Created' if the creator is also a member (which is standard)
+      const { data: memberData, error: memberError } = await supabase
         .from('divvy_members')
-        .select('divvies(*, divvy_members(count))')
+        .select('divvies(*, divvy_members(id))')
         .eq('user_id', user.id);
+
+      if (memberError) throw memberError;
       
       const shared = (memberData || [])
         .map((d: any) => {
-            if (!d.divvies) return null;
+            // divvies is a single object here due to Many-to-One from divvy_members -> divvies
+            const divvy = d.divvies; 
+            if (!divvy) return null;
+            
             return {
-                ...d.divvies,
-                member_count: d.divvies.divvy_members?.[0]?.count || 1
+                ...divvy,
+                member_count: divvy.divvy_members?.length || 1
             };
         })
         .filter(Boolean);
 
+      // 3. Combine and Deduplicate
       const combined = [...created, ...shared];
       
-      // Deduplicate by ID
-      const unique = Array.from(new Map(combined.map(item => [item.id, item])).values())
+      const uniqueMap = new Map();
+      combined.forEach(item => {
+        if (!uniqueMap.has(item.id)) {
+          uniqueMap.set(item.id, item);
+        }
+      });
+      
+      const unique = Array.from(uniqueMap.values())
         .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
         
       setDivvies(unique);
-    } catch (err) {
-      console.error(err);
-      toast.error('Erro ao carregar Divvies');
+    } catch (err: any) {
+      console.error("Fetch Divvies Error:", err);
+      toast.error('Erro ao carregar seus grupos.');
     } finally {
       setLoading(false);
     }
