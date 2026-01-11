@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
 import { useAuth } from '../context/AuthContext';
-import { supabase } from '../lib/supabase'; // Make sure this import is here
+import { supabase } from '../lib/supabase';
 import DivvyLogo from './branding/DivvyLogo';
 import { 
   LogOut, 
@@ -18,37 +18,37 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
   const { signOut, user } = useAuth();
   const router = useRouter();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const [liveAvatar, setLiveAvatar] = useState<string | null>(null);
+  
+  // Local state for live profile data
+  const [liveProfile, setLiveProfile] = useState<{
+      avatar_url?: string | null;
+      full_name?: string | null;
+      nickname?: string | null;
+  } | null>(null);
 
   const isActive = (path: string) => router.pathname === path;
 
-  // Prioridade: Apelido > Nome Completo > Email
-  const nickname = user?.user_metadata?.nickname;
-  const fullName = user?.user_metadata?.full_name;
-  const emailName = user?.email?.split('@')[0];
-  
-  const displayName = nickname || fullName || emailName || 'Usuário';
-  const displayEmail = user?.email;
-
-  // Use local state for avatar to ensure we show the latest DB version if available,
-  // preventing divergence from the Profile page.
   useEffect(() => {
     let mounted = true;
     const fetchLiveProfile = async () => {
         if (!user) return;
         
-        // 1. Start with session metadata as instant fallback
-        setLiveAvatar(user.user_metadata?.avatar_url || null);
+        // 1. Initial fallback from session
+        setLiveProfile({
+            avatar_url: user.user_metadata?.avatar_url,
+            full_name: user.user_metadata?.full_name,
+            nickname: user.user_metadata?.nickname
+        });
 
-        // 2. Fetch reliable data from DB
+        // 2. Fetch authoritative data from DB
         const { data } = await supabase
             .from('profiles')
-            .select('avatar_url')
+            .select('avatar_url, full_name, nickname')
             .eq('id', user.id)
             .single();
         
         if (mounted && data) {
-            setLiveAvatar(data.avatar_url);
+            setLiveProfile(data);
         }
     };
 
@@ -56,8 +56,21 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
     return () => { mounted = false; };
   }, [user]);
 
-  // Use liveAvatar if available, otherwise fall back to metadata or null
-  const userAvatar = liveAvatar;
+  // Priority Logic: Nickname > Full Name > Email Name
+  const getDisplayName = () => {
+      if (liveProfile?.nickname) return liveProfile.nickname;
+      if (liveProfile?.full_name) return liveProfile.full_name;
+      
+      // Fallbacks
+      if (user?.user_metadata?.nickname) return user.user_metadata.nickname;
+      if (user?.user_metadata?.full_name) return user.user_metadata.full_name;
+      
+      return user?.email?.split('@')[0] || 'Usuário';
+  };
+
+  const displayName = getDisplayName();
+  const displayEmail = user?.email;
+  const userAvatar = liveProfile?.avatar_url || user?.user_metadata?.avatar_url;
   const userInitial = displayName.charAt(0).toUpperCase();
 
   const toggleMenu = () => setIsMobileMenuOpen(!isMobileMenuOpen);

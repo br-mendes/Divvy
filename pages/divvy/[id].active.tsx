@@ -31,7 +31,7 @@ const DivvyDetailContent: React.FC = () => {
   const [divvy, setDivvy] = useState<Divvy | null>(null);
   const [members, setMembers] = useState<DivvyMember[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
-  const [allSplits, setAllSplits] = useState<ExpenseSplit[]>([]); // New state for global calculation
+  const [allSplits, setAllSplits] = useState<ExpenseSplit[]>([]);
   const [loading, setLoading] = useState(true);
   
   // UI State
@@ -87,6 +87,9 @@ const DivvyDetailContent: React.FC = () => {
         
       if (memberData && memberData.length > 0) {
         const userIds = memberData.map(m => m.user_id);
+        
+        // Fetch profiles. Note: If RLS is enabled and not configured for public read, this might fail for other users.
+        // The "Hard Fix" SQL script provided in the response addresses this.
         const { data: profilesData } = await supabase
           .from('profiles')
           .select('*')
@@ -131,6 +134,7 @@ const DivvyDetailContent: React.FC = () => {
     }
   };
 
+  // Centralized Name Logic: Nickname > Full Name > Email
   const getMemberName = (userId: string) => {
     const member = members.find(m => m.user_id === userId);
     if (!member) return 'Desconhecido';
@@ -139,7 +143,6 @@ const DivvyDetailContent: React.FC = () => {
     const profile = member.profiles;
     let displayName = '';
 
-    // Priority: Nickname > Full Name > Email
     if (profile?.nickname && profile.nickname.trim() !== '') {
       displayName = profile.nickname;
     } else if (profile?.full_name && profile.full_name.trim() !== '') {
@@ -150,6 +153,7 @@ const DivvyDetailContent: React.FC = () => {
       displayName = 'Membro';
     }
     
+    // Always append (Você) for current user for clarity
     return isMe ? `${displayName} (Você)` : displayName;
   };
 
@@ -159,66 +163,53 @@ const DivvyDetailContent: React.FC = () => {
     const totalPaid: Record<string, number> = {};
     const totalConsumed: Record<string, number> = {};
 
-    // Initialize
     members.forEach(m => {
         balances[m.user_id] = 0;
         totalPaid[m.user_id] = 0;
         totalConsumed[m.user_id] = 0;
     });
 
-    // 1. Add up what users PAID
     expenses.forEach(exp => {
         const amount = exp.amount;
         if (totalPaid[exp.paid_by_user_id] !== undefined) {
             totalPaid[exp.paid_by_user_id] += amount;
-            balances[exp.paid_by_user_id] += amount; // They are OWED this amount initially
+            balances[exp.paid_by_user_id] += amount;
         }
     });
 
-    // 2. Subtract what users CONSUMED (Splits)
     allSplits.forEach(split => {
         const amount = split.amount_owed;
         if (totalConsumed[split.participant_user_id] !== undefined) {
             totalConsumed[split.participant_user_id] += amount;
-            balances[split.participant_user_id] -= amount; // They OWE this amount
+            balances[split.participant_user_id] -= amount;
         }
     });
 
-    // 3. Calculate Debt Settlement Plan (Minimize Transactions)
     const debtors: { id: string, amount: number }[] = [];
     const creditors: { id: string, amount: number }[] = [];
 
     Object.entries(balances).forEach(([id, amount]) => {
-        // Round to 2 decimals to avoid floating point issues
         const rounded = Math.round(amount * 100) / 100;
         if (rounded < -0.01) debtors.push({ id, amount: rounded });
         if (rounded > 0.01) creditors.push({ id, amount: rounded });
     });
 
-    debtors.sort((a, b) => a.amount - b.amount); // Most negative first
-    creditors.sort((a, b) => b.amount - a.amount); // Most positive first
+    debtors.sort((a, b) => a.amount - b.amount);
+    creditors.sort((a, b) => b.amount - a.amount);
 
     const plan: { from: string, to: string, amount: number }[] = [];
-
-    let i = 0; // debtor index
-    let j = 0; // creditor index
+    let i = 0, j = 0;
 
     while (i < debtors.length && j < creditors.length) {
         const debtor = debtors[i];
         const creditor = creditors[j];
-
-        // The amount to settle is the minimum of what debtor owes and creditor is owed
         const amount = Math.min(Math.abs(debtor.amount), creditor.amount);
         
         if (amount > 0.01) {
             plan.push({ from: debtor.id, to: creditor.id, amount });
         }
-
-        // Adjust remaining amounts
         debtor.amount += amount;
         creditor.amount -= amount;
-
-        // Move indices if settled
         if (Math.abs(debtor.amount) < 0.01) i++;
         if (creditor.amount < 0.01) j++;
     }
@@ -258,9 +249,8 @@ const DivvyDetailContent: React.FC = () => {
     setCategory('food');
     setDesc('');
     setDate(new Date().toISOString().split('T')[0]);
-    setPayerId(user.id); // Default to current user
+    setPayerId(user.id);
     
-    // Initialize split: Equal split, everyone selected ("1" = selected)
     setSplitMode('equal');
     const initialSplits: Record<string, string> = {};
     members.forEach(m => initialSplits[m.user_id] = "1");
@@ -272,7 +262,6 @@ const DivvyDetailContent: React.FC = () => {
   const handleOpenEditExpense = async (exp: Expense) => {
     if (divvy?.is_archived) return;
 
-    // Se estiver vindo do modal de visualização
     setIsViewModalOpen(false);
 
     setEditingExpenseId(exp.id);
@@ -494,7 +483,6 @@ const DivvyDetailContent: React.FC = () => {
     return `${day}/${month}/${year}`;
   };
 
-  // Helper to format CPF/CNPJ
   const formatDocument = (doc: string) => {
     if (!doc) return '-';
     const clean = doc.replace(/\D/g, '');
@@ -507,7 +495,6 @@ const DivvyDetailContent: React.FC = () => {
     return doc;
   };
 
-  // Helper map for Account Types
   const accountTypeMap: Record<string, string> = {
       checking: 'Conta Corrente',
       savings: 'Conta Poupança',
@@ -636,7 +623,6 @@ const DivvyDetailContent: React.FC = () => {
         {/* --- BALANCES / GASTOS TAB --- */}
         {activeTab === 'balances' && (
             <div className="space-y-8 animate-fade-in-down">
-                {/* 1. Who Owes Whom (Settlement Plan) */}
                 <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
                     <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
                         <ArrowRight size={20} className="text-brand-600" />
@@ -679,7 +665,6 @@ const DivvyDetailContent: React.FC = () => {
                     )}
                 </div>
 
-                {/* 2. Balance Summary */}
                 <div className="grid md:grid-cols-2 gap-6">
                     <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
                         <h3 className="text-lg font-bold text-gray-900 mb-4">Resumo de Saldos</h3>
@@ -704,7 +689,6 @@ const DivvyDetailContent: React.FC = () => {
                         </div>
                     </div>
 
-                    {/* 3. Who Paid What (Total Volume) */}
                     <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
                         <h3 className="text-lg font-bold text-gray-900 mb-4">Quem pagou o quê (Total)</h3>
                         <div className="space-y-4">
@@ -742,6 +726,7 @@ const DivvyDetailContent: React.FC = () => {
             {members.map(member => {
               const avatar = member.profiles?.avatar_url;
               const name = getMemberName(member.user_id);
+              // Lógica corrigida para exibir o cargo corretamente
               const roleLabel = divvy.creator_id === member.user_id ? "Criador e Membro" : "Membro";
               
               return (
@@ -1027,7 +1012,6 @@ const DivvyDetailContent: React.FC = () => {
                <p className="text-gray-500 text-center py-4">Nenhum método de pagamento disponível.</p>
             ) : (
                memberPaymentMethods.map(method => {
-                  // Robust Pix detection
                   const isPix = 
                     method.method_type === 'pix' || 
                     method.type === 'pix' || 
@@ -1037,28 +1021,23 @@ const DivvyDetailContent: React.FC = () => {
 
                   const pixKey = method.raw_pix_key || method.pix_key || method.pix_key_masked;
                   
-                  // Card Header Title (Account Type or Pix)
                   let headerTitle = 'Conta Bancária';
                   if (isPix) {
                      headerTitle = 'Pix';
                   } else {
-                     // Translate account type
                      const accType = (method as any).account_type || 'checking';
                      headerTitle = accountTypeMap[accType] || 'Conta Bancária';
                   }
 
-                  // Bank Details Preparation
                   const bankCode = (method as any).bank_code || method.banks?.code || '';
                   const bankName = method.bank_name || method.banks?.name || 'N/A';
-                  // Display as "260 - Nubank" or just "Nubank" if no code
                   const bankDisplay = bankCode ? `${bankCode} - ${bankName}` : bankName;
 
                   const agency = method.raw_agency || method.agency || method.agency_masked || '-';
                   
                   const accNum = method.raw_account_number || method.account_number || method.account_number_masked || '-';
-                  const accDigit = (method as any).account_digit || method.raw_account_digit; // Use the digit from RPC
+                  const accDigit = (method as any).account_digit || method.raw_account_digit;
                   
-                  // Display as "12345-6" if digit exists
                   const accountDisplay = accDigit ? `${accNum}-${accDigit}` : accNum;
 
                   const holderName = method.account_holder_name || '-';
