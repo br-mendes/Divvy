@@ -80,84 +80,29 @@ const DivvyDetailContent: React.FC = () => {
     try {
       setAccessDenied(false);
       
-      // 1. Fetch Divvy Details
-      // A política RLS 'check_divvy_access' garantirá que só retorne se o usuário for membro/criador.
-      const { data: divvyData, error: divvyError } = await supabase
-        .from('divvies')
-        .select('*')
-        .eq('id', divvyId)
-        .maybeSingle(); // Use maybeSingle para evitar erro 406 se não houver linhas
-      
-      if (divvyError) {
-        console.error("Erro ao buscar divvy:", divvyError);
-        throw divvyError;
-      }
+      // SOLUÇÃO DEFINITIVA: Usar RPC Mestra
+      // Busca Grupo, Membros, Despesas e Divisões em UMA chamada segura.
+      // Isso evita qualquer problema de recursão de RLS.
+      const { data, error } = await supabase.rpc('get_divvy_details_complete', {
+         p_divvy_id: divvyId
+      });
 
-      if (!divvyData) {
-         // Se não retornou dados (bloqueado pelo RLS ou não existe), define acesso negado
+      if (error) throw error;
+
+      if (!data) {
+         // A função retorna NULL se o acesso for negado
          setAccessDenied(true);
          setLoading(false);
          return;
       }
       
-      setDivvy(divvyData);
-
-      // 2. Fetch Members
-      // A política RLS permite ver membros se 'check_divvy_access' for true para este grupo
-      const { data: memberData, error: memberError } = await supabase
-        .from('divvy_members')
-        .select('*')
-        .eq('divvy_id', divvyId);
-        
-      if (memberError) throw memberError;
-
-      if (memberData && memberData.length > 0) {
-        const userIds = memberData.map(m => m.user_id);
-        
-        // 3. FETCH PROFILES EXPLICITLY
-        const { data: profilesData, error: profilesError } = await supabase
-          .from('profiles')
-          .select('*')
-          .in('id', userIds);
-
-        if (profilesError) console.error("Error fetching profiles:", profilesError);
-
-        const mergedMembers = memberData.map(member => {
-            const profile = profilesData?.find(p => p.id === member.user_id);
-            return {
-                ...member,
-                profiles: profile || undefined 
-            };
-        });
-        setMembers(mergedMembers);
-      } else {
-        setMembers([]);
-      }
-
-      // 4. Fetch Expenses
-      const { data: expenseData } = await supabase
-        .from('expenses')
-        .select('*')
-        .eq('divvy_id', divvyId)
-        .order('date', { ascending: false });
-      
-      setExpenses(expenseData || []);
-
-      // 5. Fetch All Splits for Balances
-      if (expenseData && expenseData.length > 0) {
-        const expenseIds = expenseData.map(e => e.id);
-        const { data: splitsData } = await supabase
-            .from('expense_splits')
-            .select('*')
-            .in('expense_id', expenseIds);
-        setAllSplits(splitsData || []);
-      } else {
-        setAllSplits([]);
-      }
+      setDivvy(data.divvy);
+      setMembers(data.members || []);
+      setExpenses(data.expenses || []);
+      setAllSplits(data.splits || []);
 
     } catch (error: any) {
-      console.error("Fetch Cycle Error:", error);
-      // Erro de permissão do Postgres ou erro de conexão
+      console.error("Fetch Error:", error);
       toast.error("Erro ao sincronizar dados do grupo.");
     } finally {
       setLoading(false);
@@ -261,20 +206,21 @@ const DivvyDetailContent: React.FC = () => {
     setLoadingView(true);
     setViewingSplits([]);
     
-    try {
-      const { data: splits } = await supabase
-        .from('expense_splits')
-        .select('*')
-        .eq('expense_id', exp.id);
-      
-      if (splits) {
+    // Local Splits lookup (faster since we already have allSplits)
+    const splits = allSplits.filter(s => s.expense_id === exp.id);
+    if (splits.length > 0) {
         setViewingSplits(splits);
-      }
-    } catch (error: any) {
-      console.error("Error fetching splits for view:", error);
-      toast.error("Erro ao carregar detalhes da divisão.");
-    } finally {
-      setLoadingView(false);
+        setLoadingView(false);
+    } else {
+        // Fallback fetch only if needed
+        try {
+            const { data } = await supabase.from('expense_splits').select('*').eq('expense_id', exp.id);
+            if (data) setViewingSplits(data);
+        } catch (e) {
+            console.error(e);
+        } finally {
+            setLoadingView(false);
+        }
     }
   };
 
@@ -310,12 +256,14 @@ const DivvyDetailContent: React.FC = () => {
     setDate(exp.date);
     setPayerId(exp.paid_by_user_id);
 
-    const { data: splitsData } = await supabase
-      .from('expense_splits')
-      .select('*')
-      .eq('expense_id', String(exp.id));
+    // Filter from local state first
+    let splits = allSplits.filter(s => s.expense_id === exp.id);
     
-    const splits = splitsData as ExpenseSplit[] | null;
+    // If not found, fetch
+    if (splits.length === 0) {
+        const { data } = await supabase.from('expense_splits').select('*').eq('expense_id', exp.id);
+        if (data) splits = data;
+    }
 
     if (splits && splits.length > 0) {
       const loadedSplits: Record<string, string> = {};
