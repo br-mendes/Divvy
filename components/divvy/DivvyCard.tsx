@@ -13,8 +13,13 @@ const typeLabel: Record<string, string> = {
   trip: 'Viagem', roommate: 'República', event: 'Evento', general: 'Geral',
 };
 
-// Fix: Included onRefresh in the props type definition to match the props passed from DivvyList.tsx
-export default function DivvyCard({ divvy, onRefresh }: { divvy: Divvy; onRefresh?: () => void }) {
+interface DivvyCardProps {
+  divvy: Divvy;
+  onRefresh?: () => void;
+}
+
+// Fix: Explicitly typing the component as React.FC to allow React-specific props like 'key' when used in .map() blocks.
+const DivvyCard: React.FC<DivvyCardProps> = ({ divvy, onRefresh }) => {
   const date = new Date(divvy.created_at).toLocaleDateString('pt-BR');
 
   return (
@@ -59,4 +64,6 @@ export default function DivvyCard({ divvy, onRefresh }: { divvy: Divvy; onRefres
       </div>
     </div>
   );
-}
+};
+
+export default DivvyCard;

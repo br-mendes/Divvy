@@ -22,22 +22,22 @@ export default function AnimatedTagline() {
       setTimeout(() => {
         setCurrentTagline((prev) => (prev + 1) % taglines.length);
         setIsTransitioning(false);
-      }, 300);
-    }, 4000); // Muda a cada 4 segundos
+      }, 400);
+    }, 4500);
 
     return () => clearInterval(interval);
   }, []);
 
   return (
-    <>
-      Despesas em grupo
+    <span className="block">
+      Despesas em grupo{' '}
       <span
-        className={`text-primary block transition-opacity duration-300 whitespace-nowrap overflow-hidden text-ellipsis ${
-          isTransitioning ? 'opacity-0' : 'opacity-100'
+        className={`text-brand-600 dark:text-brand-400 block sm:inline transition-all duration-500 ${
+          isTransitioning ? 'opacity-0 -translate-y-2' : 'opacity-100 translate-y-0'
         }`}
       >
         {taglines[currentTagline]}
       </span>
-    </>
+    </span>
   );
 }
