@@ -1,12 +1,12 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { ProtectedRoute } from '../components/ProtectedRoute';
 import toast from 'react-hot-toast';
-import { User, CreditCard, Plus, Trash2, Star, Pencil, X } from 'lucide-react';
+import { User, CreditCard, Plus, Trash2, Star, Pencil, X, Camera, Upload, Loader2 } from 'lucide-react';
 import { PaymentMethod, Bank } from '../types';
 import { POPULAR_BANKS } from '../lib/constants';
 
@@ -17,7 +17,11 @@ function ProfileContent() {
   const [name, setName] = useState('');
   const [nickname, setNickname] = useState('');
   const [email, setEmail] = useState('');
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [profileLoading, setProfileLoading] = useState(false);
+  const [avatarLoading, setAvatarLoading] = useState(false);
+  
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Payment State
   const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([]);
@@ -52,19 +56,111 @@ function ProfileContent() {
     // First try to load from public profiles table (source of truth for groups)
     const { data: profile } = await supabase
       .from('profiles')
-      .select('full_name, nickname')
+      .select('full_name, nickname, avatar_url')
       .eq('id', user.id)
       .single();
 
     if (profile) {
       setName(profile.full_name || user.user_metadata?.full_name || '');
       setNickname(profile.nickname || user.user_metadata?.nickname || '');
+      setAvatarUrl(profile.avatar_url || user.user_metadata?.avatar_url || null);
     } else {
       // Fallback to auth metadata
       setName(user.user_metadata?.full_name || '');
       setNickname(user.user_metadata?.nickname || '');
+      setAvatarUrl(user.user_metadata?.avatar_url || null);
     }
     setEmail(user.email || '');
+  };
+
+  const handleAvatarUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    try {
+      setAvatarLoading(true);
+      if (!event.target.files || event.target.files.length === 0) {
+        throw new Error('Você deve selecionar uma imagem para upload.');
+      }
+
+      if (!user) throw new Error('Usuário não autenticado.');
+
+      const file = event.target.files[0];
+      const fileExt = file.name.split('.').pop();
+      // Nome do arquivo: userId/timestamp.ext (para evitar cache e organizar por usuário)
+      const fileName = `${user.id}/${Date.now()}.${fileExt}`;
+      const filePath = `${fileName}`;
+
+      // 1. Upload para o Storage
+      const { error: uploadError } = await supabase.storage
+        .from('avatars')
+        .upload(filePath, file);
+
+      if (uploadError) {
+        throw uploadError;
+      }
+
+      // 2. Obter URL Pública
+      const { data: { publicUrl } } = supabase.storage
+        .from('avatars')
+        .getPublicUrl(filePath);
+
+      // 3. Atualizar Tabela Profiles e Auth Metadata
+      const { error: updateError } = await supabase
+        .from('profiles')
+        .update({ 
+            avatar_url: publicUrl,
+            updated_at: new Date().toISOString()
+        })
+        .eq('id', user.id);
+
+      if (updateError) throw updateError;
+      
+      // Update auth metadata as fallback/cache
+      await supabase.auth.updateUser({
+        data: { avatar_url: publicUrl }
+      });
+
+      setAvatarUrl(publicUrl);
+      toast.success('Avatar atualizado!');
+    } catch (error: any) {
+      toast.error('Erro ao fazer upload: ' + error.message);
+    } finally {
+      setAvatarLoading(false);
+      // Limpar input
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  const handleDeleteAvatar = async () => {
+      if (!user) return;
+      if (!confirm("Tem certeza que deseja remover sua foto de perfil?")) return;
+      
+      setAvatarLoading(true);
+      try {
+          // Nota: Não é estritamente necessário deletar do storage se quisermos manter histórico,
+          // mas para limpar espaço é bom. Pular a deleção do arquivo físico para simplificar 
+          // (já que o nome do arquivo antigo não está armazenado explicitamente, apenas a URL completa).
+          // O foco aqui é limpar a referência no banco.
+
+          const { error } = await supabase
+            .from('profiles')
+            .update({ 
+                avatar_url: null,
+                updated_at: new Date().toISOString()
+            })
+            .eq('id', user.id);
+
+          if (error) throw error;
+          
+          await supabase.auth.updateUser({
+             data: { avatar_url: null }
+          });
+
+          setAvatarUrl(null);
+          toast.success("Foto de perfil removida.");
+      } catch (error: any) {
+          toast.error("Erro ao remover foto: " + error.message);
+      } finally {
+          setAvatarLoading(false);
+      }
   };
 
   const fetchPaymentData = async () => {
@@ -310,6 +406,49 @@ function ProfileContent() {
           <User size={24} className="text-brand-600" />
           Dados Pessoais
         </h2>
+
+        {/* --- Avatar Section --- */}
+        <div className="flex flex-col items-center mb-8">
+          <div className="relative group">
+            <div className="w-32 h-32 rounded-full overflow-hidden border-4 border-white shadow-lg bg-brand-50 flex items-center justify-center">
+               {avatarLoading ? (
+                  <Loader2 className="animate-spin text-brand-500 w-10 h-10" />
+               ) : avatarUrl ? (
+                  <img src={avatarUrl} alt="Avatar" className="w-full h-full object-cover" />
+               ) : (
+                  <span className="text-4xl text-brand-300 font-bold">
+                     {name ? name.charAt(0).toUpperCase() : user?.email?.charAt(0).toUpperCase()}
+                  </span>
+               )}
+            </div>
+            
+            <div className="absolute bottom-0 right-0 flex gap-2">
+                <label className="p-2 bg-brand-600 text-white rounded-full cursor-pointer hover:bg-brand-700 shadow-md transition-all hover:scale-105" title="Alterar foto">
+                    <Camera size={18} />
+                    <input
+                      type="file"
+                      ref={fileInputRef}
+                      className="hidden"
+                      accept="image/*"
+                      onChange={handleAvatarUpload}
+                      disabled={avatarLoading}
+                    />
+                </label>
+                {avatarUrl && (
+                   <button 
+                      type="button"
+                      onClick={handleDeleteAvatar}
+                      disabled={avatarLoading}
+                      className="p-2 bg-red-100 text-red-600 rounded-full hover:bg-red-200 shadow-md transition-all hover:scale-105"
+                      title="Remover foto"
+                   >
+                      <Trash2 size={18} />
+                   </button>
+                )}
+            </div>
+          </div>
+          <p className="text-xs text-gray-400 mt-2">Clique na câmera para alterar</p>
+        </div>
 
         <form onSubmit={handleUpdateProfile} className="space-y-6">
           <div className="grid md:grid-cols-2 gap-6">
