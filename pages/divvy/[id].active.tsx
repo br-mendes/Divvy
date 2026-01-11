@@ -12,10 +12,11 @@ import DivvyHeader from '../../components/divvy/DivvyHeader';
 import InviteModal from '../../components/invite/InviteModal';
 import LoadingSpinner from '../../components/ui/LoadingSpinner';
 import EmptyState from '../../components/ui/EmptyState';
-import { Plus, UserPlus, Receipt, PieChart, Users, Pencil, Trash2, CreditCard, Lock, Copy, QrCode, Check, ArrowRight, Wallet, TrendingUp, TrendingDown } from 'lucide-react';
+import { Plus, UserPlus, Receipt, PieChart, Users, Pencil, Trash2, CreditCard, Lock, Copy, QrCode, Check, ArrowRight, Wallet, TrendingUp, TrendingDown, ShieldAlert } from 'lucide-react';
 import { ProtectedRoute } from '../../components/ProtectedRoute';
 import toast from 'react-hot-toast';
 import QRCode from 'qrcode';
+import Link from 'next/link';
 
 type SplitMode = 'equal' | 'amount' | 'percentage';
 
@@ -32,6 +33,7 @@ const DivvyDetailContent: React.FC = () => {
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [allSplits, setAllSplits] = useState<ExpenseSplit[]>([]);
   const [loading, setLoading] = useState(true);
+  const [accessDenied, setAccessDenied] = useState(false);
   
   // --- UI State ---
   const [activeTab, setActiveTab] = useState<'expenses' | 'balances' | 'charts' | 'members'>('expenses');
@@ -76,9 +78,18 @@ const DivvyDetailContent: React.FC = () => {
 
   const fetchDivvyData = async () => {
     try {
+      setAccessDenied(false);
       // 1. Fetch Divvy Details
+      // Se o RLS estiver ativo e o usuário não tiver permissão, isso retornará data: null ou erro
       const { data: divvyData, error: divvyError } = await supabase.from('divvies').select('*').eq('id', divvyId).single();
-      if (divvyError) throw divvyError;
+      
+      if (divvyError || !divvyData) {
+         // Se deu erro ou não veio dado, assumimos acesso negado ou inexistente
+         setAccessDenied(true);
+         setLoading(false);
+         return;
+      }
+      
       setDivvy(divvyData);
 
       // 2. Fetch Members
@@ -88,6 +99,16 @@ const DivvyDetailContent: React.FC = () => {
         .eq('divvy_id', divvyId);
         
       if (memberError) throw memberError;
+
+      // Validação Extra no Front: Usuário é criador ou membro?
+      const isCreator = divvyData.creator_id === user?.id;
+      const isMember = memberData?.some(m => m.user_id === user?.id);
+
+      if (!isCreator && !isMember) {
+         setAccessDenied(true);
+         setLoading(false);
+         return;
+      }
 
       if (memberData && memberData.length > 0) {
         const userIds = memberData.map(m => m.user_id);
@@ -136,7 +157,12 @@ const DivvyDetailContent: React.FC = () => {
 
     } catch (error: any) {
       console.error("Fetch Error:", error);
-      toast.error("Erro ao carregar dados: " + error.message);
+      // Códigos de erro específicos do Postgres para permissão/não encontrado
+      if (error.code === 'PGRST116' || error.code === '42501') {
+         setAccessDenied(true);
+      } else {
+         toast.error("Erro ao carregar dados.");
+      }
     } finally {
       setLoading(false);
     }
@@ -196,10 +222,11 @@ const DivvyDetailContent: React.FC = () => {
 
     // 2. Debit Consumers
     allSplits.forEach(split => {
-        const amount = split.amount_owed;
+        const amount = split.amount; // Changed from amount_owed to match your types if changed, usually amount_owed in DB
+        const val = split.amount_owed || 0;
         if (totalConsumed[split.participant_user_id] !== undefined) {
-            totalConsumed[split.participant_user_id] += amount;
-            balances[split.participant_user_id] -= amount;
+            totalConsumed[split.participant_user_id] += val;
+            balances[split.participant_user_id] -= val;
         }
     });
 
@@ -237,6 +264,28 @@ const DivvyDetailContent: React.FC = () => {
   }, [expenses, allSplits, members]);
 
   // --- HANDLERS ---
+  const handleViewExpense = async (exp: Expense) => {
+    setViewingExpense(exp);
+    setIsViewModalOpen(true);
+    setLoadingView(true);
+    setViewingSplits([]);
+    
+    try {
+      const { data: splits } = await supabase
+        .from('expense_splits')
+        .select('*')
+        .eq('expense_id', exp.id);
+      
+      if (splits) {
+        setViewingSplits(splits);
+      }
+    } catch (error: any) {
+      console.error("Error fetching splits for view:", error);
+      toast.error("Erro ao carregar detalhes da divisão.");
+    } finally {
+      setLoadingView(false);
+    }
+  };
 
   const handleOpenAddExpense = () => {
     if (!user) return;
@@ -302,29 +351,6 @@ const DivvyDetailContent: React.FC = () => {
         setSplitValues(initialSplits);
     }
     setIsExpenseModalOpen(true);
-  };
-
-  const handleViewExpense = async (exp: Expense) => {
-    setViewingExpense(exp);
-    setIsViewModalOpen(true);
-    setLoadingView(true);
-    setViewingSplits([]);
-    
-    try {
-      const { data: splits } = await supabase
-        .from('expense_splits')
-        .select('*')
-        .eq('expense_id', exp.id);
-      
-      if (splits) {
-        setViewingSplits(splits);
-      }
-    } catch (error: any) {
-      console.error("Error fetching splits for view:", error);
-      toast.error("Erro ao carregar detalhes da divisão.");
-    } finally {
-      setLoadingView(false);
-    }
   };
 
   // --- Split Logic Handlers (Restored) ---
@@ -494,7 +520,22 @@ const DivvyDetailContent: React.FC = () => {
 
   // --- RENDER ---
   if (loading) return <div className="flex justify-center p-12"><LoadingSpinner /></div>;
-  if (!divvy) return <div className="text-center p-12">Divvy não encontrado</div>;
+  
+  if (accessDenied || !divvy) {
+      return (
+        <div className="flex flex-col items-center justify-center min-h-[50vh] text-center p-6 bg-white rounded-xl shadow-sm border border-gray-200">
+           <ShieldAlert className="w-16 h-16 text-red-500 mb-4" />
+           <h2 className="text-2xl font-bold text-gray-900 mb-2">Acesso Negado</h2>
+           <p className="text-gray-600 max-w-md mb-6">
+              Você não tem permissão para visualizar este grupo ou ele não existe. 
+              Certifique-se de que foi convidado e aceitou o convite.
+           </p>
+           <Link href="/dashboard">
+              <Button>Voltar ao Dashboard</Button>
+           </Link>
+        </div>
+      );
+  }
 
   return (
     <div className="space-y-6">
