@@ -27,49 +27,25 @@ const DashboardContent: React.FC = () => {
     try {
       if (!user) return;
       
-      // COM RLS ATIVO:
-      // Apenas solicitamos os divvies. O Supabase filtrará automaticamente
-      // retornando apenas aqueles que o usuário criou ou é membro.
-      const { data: divviesData, error: divviesError } = await supabase
-        .from('divvies')
-        .select('*')
-        .order('created_at', { ascending: false });
+      // SOLUÇÃO DEFINITIVA: Usar RPC (Remote Procedure Call)
+      // Isso chama a função segura no banco que ignora conflitos de política (RLS)
+      // e já retorna a contagem de membros pronta.
+      const { data, error } = await supabase.rpc('get_dashboard_divvies');
 
-      if (divviesError) throw divviesError;
+      if (error) throw error;
 
-      if (!divviesData || divviesData.length === 0) {
+      if (!data || data.length === 0) {
         setDivvies([]);
-        setLoading(false);
-        return;
+      } else {
+        // Mapeia para o tipo Divvy
+        setDivvies(data as Divvy[]);
       }
-
-      // Buscar contagem de membros para os grupos retornados
-      const divvyIds = divviesData.map(d => d.id);
-      
-      const { data: membersCountData, error: countError } = await supabase
-        .from('divvy_members')
-        .select('divvy_id')
-        .in('divvy_id', divvyIds);
-
-      const counts: Record<string, number> = {};
-      if (membersCountData && !countError) {
-        membersCountData.forEach((row: any) => {
-           counts[row.divvy_id] = (counts[row.divvy_id] || 0) + 1;
-        });
-      }
-
-      const finalDivvies = divviesData.map((d: any) => ({
-         ...d,
-         member_count: counts[d.id] || 1
-      }));
-        
-      setDivvies(finalDivvies);
 
     } catch (err: any) {
       console.error("Fetch Divvies Error:", err);
-      // Ignora erro de cancelamento de fetch se ocorrer
-      if (err.code !== 'PGRST000') { 
-          toast.error('Não foi possível sincronizar os grupos.');
+      // Evita toast em caso de erro de conexão interrompida (comum em SPAs)
+      if (err.message && err.message !== 'Failed to fetch') {
+          toast.error('Não foi possível carregar os grupos.');
       }
     } finally {
       setLoading(false);
