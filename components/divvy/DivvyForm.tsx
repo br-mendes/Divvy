@@ -120,7 +120,7 @@ export default function DivvyForm({ onSuccess, initialData }: DivvyFormProps) {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
-      <h3 className="text-lg font-semibold text-gray-900 mb-4">
+      <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
         {initialData ? 'Editar Divvy' : 'Criar novo Divvy'}
       </h3>
       <Input
@@ -133,13 +133,13 @@ export default function DivvyForm({ onSuccess, initialData }: DivvyFormProps) {
       />
 
       <div>
-        <label className="block text-sm font-medium text-gray-900 mb-2">
+        <label className="block text-sm font-medium text-gray-900 dark:text-gray-300 mb-2">
           Tipo
         </label>
         <select
           value={type}
           onChange={(e) => setType(e.target.value)}
-          className="w-full px-4 py-2 border border-gray-300 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-brand-600 bg-white"
+          className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-600 bg-white dark:bg-gray-800"
         >
           {divvyTypes.map((t) => (
             <option key={t.value} value={t.value}>
@@ -165,14 +165,14 @@ export default function DivvyForm({ onSuccess, initialData }: DivvyFormProps) {
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-gray-900 mb-2">
+        <label className="block text-sm font-medium text-gray-900 dark:text-gray-300 mb-2">
           Descrição (opcional)
         </label>
         <textarea
           value={description}
           onChange={(e) => setDescription(e.target.value)}
           placeholder="Descreva o propósito desta despesa compartilhada"
-          className="w-full px-4 py-2 border border-gray-300 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-brand-600 resize-none"
+          className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-600 resize-none bg-white dark:bg-gray-800 placeholder-gray-400 dark:placeholder-gray-500"
           rows={3}
         />
       </div>

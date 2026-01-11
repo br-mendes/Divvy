@@ -24,7 +24,6 @@ const DivvyCard: React.FC<DivvyCardProps> = ({ divvy, onRefresh }) => {
     general: 'Geral',
   };
 
-  // Helper simples para formatar data (YYYY-MM-DD -> DD/MM/YYYY)
   const formatDate = (dateStr: string) => {
     if (!dateStr) return '';
     try {
@@ -36,28 +35,27 @@ const DivvyCard: React.FC<DivvyCardProps> = ({ divvy, onRefresh }) => {
   };
 
   return (
-    <div className="bg-white p-6 rounded-lg border border-gray-200 hover:shadow-lg transition flex flex-col h-full">
+    <div className="bg-white dark:bg-gray-800 p-6 rounded-lg border border-gray-200 dark:border-gray-700 hover:shadow-lg dark:hover:border-gray-600 transition flex flex-col h-full">
       <div className="flex justify-between items-start mb-2">
         <span className="text-4xl">{typeEmoji[divvy.type] || '💰'}</span>
         {divvy.is_archived && (
-          <span className="bg-gray-100 text-gray-600 text-xs px-2 py-1 rounded-full font-medium">
+          <span className="bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 text-xs px-2 py-1 rounded-full font-medium">
             Arquivado
           </span>
         )}
       </div>
 
-      <h3 className="text-xl font-bold text-gray-900 mt-2 mb-1">{divvy.name}</h3>
-      <p className="text-sm text-brand-600 font-medium mb-4">{typeLabel[divvy.type] || 'Geral'}</p>
+      <h3 className="text-xl font-bold text-gray-900 dark:text-white mt-2 mb-1">{divvy.name}</h3>
+      <p className="text-sm text-brand-600 dark:text-brand-400 font-medium mb-4">{typeLabel[divvy.type] || 'Geral'}</p>
 
       {divvy.description && (
-        <p className="text-gray-600 text-sm mb-4 line-clamp-2 flex-grow">
+        <p className="text-gray-600 dark:text-gray-300 text-sm mb-4 line-clamp-2 flex-grow">
           {divvy.description}
         </p>
       )}
 
-      <div className="flex gap-4 text-sm text-gray-500 mb-4 border-t border-gray-200 pt-4 mt-auto">
+      <div className="flex gap-4 text-sm text-gray-500 dark:text-gray-400 mb-4 border-t border-gray-200 dark:border-gray-700 pt-4 mt-auto">
         <span>👥 {divvy.member_count || divvy.members?.length || 1} membros</span>
-        {/* Usa a data de criação formatada manualmente para evitar divergências de fuso */}
         <span>📅 {formatDate(divvy.created_at)}</span>
       </div>
 

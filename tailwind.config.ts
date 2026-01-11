@@ -1,6 +1,8 @@
+
 import type { Config } from 'tailwindcss';
 
 const config: Config = {
+  darkMode: 'class', // Habilita o modo escuro via classe CSS 'dark'
   content: [
     './app/**/*.{js,ts,jsx,tsx,mdx}',
     './components/**/*.{js,ts,jsx,tsx,mdx}',
@@ -25,7 +27,13 @@ const config: Config = {
           900: '#4c1d95',
           950: '#2e1065',
         },
-        dark: '#1f2121',
+        dark: {
+          bg: '#111827',     // gray-900
+          card: '#1f2937',   // gray-800
+          border: '#374151', // gray-700
+          text: '#f9fafb',   // gray-50
+          muted: '#9ca3af',  // gray-400
+        },
         light: '#f5f5f5',
       },
       screens: {

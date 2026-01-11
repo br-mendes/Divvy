@@ -51,7 +51,7 @@ const DivvyDetailContent: React.FC = () => {
   // --- Payment Info State ---
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
   const [viewingMemberName, setViewingMemberName] = useState('');
-  const [payingToId, setPayingToId] = useState<string | null>(null); // New: Track who we are paying
+  const [payingToId, setPayingToId] = useState<string | null>(null);
   const [memberPaymentMethods, setMemberPaymentMethods] = useState<PaymentMethod[]>([]);
   const [loadingPayments, setLoadingPayments] = useState(false);
   
@@ -108,7 +108,6 @@ const DivvyDetailContent: React.FC = () => {
     }
   };
 
-  /** Helper: Format Currency pt-BR */
   const formatMoney = (val: number) => {
     return new Intl.NumberFormat('pt-BR', {
       style: 'currency',
@@ -116,14 +115,12 @@ const DivvyDetailContent: React.FC = () => {
     }).format(val);
   };
 
-  /** Helper: Format Date preventing Timezone Shift */
   const formatDate = (dateString: string) => {
     if (!dateString) return '';
     const [year, month, day] = dateString.split('T')[0].split('-');
     return `${day}/${month}/${year}`;
   };
 
-  /** Helper: Get Member Name Display */
   const getMemberName = (userId: string, includeYouSuffix = true) => {
     const member = members.find(m => m.user_id === userId);
     if (!member) return 'Usuário Desconhecido';
@@ -150,7 +147,6 @@ const DivvyDetailContent: React.FC = () => {
     return displayName;
   };
 
-  // --- LOGIC: Balance Calculation ---
   const calculateBalances = useMemo(() => {
     const balances: Record<string, number> = {};
     const totalPaid: Record<string, number> = {};
@@ -162,7 +158,6 @@ const DivvyDetailContent: React.FC = () => {
         totalConsumed[m.user_id] = 0;
     });
 
-    // 1. Credit Payer (Expenses)
     expenses.forEach(exp => {
         const amount = exp.amount;
         if (totalPaid[exp.paid_by_user_id] !== undefined) {
@@ -171,7 +166,6 @@ const DivvyDetailContent: React.FC = () => {
         }
     });
 
-    // 2. Debit Consumers (Splits)
     allSplits.forEach(split => {
         const val = split.amount_owed || 0;
         if (totalConsumed[split.participant_user_id] !== undefined) {
@@ -180,17 +174,13 @@ const DivvyDetailContent: React.FC = () => {
         }
     });
 
-    // 3. Process CONFIRMED Settlements (Treat as payments)
     settlements.forEach(s => {
       if (s.status === 'confirmed') {
-        // Payer sent money (Paid debt), so their balance increases (debt reduces)
         if (balances[s.payer_id] !== undefined) balances[s.payer_id] += s.amount;
-        // Receiver got money (Claimed credit), so their balance decreases (credit reduces)
         if (balances[s.receiver_id] !== undefined) balances[s.receiver_id] -= s.amount;
       }
     });
 
-    // 4. Minimize Debt Algo
     const debtors: { id: string, amount: number }[] = [];
     const creditors: { id: string, amount: number }[] = [];
 
@@ -223,14 +213,12 @@ const DivvyDetailContent: React.FC = () => {
     return { balances, totalPaid, totalConsumed, plan };
   }, [expenses, allSplits, members, settlements]);
 
-  // --- HANDLERS ---
   const handleViewExpense = async (exp: Expense) => {
     setViewingExpense(exp);
     setIsViewModalOpen(true);
     setLoadingView(true);
     setViewingSplits([]);
     
-    // Local Splits lookup
     const splits = allSplits.filter(s => s.expense_id === exp.id);
     if (splits.length > 0) {
         setViewingSplits(splits);
@@ -310,7 +298,6 @@ const DivvyDetailContent: React.FC = () => {
     setIsExpenseModalOpen(true);
   };
 
-  // --- Payment / Settlement Handlers ---
   const handleMarkAsPaid = async (receiverId: string, amount: number) => {
      if (!confirm(`Confirmar que você pagou ${formatMoney(amount)} para ${getMemberName(receiverId, false)}?`)) return;
      if (!user) return;
@@ -327,7 +314,6 @@ const DivvyDetailContent: React.FC = () => {
 
        if (error) throw error;
        
-       // --- NOTIFICATION TRIGGER: Payment Sent ---
        await supabase.from('notifications').insert({
          user_id: receiverId,
          divvy_id: divvyId,
@@ -357,7 +343,6 @@ const DivvyDetailContent: React.FC = () => {
 
         if (error) throw error;
         
-        // --- NOTIFICATION TRIGGER: Payment Confirmed/Rejected ---
         if (data) {
            const title = newStatus === 'confirmed' ? 'Pagamento Confirmado!' : 'Pagamento Rejeitado';
            const msg = newStatus === 'confirmed' 
@@ -380,8 +365,6 @@ const DivvyDetailContent: React.FC = () => {
       }
   };
 
-
-  // --- Split Logic Handlers ---
   const totalAmount = parseFloat(amount) || 0;
   
   const toggleMemberSelection = (userId: string) => {
@@ -488,12 +471,10 @@ const DivvyDetailContent: React.FC = () => {
            await supabase.from('expense_splits').insert(splitsToInsert);
         }
 
-        // --- NOTIFICATION TRIGGER: New Expense (Only on creation) ---
         if (!editingExpenseId) {
            const payerName = getMemberName(payerId, false);
            const otherMembers = members.filter(m => m.user_id !== user.id);
            
-           // Batch insert notifications
            const notifications = otherMembers.map(m => ({
               user_id: m.user_id,
               divvy_id: divvy.id,
@@ -566,21 +547,19 @@ const DivvyDetailContent: React.FC = () => {
     }
   };
 
-  // --- DERIVED: Pending Approvals ---
   const pendingApprovals = useMemo(() => {
      if (!user) return [];
      return settlements.filter(s => s.receiver_id === user.id && s.status === 'pending');
   }, [settlements, user]);
 
-  // --- RENDER ---
   if (loading) return <div className="flex justify-center p-12"><LoadingSpinner /></div>;
   
   if (accessDenied || !divvy) {
       return (
-        <div className="flex flex-col items-center justify-center min-h-[50vh] text-center p-6 bg-white rounded-xl shadow-sm border border-gray-200">
+        <div className="flex flex-col items-center justify-center min-h-[50vh] text-center p-6 bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700">
            <ShieldAlert className="w-16 h-16 text-red-500 mb-4" />
-           <h2 className="text-2xl font-bold text-gray-900 mb-2">Acesso Negado</h2>
-           <p className="text-gray-600 max-w-md mb-6">
+           <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Acesso Negado</h2>
+           <p className="text-gray-600 dark:text-gray-300 max-w-md mb-6">
               Você não tem permissão para visualizar este grupo ou ele não existe. 
               Certifique-se de que foi convidado e aceitou o convite.
            </p>
@@ -596,7 +575,7 @@ const DivvyDetailContent: React.FC = () => {
       <DivvyHeader divvy={divvy} onUpdate={fetchDivvyData} />
 
       {divvy.is_archived && (
-        <div className="bg-gray-100 border border-gray-300 text-gray-700 p-4 rounded-lg flex items-center gap-3">
+        <div className="bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-300 p-4 rounded-lg flex items-center gap-3">
           <Lock size={20} />
           <div>
             <p className="font-bold">Grupo Arquivado</p>
@@ -618,7 +597,7 @@ const DivvyDetailContent: React.FC = () => {
       </div>
 
       {/* Tabs */}
-      <div className="border-b border-gray-200">
+      <div className="border-b border-gray-200 dark:border-gray-700">
         <nav className="-mb-px flex space-x-8 overflow-x-auto">
           {[
             { id: 'expenses', label: 'Despesas', icon: Receipt },
@@ -629,8 +608,10 @@ const DivvyDetailContent: React.FC = () => {
              <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id as any)}
-                className={`pb-4 px-1 border-b-2 font-medium text-sm flex items-center gap-2 whitespace-nowrap ${
-                  activeTab === tab.id ? 'border-brand-500 text-brand-600' : 'border-transparent text-gray-500 hover:text-gray-700'
+                className={`pb-4 px-1 border-b-2 font-medium text-sm flex items-center gap-2 whitespace-nowrap transition-colors ${
+                  activeTab === tab.id 
+                    ? 'border-brand-500 text-brand-600 dark:text-brand-400' 
+                    : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:border-gray-300 dark:hover:border-gray-600'
                 }`}
               >
                 <tab.icon size={16} /> {tab.label}
@@ -649,21 +630,21 @@ const DivvyDetailContent: React.FC = () => {
                <div 
                  key={exp.id} 
                  onClick={() => { handleViewExpense(exp); }}
-                 className="bg-white p-4 rounded-lg shadow-sm border border-gray-100 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 cursor-pointer hover:bg-gray-50 transition-colors group"
+                 className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-sm border border-gray-100 dark:border-gray-700 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors group"
                >
                  <div className="flex items-center gap-4 flex-1">
-                    <div className="h-10 w-10 rounded-full bg-brand-50 flex items-center justify-center text-xl group-hover:scale-110 transition-transform">
+                    <div className="h-10 w-10 rounded-full bg-brand-50 dark:bg-brand-900/30 flex items-center justify-center text-xl group-hover:scale-110 transition-transform">
                       {exp.category === 'food' ? '🍽️' : exp.category === 'transport' ? '🚗' : exp.category === 'accommodation' ? '🏨' : exp.category === 'activity' ? '🎬' : '💰'}
                     </div>
                     <div>
-                        <p className="font-medium text-gray-900">{exp.description || exp.category}</p>
-                        <p className="text-sm text-gray-500">
+                        <p className="font-medium text-gray-900 dark:text-white">{exp.description || exp.category}</p>
+                        <p className="text-sm text-gray-500 dark:text-gray-400">
                             {formatDate(exp.date)} • Pago por <strong>{getMemberName(exp.paid_by_user_id, false)}</strong>
                         </p>
                     </div>
                  </div>
                  <div className="flex items-center gap-4 w-full sm:w-auto justify-between sm:justify-end">
-                    <span className="font-bold text-gray-900">{formatMoney(exp.amount)}</span>
+                    <span className="font-bold text-gray-900 dark:text-white">{formatMoney(exp.amount)}</span>
                  </div>
                </div>
             ))}
@@ -676,22 +657,22 @@ const DivvyDetailContent: React.FC = () => {
                 
                 {/* Pending Approvals Section */}
                 {pendingApprovals.length > 0 && (
-                   <div className="bg-yellow-50 p-6 rounded-xl border border-yellow-200 shadow-sm">
-                      <h3 className="text-lg font-bold text-yellow-800 mb-4 flex items-center gap-2">
+                   <div className="bg-yellow-50 dark:bg-yellow-900/10 p-6 rounded-xl border border-yellow-200 dark:border-yellow-900/30 shadow-sm">
+                      <h3 className="text-lg font-bold text-yellow-800 dark:text-yellow-500 mb-4 flex items-center gap-2">
                           <Clock size={20} />
                           Aprovações Pendentes
                       </h3>
                       <div className="space-y-3">
                         {pendingApprovals.map(s => (
-                           <div key={s.id} className="flex flex-col sm:flex-row items-center justify-between p-4 bg-white rounded-lg border border-yellow-100 shadow-sm">
+                           <div key={s.id} className="flex flex-col sm:flex-row items-center justify-between p-4 bg-white dark:bg-gray-800 rounded-lg border border-yellow-100 dark:border-yellow-900/20 shadow-sm">
                               <div className="mb-2 sm:mb-0">
-                                 <p className="text-gray-900 font-medium">
-                                    <span className="font-bold">{getMemberName(s.payer_id, false)}</span> disse que pagou <span className="font-bold text-green-600">{formatMoney(s.amount)}</span> para você.
+                                 <p className="text-gray-900 dark:text-gray-100 font-medium">
+                                    <span className="font-bold">{getMemberName(s.payer_id, false)}</span> disse que pagou <span className="font-bold text-green-600 dark:text-green-400">{formatMoney(s.amount)}</span> para você.
                                  </p>
-                                 <p className="text-xs text-gray-500">{new Date(s.created_at).toLocaleDateString('pt-BR')}</p>
+                                 <p className="text-xs text-gray-500 dark:text-gray-400">{new Date(s.created_at).toLocaleDateString('pt-BR')}</p>
                               </div>
                               <div className="flex gap-2">
-                                 <Button size="sm" variant="outline" className="text-red-600 border-red-200 hover:bg-red-50" onClick={() => handleUpdateSettlement(s.id, 'rejected')}>
+                                 <Button size="sm" variant="outline" className="text-red-600 border-red-200 hover:bg-red-50 dark:hover:bg-red-900/20 dark:border-red-900/30 dark:text-red-400" onClick={() => handleUpdateSettlement(s.id, 'rejected')}>
                                     <XCircle size={16} className="mr-1" /> Rejeitar
                                  </Button>
                                  <Button size="sm" className="bg-green-600 hover:bg-green-700 text-white" onClick={() => handleUpdateSettlement(s.id, 'confirmed')}>
@@ -705,22 +686,21 @@ const DivvyDetailContent: React.FC = () => {
                 )}
 
                 {/* Section 1: Debt Settlement Plan */}
-                <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
-                    <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
-                        <ArrowRight size={20} className="text-brand-600" />
+                <div className="bg-white dark:bg-gray-800 p-6 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm">
+                    <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+                        <ArrowRight size={20} className="text-brand-600 dark:text-brand-400" />
                         Plano de Pagamentos
                     </h3>
                     
                     {calculateBalances.plan.length === 0 ? (
-                        <div className="flex flex-col items-center justify-center py-8 text-center bg-gray-50 rounded-lg border border-dashed border-gray-200">
+                        <div className="flex flex-col items-center justify-center py-8 text-center bg-gray-50 dark:bg-gray-700/20 rounded-lg border border-dashed border-gray-200 dark:border-gray-600">
                             <Check size={48} className="text-green-500 mb-3" />
-                            <p className="text-gray-900 font-medium">Tudo quitado!</p>
-                            <p className="text-sm text-gray-500">Ninguém deve nada para ninguém.</p>
+                            <p className="text-gray-900 dark:text-white font-medium">Tudo quitado!</p>
+                            <p className="text-sm text-gray-500 dark:text-gray-400">Ninguém deve nada para ninguém.</p>
                         </div>
                     ) : (
                         <div className="space-y-3">
                             {calculateBalances.plan.map((transfer, idx) => {
-                                // Check if there's a pending settlement for this pair
                                 const myPending = settlements.find(s => 
                                     s.payer_id === transfer.from && 
                                     s.receiver_id === transfer.to && 
@@ -730,13 +710,13 @@ const DivvyDetailContent: React.FC = () => {
                                 const isMeDebtor = transfer.from === user?.id;
 
                                 return (
-                                <div key={idx} className="flex flex-col sm:flex-row items-center justify-between p-4 bg-gray-50 rounded-lg border border-gray-100 hover:border-brand-200 transition-colors">
+                                <div key={idx} className="flex flex-col sm:flex-row items-center justify-between p-4 bg-gray-50 dark:bg-gray-700/30 rounded-lg border border-gray-100 dark:border-gray-700 hover:border-brand-200 dark:hover:border-brand-700 transition-colors">
                                     <div className="flex flex-col sm:flex-row sm:items-center gap-2 w-full sm:w-auto mb-3 sm:mb-0">
                                         <div className="flex items-center gap-2">
-                                            <div className="w-8 h-8 rounded-full bg-red-100 flex items-center justify-center text-red-600 text-xs font-bold">
+                                            <div className="w-8 h-8 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center text-red-600 dark:text-red-400 text-xs font-bold">
                                                 {getMemberName(transfer.from, false).charAt(0)}
                                             </div>
-                                            <span className="font-medium text-gray-900">{getMemberName(transfer.from, false)}</span>
+                                            <span className="font-medium text-gray-900 dark:text-white">{getMemberName(transfer.from, false)}</span>
                                         </div>
                                         
                                         <div className="hidden sm:flex flex-col items-center px-4">
@@ -746,30 +726,28 @@ const DivvyDetailContent: React.FC = () => {
                                         <div className="sm:hidden text-xs text-gray-400 pl-10">paga para</div>
 
                                         <div className="flex items-center gap-2">
-                                            <div className="w-8 h-8 rounded-full bg-green-100 flex items-center justify-center text-green-600 text-xs font-bold">
+                                            <div className="w-8 h-8 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center text-green-600 dark:text-green-400 text-xs font-bold">
                                                 {getMemberName(transfer.to, false).charAt(0)}
                                             </div>
-                                            <span className="font-medium text-gray-900">{getMemberName(transfer.to, false)}</span>
+                                            <span className="font-medium text-gray-900 dark:text-white">{getMemberName(transfer.to, false)}</span>
                                         </div>
                                     </div>
                                     
-                                    <div className="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-end pl-0 sm:pl-4 sm:border-l border-gray-200">
-                                        <span className="font-bold text-lg text-brand-600">{formatMoney(transfer.amount)}</span>
+                                    <div className="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-end pl-0 sm:pl-4 sm:border-l border-gray-200 dark:border-gray-600">
+                                        <span className="font-bold text-lg text-brand-600 dark:text-brand-400">{formatMoney(transfer.amount)}</span>
                                         
                                         <div className="flex gap-2">
-                                           {/* Botão de Ver Dados Bancários */}
                                             <button 
                                                 onClick={() => handleOpenPaymentInfo(transfer.to)}
-                                                className="p-2 text-gray-400 hover:text-brand-600 hover:bg-white rounded-full transition-colors"
+                                                className="p-2 text-gray-400 hover:text-brand-600 dark:hover:text-brand-400 hover:bg-white dark:hover:bg-gray-600 rounded-full transition-colors"
                                                 title="Ver dados bancários"
                                             >
                                                 <CreditCard size={18} />
                                             </button>
 
-                                            {/* Logica do Botão de Pagar */}
                                             {isMeDebtor && (
                                                myPending ? (
-                                                  <span className="text-xs font-medium text-yellow-600 bg-yellow-50 px-2 py-1 rounded border border-yellow-200 flex items-center gap-1">
+                                                  <span className="text-xs font-medium text-yellow-600 dark:text-yellow-400 bg-yellow-50 dark:bg-yellow-900/30 px-2 py-1 rounded border border-yellow-200 dark:border-yellow-900/50 flex items-center gap-1">
                                                      <Clock size={12} /> Aguardando
                                                   </span>
                                                ) : (
@@ -793,8 +771,8 @@ const DivvyDetailContent: React.FC = () => {
 
                 {/* Section 2: Visual Net Balance */}
                 <div className="grid md:grid-cols-2 gap-6">
-                    <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
-                        <h3 className="text-lg font-bold text-gray-900 mb-4">Balanço Geral</h3>
+                    <div className="bg-white dark:bg-gray-800 p-6 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm">
+                        <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-4">Balanço Geral</h3>
                         <div className="space-y-4">
                             {members.map(m => {
                                 const balance = calculateBalances.balances[m.user_id] || 0;
@@ -805,16 +783,16 @@ const DivvyDetailContent: React.FC = () => {
                                 return (
                                     <div key={m.user_id} className="flex flex-col gap-1">
                                         <div className="flex justify-between items-center text-sm">
-                                            <span className="font-medium text-gray-700">{getMemberName(m.user_id)}</span>
-                                            <span className={`font-bold ${isPositive ? 'text-green-600' : isNegative ? 'text-red-500' : 'text-gray-400'}`}>
+                                            <span className="font-medium text-gray-700 dark:text-gray-300">{getMemberName(m.user_id)}</span>
+                                            <span className={`font-bold ${isPositive ? 'text-green-600 dark:text-green-400' : isNegative ? 'text-red-500 dark:text-red-400' : 'text-gray-400'}`}>
                                                 {isZero ? 'Zerado' : (isPositive ? `+ ${formatMoney(balance)}` : `- ${formatMoney(Math.abs(balance))}`)}
                                             </span>
                                         </div>
                                         {/* Visual Bar */}
-                                        <div className="w-full bg-gray-100 h-2 rounded-full overflow-hidden flex">
+                                        <div className="w-full bg-gray-100 dark:bg-gray-700 h-2 rounded-full overflow-hidden flex">
                                             {isPositive && <div className="h-full bg-green-500" style={{ width: '100%' }}></div>}
                                             {isNegative && <div className="h-full bg-red-500" style={{ width: '100%' }}></div>}
-                                            {isZero && <div className="h-full bg-gray-300 w-full"></div>}
+                                            {isZero && <div className="h-full bg-gray-300 dark:bg-gray-600 w-full"></div>}
                                         </div>
                                     </div>
                                 );
@@ -822,23 +800,23 @@ const DivvyDetailContent: React.FC = () => {
                         </div>
                     </div>
 
-                    <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
-                        <h3 className="text-lg font-bold text-gray-900 mb-4">Detalhes de Consumo</h3>
+                    <div className="bg-white dark:bg-gray-800 p-6 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm">
+                        <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-4">Detalhes de Consumo</h3>
                         <div className="space-y-4 max-h-[300px] overflow-y-auto pr-2">
                             {members.map(m => {
                                 const paid = calculateBalances.totalPaid[m.user_id] || 0;
                                 const consumed = calculateBalances.totalConsumed[m.user_id] || 0;
                                 
                                 return (
-                                    <div key={m.user_id} className="p-3 bg-gray-50 rounded-lg border border-gray-100">
+                                    <div key={m.user_id} className="p-3 bg-gray-50 dark:bg-gray-700/30 rounded-lg border border-gray-100 dark:border-gray-700">
                                         <div className="flex justify-between items-center mb-1">
-                                            <span className="font-bold text-gray-900">{getMemberName(m.user_id, false)}</span>
+                                            <span className="font-bold text-gray-900 dark:text-white">{getMemberName(m.user_id, false)}</span>
                                         </div>
-                                        <div className="flex justify-between text-xs text-gray-600 mt-2">
+                                        <div className="flex justify-between text-xs text-gray-600 dark:text-gray-400 mt-2">
                                             <span className="flex items-center gap-1"><TrendingUp size={12} className="text-green-500"/> Pagou:</span>
                                             <span className="font-medium">{formatMoney(paid)}</span>
                                         </div>
-                                        <div className="flex justify-between text-xs text-gray-600 mt-1">
+                                        <div className="flex justify-between text-xs text-gray-600 dark:text-gray-400 mt-1">
                                             <span className="flex items-center gap-1"><TrendingDown size={12} className="text-red-500"/> Consumiu:</span>
                                             <span className="font-medium">{formatMoney(consumed)}</span>
                                         </div>
@@ -853,7 +831,7 @@ const DivvyDetailContent: React.FC = () => {
 
         {/* TAB 3: CHARTS */}
         {activeTab === 'charts' && (
-          <div className="bg-white p-6 rounded-xl border border-gray-100">
+          <div className="bg-white dark:bg-gray-800 p-6 rounded-xl border border-gray-100 dark:border-gray-700">
              <ExpenseCharts expenses={expenses} />
           </div>
         )}
@@ -867,23 +845,23 @@ const DivvyDetailContent: React.FC = () => {
               const roleLabel = divvy.creator_id === member.user_id ? "Criador e Membro" : "Membro";
               
               return (
-                <div key={member.id} className="bg-white p-4 rounded-lg border border-gray-100 flex items-center justify-between">
+                <div key={member.id} className="bg-white dark:bg-gray-800 p-4 rounded-lg border border-gray-100 dark:border-gray-700 flex items-center justify-between">
                   <div className="flex items-center gap-3">
                     {avatar ? (
-                       <img src={avatar} alt={name} className="h-10 w-10 rounded-full object-cover border border-gray-200" />
+                       <img src={avatar} alt={name} className="h-10 w-10 rounded-full object-cover border border-gray-200 dark:border-gray-600" />
                     ) : (
-                      <div className="h-10 w-10 rounded-full bg-brand-100 flex items-center justify-center text-brand-600 font-bold border border-brand-200">
+                      <div className="h-10 w-10 rounded-full bg-brand-100 dark:bg-brand-900/30 flex items-center justify-center text-brand-600 dark:text-brand-400 font-bold border border-brand-200 dark:border-brand-800">
                         {name.charAt(0).toUpperCase()}
                       </div>
                     )}
                     <div>
-                      <p className="font-medium text-gray-900">{name}</p>
-                      <p className="text-xs text-gray-500 capitalize">{roleLabel}</p>
+                      <p className="font-medium text-gray-900 dark:text-white">{name}</p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400 capitalize">{roleLabel}</p>
                     </div>
                   </div>
                   <button 
                      onClick={() => handleOpenPaymentInfo(member.user_id)}
-                     className="text-brand-600 hover:bg-brand-50 p-2 rounded-full transition-colors"
+                     className="text-brand-600 dark:text-brand-400 hover:bg-brand-50 dark:hover:bg-brand-900/20 p-2 rounded-full transition-colors"
                   >
                      <CreditCard size={20} />
                   </button>
@@ -901,24 +879,24 @@ const DivvyDetailContent: React.FC = () => {
         {viewingExpense && (
           <div className="space-y-6">
             <div className="flex items-center justify-between">
-               <h3 className="text-lg font-bold text-gray-900">{viewingExpense.description || viewingExpense.category}</h3>
+               <h3 className="text-lg font-bold text-gray-900 dark:text-white">{viewingExpense.description || viewingExpense.category}</h3>
                <div className="text-right">
-                  <p className="text-2xl font-bold text-brand-600">{formatMoney(viewingExpense.amount)}</p>
-                  <p className="text-xs text-gray-500">Pago por {getMemberName(viewingExpense.paid_by_user_id)}</p>
+                  <p className="text-2xl font-bold text-brand-600 dark:text-brand-400">{formatMoney(viewingExpense.amount)}</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">Pago por {getMemberName(viewingExpense.paid_by_user_id)}</p>
                </div>
             </div>
-            <div className="border-t border-gray-100 pt-4">
-               <h4 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2"><Users size={16} /> Como foi dividido:</h4>
+            <div className="border-t border-gray-100 dark:border-gray-700 pt-4">
+               <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-200 mb-3 flex items-center gap-2"><Users size={16} /> Como foi dividido:</h4>
                {loadingView ? <LoadingSpinner /> : (
-                 <div className="bg-gray-50 rounded-lg p-3 space-y-2 max-h-48 overflow-y-auto">
+                 <div className="bg-gray-50 dark:bg-gray-700/30 rounded-lg p-3 space-y-2 max-h-48 overflow-y-auto">
                     {members.map(m => {
                        const split = viewingSplits.find(s => s.participant_user_id === m.user_id);
                        const amountOwed = split ? split.amount_owed : 0;
                        if (amountOwed <= 0) return null;
                        return (
                          <div key={m.user_id} className="flex justify-between items-center text-sm">
-                            <span className="text-gray-700">{getMemberName(m.user_id)}</span>
-                            <span className="font-medium text-gray-900">{formatMoney(amountOwed)}</span>
+                            <span className="text-gray-700 dark:text-gray-300">{getMemberName(m.user_id)}</span>
+                            <span className="font-medium text-gray-900 dark:text-white">{formatMoney(amountOwed)}</span>
                          </div>
                        );
                     })}
@@ -945,8 +923,8 @@ const DivvyDetailContent: React.FC = () => {
               <Input label="Valor (R$)" type="number" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} required placeholder="0.00" className="text-lg font-bold" />
               <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Categoria</label>
-                    <select className="w-full rounded-lg border border-gray-300 px-3 py-2 bg-white" value={category} onChange={(e) => setCategory(e.target.value)}>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Categoria</label>
+                    <select className="w-full rounded-lg border border-gray-300 dark:border-gray-600 px-3 py-2 bg-white dark:bg-gray-800 text-gray-900 dark:text-white" value={category} onChange={(e) => setCategory(e.target.value)}>
                       <option value="food">🍽️ Alimentação</option>
                       <option value="transport">🚗 Transporte</option>
                       <option value="accommodation">🏨 Hospedagem</option>
@@ -960,46 +938,46 @@ const DivvyDetailContent: React.FC = () => {
               </div>
               <Input label="Descrição" value={desc} onChange={(e) => setDesc(e.target.value)} placeholder="Ex: Jantar no centro" />
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Quem pagou?</label>
-                <select className="w-full rounded-lg border border-gray-300 px-3 py-2 bg-white" value={payerId} onChange={(e) => setPayerId(e.target.value)}>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Quem pagou?</label>
+                <select className="w-full rounded-lg border border-gray-300 dark:border-gray-600 px-3 py-2 bg-white dark:bg-gray-800 text-gray-900 dark:text-white" value={payerId} onChange={(e) => setPayerId(e.target.value)}>
                   {members.map(m => (
                     <option key={m.user_id} value={m.user_id}>{getMemberName(m.user_id)}</option>
                   ))}
                 </select>
               </div>
            </div>
-           <hr className="border-gray-200" />
+           <hr className="border-gray-200 dark:border-gray-700" />
            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Divisão</label>
-              <div className="flex bg-gray-100 rounded-lg p-1 mb-3">
-                <button type="button" onClick={() => setSplitMode('equal')} className={`flex-1 py-1.5 text-sm font-medium rounded-md ${splitMode === 'equal' ? 'bg-white shadow-sm text-brand-600' : 'text-gray-500'}`}>Igual</button>
-                <button type="button" onClick={() => setSplitMode('amount')} className={`flex-1 py-1.5 text-sm font-medium rounded-md ${splitMode === 'amount' ? 'bg-white shadow-sm text-brand-600' : 'text-gray-500'}`}>Valor (R$)</button>
-                <button type="button" onClick={() => setSplitMode('percentage')} className={`flex-1 py-1.5 text-sm font-medium rounded-md ${splitMode === 'percentage' ? 'bg-white shadow-sm text-brand-600' : 'text-gray-500'}`}>%</button>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Divisão</label>
+              <div className="flex bg-gray-100 dark:bg-gray-700 rounded-lg p-1 mb-3">
+                <button type="button" onClick={() => setSplitMode('equal')} className={`flex-1 py-1.5 text-sm font-medium rounded-md ${splitMode === 'equal' ? 'bg-white dark:bg-gray-600 shadow-sm text-brand-600 dark:text-brand-300' : 'text-gray-500 dark:text-gray-400'}`}>Igual</button>
+                <button type="button" onClick={() => setSplitMode('amount')} className={`flex-1 py-1.5 text-sm font-medium rounded-md ${splitMode === 'amount' ? 'bg-white dark:bg-gray-600 shadow-sm text-brand-600 dark:text-brand-300' : 'text-gray-500 dark:text-gray-400'}`}>Valor (R$)</button>
+                <button type="button" onClick={() => setSplitMode('percentage')} className={`flex-1 py-1.5 text-sm font-medium rounded-md ${splitMode === 'percentage' ? 'bg-white dark:bg-gray-600 shadow-sm text-brand-600 dark:text-brand-300' : 'text-gray-500 dark:text-gray-400'}`}>%</button>
               </div>
               <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
                 {members.map(m => {
                   const isSelected = splitValues[m.user_id] === "1";
                   const equalValue = totalAmount / Math.max(1, Object.values(splitValues).filter(v => v === "1").length);
                   return (
-                    <div key={m.user_id} className="flex items-center justify-between p-2 rounded border border-gray-100 hover:bg-gray-50">
+                    <div key={m.user_id} className="flex items-center justify-between p-2 rounded border border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50">
                       <div className="flex items-center gap-2 overflow-hidden">
                         {splitMode === 'equal' && (
                            <input type="checkbox" checked={isSelected} onChange={() => toggleMemberSelection(m.user_id)} className="w-4 h-4 text-brand-600 rounded border-gray-300" />
                         )}
-                        <span className={`text-sm truncate ${splitMode === 'equal' && !isSelected ? 'text-gray-400' : 'text-gray-700'}`}>{getMemberName(m.user_id)}</span>
+                        <span className={`text-sm truncate ${splitMode === 'equal' && !isSelected ? 'text-gray-400 dark:text-gray-500' : 'text-gray-700 dark:text-gray-300'}`}>{getMemberName(m.user_id)}</span>
                       </div>
                       <div className="flex items-center gap-2">
                         {splitMode === 'equal' ? (
-                           isSelected ? <span className="text-sm font-medium text-gray-900">{formatMoney(equalValue)}</span> : <span className="text-xs text-gray-400">-</span>
+                           isSelected ? <span className="text-sm font-medium text-gray-900 dark:text-white">{formatMoney(equalValue)}</span> : <span className="text-xs text-gray-400">-</span>
                         ) : (
-                           <input type="number" step={splitMode === 'amount' ? "0.01" : "1"} value={splitValues[m.user_id] || ''} onChange={(e) => handleSplitValueChange(m.user_id, e.target.value)} className="w-24 pl-2 py-1 text-right text-sm border rounded" placeholder="0" />
+                           <input type="number" step={splitMode === 'amount' ? "0.01" : "1"} value={splitValues[m.user_id] || ''} onChange={(e) => handleSplitValueChange(m.user_id, e.target.value)} className="w-24 pl-2 py-1 text-right text-sm border rounded dark:bg-gray-700 dark:border-gray-600 dark:text-white" placeholder="0" />
                         )}
                       </div>
                     </div>
                   );
                 })}
               </div>
-              <div className={`mt-2 text-sm text-right font-medium ${isSplitValid ? 'text-green-600' : 'text-red-500'}`}>{splitMessage}</div>
+              <div className={`mt-2 text-sm text-right font-medium ${isSplitValid ? 'text-green-600 dark:text-green-400' : 'text-red-500 dark:text-red-400'}`}>{splitMessage}</div>
            </div>
            <div className="flex justify-end gap-3 pt-2">
              <Button type="button" variant="ghost" onClick={() => setIsExpenseModalOpen(false)}>Cancelar</Button>
@@ -1016,19 +994,19 @@ const DivvyDetailContent: React.FC = () => {
                   const pixKey = method.raw_pix_key || method.pix_key || method.pix_key_masked;
                   
                   return (
-                    <div key={method.id} className="border border-gray-200 rounded-lg p-4 bg-gray-50">
+                    <div key={method.id} className="border border-gray-200 dark:border-gray-700 rounded-lg p-4 bg-gray-50 dark:bg-gray-700/30">
                        <div className="flex items-center gap-3 mb-2">
                           <span className="text-2xl">{isPix ? '💠' : '🏦'}</span>
-                          <h4 className="font-bold text-gray-900">{isPix ? 'Pix' : 'Conta Bancária'}</h4>
+                          <h4 className="font-bold text-gray-900 dark:text-white">{isPix ? 'Pix' : 'Conta Bancária'}</h4>
                        </div>
                        
                        <div className="space-y-3 mt-3">
                           {isPix ? (
                              <div className="space-y-3">
                                 <div className="flex items-center gap-2">
-                                  <input readOnly value={pixKey || 'Chave indisponível'} className="flex-1 bg-white p-3 rounded border border-gray-200 font-mono text-sm" />
-                                  <button onClick={() => handleCopy(pixKey || '', method.id)} className="p-3 bg-white border border-gray-200 rounded hover:bg-gray-50">
-                                     {copiedKey === method.id ? <Check size={20} className="text-green-600" /> : <Copy size={20} />}
+                                  <input readOnly value={pixKey || 'Chave indisponível'} className="flex-1 bg-white dark:bg-gray-800 p-3 rounded border border-gray-200 dark:border-gray-600 font-mono text-sm text-gray-800 dark:text-gray-200" />
+                                  <button onClick={() => handleCopy(pixKey || '', method.id)} className="p-3 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded hover:bg-gray-50 dark:hover:bg-gray-700">
+                                     {copiedKey === method.id ? <Check size={20} className="text-green-600" /> : <Copy size={20} className="text-gray-500 dark:text-gray-400" />}
                                   </button>
                                 </div>
                                 <Button variant="outline" size="sm" fullWidth onClick={() => handleGenerateQR(pixKey || '', method.id)} disabled={!pixKey} className="flex items-center justify-center gap-2"><QrCode size={16} /> Gerar QR Code</Button>
@@ -1039,7 +1017,7 @@ const DivvyDetailContent: React.FC = () => {
                                 )}
                              </div>
                           ) : (
-                             <div className="text-sm text-gray-600 bg-white p-3 rounded border border-gray-200 space-y-1">
+                             <div className="text-sm text-gray-600 dark:text-gray-300 bg-white dark:bg-gray-800 p-3 rounded border border-gray-200 dark:border-gray-600 space-y-1">
                                 <p><span className="font-semibold">Banco:</span> {(method as any).bank_code} - {method.bank_name}</p>
                                 <p><span className="font-semibold">Agência:</span> {method.agency || method.raw_agency}</p>
                                 <p><span className="font-semibold">Conta:</span> {method.account_number || method.raw_account_number}</p>
@@ -1050,7 +1028,6 @@ const DivvyDetailContent: React.FC = () => {
                   );
                })}
             
-            {/* Atalho para marcar como pago direto do modal */}
             {payingToId && payingToId !== user?.id && !divvy?.is_archived && (
                <Button 
                  variant="primary" 
