@@ -79,12 +79,22 @@ const DivvyDetailContent: React.FC = () => {
   const fetchDivvyData = async () => {
     try {
       setAccessDenied(false);
-      // 1. Fetch Divvy Details
-      // Se o RLS estiver ativo e o usuário não tiver permissão, isso retornará data: null ou erro
-      const { data: divvyData, error: divvyError } = await supabase.from('divvies').select('*').eq('id', divvyId).single();
       
-      if (divvyError || !divvyData) {
-         // Se deu erro ou não veio dado, assumimos acesso negado ou inexistente
+      // 1. Fetch Divvy Details
+      // A política RLS 'check_divvy_access' garantirá que só retorne se o usuário for membro/criador.
+      const { data: divvyData, error: divvyError } = await supabase
+        .from('divvies')
+        .select('*')
+        .eq('id', divvyId)
+        .maybeSingle(); // Use maybeSingle para evitar erro 406 se não houver linhas
+      
+      if (divvyError) {
+        console.error("Erro ao buscar divvy:", divvyError);
+        throw divvyError;
+      }
+
+      if (!divvyData) {
+         // Se não retornou dados (bloqueado pelo RLS ou não existe), define acesso negado
          setAccessDenied(true);
          setLoading(false);
          return;
@@ -93,6 +103,7 @@ const DivvyDetailContent: React.FC = () => {
       setDivvy(divvyData);
 
       // 2. Fetch Members
+      // A política RLS permite ver membros se 'check_divvy_access' for true para este grupo
       const { data: memberData, error: memberError } = await supabase
         .from('divvy_members')
         .select('*')
@@ -100,20 +111,10 @@ const DivvyDetailContent: React.FC = () => {
         
       if (memberError) throw memberError;
 
-      // Validação Extra no Front: Usuário é criador ou membro?
-      const isCreator = divvyData.creator_id === user?.id;
-      const isMember = memberData?.some(m => m.user_id === user?.id);
-
-      if (!isCreator && !isMember) {
-         setAccessDenied(true);
-         setLoading(false);
-         return;
-      }
-
       if (memberData && memberData.length > 0) {
         const userIds = memberData.map(m => m.user_id);
         
-        // 3. FETCH PROFILES EXPLICITLY (Crucial for Names)
+        // 3. FETCH PROFILES EXPLICITLY
         const { data: profilesData, error: profilesError } = await supabase
           .from('profiles')
           .select('*')
@@ -121,7 +122,6 @@ const DivvyDetailContent: React.FC = () => {
 
         if (profilesError) console.error("Error fetching profiles:", profilesError);
 
-        // Merge profiles into members
         const mergedMembers = memberData.map(member => {
             const profile = profilesData?.find(p => p.id === member.user_id);
             return {
@@ -156,22 +156,15 @@ const DivvyDetailContent: React.FC = () => {
       }
 
     } catch (error: any) {
-      console.error("Fetch Error:", error);
-      // Códigos de erro específicos do Postgres para permissão/não encontrado
-      if (error.code === 'PGRST116' || error.code === '42501') {
-         setAccessDenied(true);
-      } else {
-         toast.error("Erro ao carregar dados.");
-      }
+      console.error("Fetch Cycle Error:", error);
+      // Erro de permissão do Postgres ou erro de conexão
+      toast.error("Erro ao sincronizar dados do grupo.");
     } finally {
       setLoading(false);
     }
   };
 
-  /**
-   * Helper: Get Member Name Display
-   * Priority: Nickname -> Full Name -> Email Username
-   */
+  /** Helper: Get Member Name Display */
   const getMemberName = (userId: string, includeYouSuffix = true) => {
     const member = members.find(m => m.user_id === userId);
     if (!member) return 'Usuário Desconhecido';
@@ -185,12 +178,11 @@ const DivvyDetailContent: React.FC = () => {
     } else if (profile?.full_name && profile.full_name.trim()) {
       displayName = profile.full_name;
     } else if (member.email) {
-      displayName = member.email.split('@')[0]; // Fallback to email username
+      displayName = member.email.split('@')[0];
     } else {
       displayName = 'Membro';
     }
     
-    // Capitalize first letter
     displayName = displayName.charAt(0).toUpperCase() + displayName.slice(1);
 
     if (isMe && includeYouSuffix) {
@@ -222,7 +214,6 @@ const DivvyDetailContent: React.FC = () => {
 
     // 2. Debit Consumers
     allSplits.forEach(split => {
-        const amount = split.amount; // Changed from amount_owed to match your types if changed, usually amount_owed in DB
         const val = split.amount_owed || 0;
         if (totalConsumed[split.participant_user_id] !== undefined) {
             totalConsumed[split.participant_user_id] += val;
@@ -300,7 +291,6 @@ const DivvyDetailContent: React.FC = () => {
     setDate(new Date().toISOString().split('T')[0]);
     setPayerId(user.id);
     
-    // Default split: Equal, all selected
     setSplitMode('equal');
     const initialSplits: Record<string, string> = {};
     members.forEach(m => initialSplits[m.user_id] = "1");
@@ -320,7 +310,6 @@ const DivvyDetailContent: React.FC = () => {
     setDate(exp.date);
     setPayerId(exp.paid_by_user_id);
 
-    // Fetch existing splits to populate form
     const { data: splitsData } = await supabase
       .from('expense_splits')
       .select('*')
@@ -331,7 +320,6 @@ const DivvyDetailContent: React.FC = () => {
     if (splits && splits.length > 0) {
       const loadedSplits: Record<string, string> = {};
       const firstAmount = splits[0].amount_owed;
-      // Heuristic: if all splits roughly equal, assume equal mode
       const isRoughlyEqual = splits.every(s => Math.abs(s.amount_owed - firstAmount) < 0.05);
       
       if (isRoughlyEqual) {
@@ -353,7 +341,7 @@ const DivvyDetailContent: React.FC = () => {
     setIsExpenseModalOpen(true);
   };
 
-  // --- Split Logic Handlers (Restored) ---
+  // --- Split Logic Handlers ---
   const totalAmount = parseFloat(amount) || 0;
   
   const toggleMemberSelection = (userId: string) => {
@@ -616,10 +604,10 @@ const DivvyDetailContent: React.FC = () => {
           </div>
         )}
 
-        {/* TAB 2: BALANCES (GASTOS) - REDESIGNED */}
+        {/* TAB 2: BALANCES (GASTOS) */}
         {activeTab === 'balances' && (
             <div className="space-y-8 animate-fade-in-down">
-                {/* Section 1: Debt Settlement Plan (Who owes Whom) */}
+                {/* Section 1: Debt Settlement Plan */}
                 <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
                     <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
                         <ArrowRight size={20} className="text-brand-600" />
