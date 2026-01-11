@@ -6,7 +6,7 @@ import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { ProtectedRoute } from '../components/ProtectedRoute';
 import toast from 'react-hot-toast';
-import { User, CreditCard, Plus, Trash2, Star, Pencil, X, Camera, Loader2 } from 'lucide-react';
+import { User, CreditCard, Plus, Trash2, Star, Pencil, X, Camera, Loader2, Copy, QrCode } from 'lucide-react';
 import { PaymentMethod, Bank } from '../types';
 import { POPULAR_BANKS } from '../lib/constants';
 
@@ -84,25 +84,18 @@ function ProfileContent() {
 
       const file = event.target.files[0];
       const fileExt = file.name.split('.').pop();
-      // Nome do arquivo: userId/timestamp.ext (timestamp evita cache do navegador)
       const fileName = `${user.id}/${Date.now()}.${fileExt}`;
 
-      // 1. Upload para o Storage
       const { error: uploadError } = await supabase.storage
         .from('avatars')
-        .upload(fileName, file, {
-           upsert: true
-        });
+        .upload(fileName, file, { upsert: true });
 
       if (uploadError) throw uploadError;
 
-      // 2. Obter URL Pública
       const { data: { publicUrl } } = supabase.storage
         .from('avatars')
         .getPublicUrl(fileName);
 
-      // 3. Atualizar Tabela Profiles (Persistência Real)
-      // Usamos upsert para garantir que crie a linha caso ela não exista
       const { error: updateError } = await supabase
         .from('profiles')
         .upsert({ 
@@ -114,23 +107,17 @@ function ProfileContent() {
 
       if (updateError) throw updateError;
       
-      // 4. Update auth metadata (Sessão Atual)
       await supabase.auth.updateUser({
         data: { avatar_url: publicUrl }
       });
 
       setAvatarUrl(publicUrl);
       toast.success('Foto de perfil atualizada!');
-      
-      // Força um reload suave da página ou avisa componentes para atualizar se necessário
-      // (O layout deve reagir a mudança do user metadata ou fazer fetch do profile)
-      
     } catch (error: any) {
       console.error(error);
       toast.error('Erro ao fazer upload: ' + error.message);
     } finally {
       setAvatarLoading(false);
-      // Limpar input
       if (fileInputRef.current) fileInputRef.current.value = '';
     }
   };
@@ -141,7 +128,6 @@ function ProfileContent() {
       
       setAvatarLoading(true);
       try {
-          // Atualiza tabela para null
           const { error } = await supabase
             .from('profiles')
             .upsert({ 
@@ -153,7 +139,6 @@ function ProfileContent() {
 
           if (error) throw error;
           
-          // Atualiza metadata
           await supabase.auth.updateUser({
              data: { avatar_url: null }
           });
@@ -171,7 +156,6 @@ function ProfileContent() {
     if (!user) return;
 
     try {
-        // Tenta buscar via RPC primeiro (mais robusto e formatado)
         const { data: methods, error } = await supabase.rpc('get_user_payment_methods', {
             p_user_id: user.id
         });
@@ -179,7 +163,6 @@ function ProfileContent() {
         if (!error && methods) {
             setPaymentMethods(methods as any);
         } else {
-            // Fallback para select direto caso RPC falhe ou não exista
             const { data: methodsDirect } = await supabase
               .from('user_payment_methods')
               .select('*, banks(name, short_name)')
@@ -193,7 +176,6 @@ function ProfileContent() {
         console.error("Error fetching payments", e);
     }
 
-    // Fetch banks
     const { data: banksData } = await supabase.from('banks').select('*').order('name');
     if (banksData) setBanks(banksData);
   };
@@ -204,7 +186,6 @@ function ProfileContent() {
     setProfileLoading(true);
 
     try {
-      // 1. Update Auth Metadata (Used for session)
       const { error: authError } = await supabase.auth.updateUser({
         data: {
           full_name: name,
@@ -213,7 +194,6 @@ function ProfileContent() {
       });
       if (authError) throw authError;
 
-      // 2. Update Public Profiles Table (Used for Divvy Groups display)
       const { error: profileError } = await supabase
         .from('profiles')
         .upsert({
@@ -238,7 +218,6 @@ function ProfileContent() {
       resetPaymentForm();
       setEditingId(null);
       setIsFormOpen(true);
-      // Scroll to form
       setTimeout(() => {
         const formElement = document.getElementById('payment-form-section');
         if (formElement) formElement.scrollIntoView({ behavior: 'smooth' });
@@ -249,11 +228,9 @@ function ProfileContent() {
     setEditingId(method.id);
     setMethodType(method.method_type === 'bank_account' || method.type === 'bank_account' ? 'bank_account' : 'pix');
     
-    // Pix Fields
     setPixKey(method.raw_pix_key || method.pix_key || '');
     setPixKeyType((method.pix_key_type as string) || 'cpf');
     
-    // Bank Fields
     setSelectedBankId(method.bank_id || '');
     setAgency(method.raw_agency || method.agency || '');
     setAccountNumber(method.raw_account_number || method.account_number || '');
@@ -263,8 +240,6 @@ function ProfileContent() {
     setHolderDoc(method.account_holder_document || '');
 
     setIsFormOpen(true);
-    
-    // Scroll to form
     setTimeout(() => {
         const formElement = document.getElementById('payment-form-section');
         if (formElement) formElement.scrollIntoView({ behavior: 'smooth' });
@@ -277,8 +252,7 @@ function ProfileContent() {
     setPaymentLoading(true);
 
     try {
-      // Se for o primeiro método, ele é Primary e Visible.
-      // Se não for o primeiro, ele nasce oculto (não principal), a menos que o usuário o marque depois.
+      // Se for o primeiro método, ele é Primary e Visible por padrão.
       const isFirst = paymentMethods.length === 0;
 
       const payload: any = {
@@ -293,7 +267,6 @@ function ProfileContent() {
         if (!pixKey) throw new Error("Chave PIX é obrigatória");
         payload.pix_key = pixKey;
         payload.pix_key_type = pixKeyType;
-        // Limpar campos de banco
         payload.bank_id = null;
         payload.agency = null;
         payload.account_number = null;
@@ -305,12 +278,10 @@ function ProfileContent() {
         payload.account_type = accountType;
         payload.account_holder_name = holderName || name;
         payload.account_holder_document = holderDoc;
-        // Limpar campos pix
         payload.pix_key = null;
       }
 
       if (editingId) {
-        // UPDATE
         delete payload.is_primary;
         delete payload.is_visible_in_groups;
 
@@ -321,7 +292,6 @@ function ProfileContent() {
         if (error) throw error;
         toast.success('Método atualizado!');
       } else {
-        // INSERT
         const { error } = await supabase.from('user_payment_methods').insert(payload);
         if (error) throw error;
         toast.success('Método adicionado!');
@@ -356,26 +326,33 @@ function ProfileContent() {
     }
   };
 
-  const handleSetPrimary = async (e: React.MouseEvent, id: string) => {
+  const handleSetPrimary = async (e: React.MouseEvent, id: string, currentStatus: boolean) => {
     e.stopPropagation();
     if (!user) return;
     
-    const loadingToast = toast.loading('Definindo como principal...');
+    // Toggle Logic: Se for true, vira false. Se for false, vira true (e desliga os outros).
+    const newStatus = !currentStatus;
+    const loadingToast = toast.loading(newStatus ? 'Definindo como principal...' : 'Removendo principal...');
 
     try {
-        await supabase
-            .from('user_payment_methods')
-            .update({ is_primary: false, is_visible_in_groups: false })
-            .eq('user_id', user.id);
+        if (newStatus) {
+            // Se estou ativando este, preciso desativar todos os outros primeiro
+            await supabase
+                .from('user_payment_methods')
+                .update({ is_primary: false, is_visible_in_groups: false })
+                .eq('user_id', user.id);
+        }
 
+        // Atualiza o alvo (seja para ligar ou desligar)
+        // Regra de negócio: Principal = Visível
         const { error } = await supabase
             .from('user_payment_methods')
-            .update({ is_primary: true, is_visible_in_groups: true })
+            .update({ is_primary: newStatus, is_visible_in_groups: newStatus })
             .eq('id', id);
 
         if (error) throw error;
 
-        toast.success("Método principal atualizado!", { id: loadingToast });
+        toast.success(newStatus ? "Método definido como principal!" : "Método não é mais principal.", { id: loadingToast });
         fetchPaymentData();
     } catch (error: any) {
         toast.error("Erro ao atualizar: " + error.message, { id: loadingToast });
@@ -479,7 +456,7 @@ function ProfileContent() {
                 Métodos de Pagamento
             </h2>
             <p className="text-sm text-gray-500 mt-1">
-                Apenas o método marcado com estrela (★) será visível para seus amigos.
+                O método destacado com estrela (★) será exibido para seus amigos.
             </p>
           </div>
           {!isFormOpen && (
@@ -640,11 +617,12 @@ function ProfileContent() {
           </div>
         )}
 
-        <div className="space-y-4">
+        {/* --- GRID LAYOUT FOR CARDS --- */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {paymentMethods.length === 0 ? (
-            <p className="text-gray-500 text-center py-8 bg-gray-50 rounded-lg border border-dashed border-gray-300">
+            <div className="md:col-span-2 text-gray-500 text-center py-8 bg-gray-50 rounded-lg border border-dashed border-gray-300">
                 Nenhum método de pagamento cadastrado.
-            </p>
+            </div>
           ) : (
             paymentMethods.map(method => {
               const isPix = method.type === 'pix' || method.method_type === 'pix' || !!method.pix_key;
@@ -653,68 +631,82 @@ function ProfileContent() {
               return (
               <div 
                 key={method.id} 
-                onClick={() => handleEdit(method)}
-                className={`relative border rounded-lg p-4 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 transition-all cursor-pointer group hover:shadow-md ${isPrimary ? 'bg-brand-50 border-brand-200' : 'bg-white border-gray-200 hover:border-brand-300'}`}
+                className={`
+                    relative rounded-xl p-5 border transition-all hover:shadow-md flex flex-col justify-between
+                    ${isPrimary 
+                        ? 'bg-brand-50/50 border-brand-500 ring-1 ring-brand-500' 
+                        : 'bg-white border-gray-200 hover:border-brand-200'
+                    }
+                `}
               >
-                <div className="flex items-center gap-4">
-                  <div className={`h-12 w-12 rounded-full flex items-center justify-center text-xl ${isPrimary ? 'bg-brand-200 text-brand-700' : 'bg-gray-100 text-gray-500'}`}>
+                {/* Badge Principal */}
+                {isPrimary && (
+                    <div className="absolute top-0 right-0 bg-brand-600 text-white text-[10px] uppercase font-bold px-3 py-1 rounded-bl-lg rounded-tr-lg shadow-sm">
+                        Principal
+                    </div>
+                )}
+
+                <div className="flex items-start gap-4 mb-4">
+                  <div className={`
+                    h-12 w-12 rounded-lg flex items-center justify-center text-2xl shadow-sm
+                    ${isPix ? 'bg-teal-50 text-teal-600' : 'bg-blue-50 text-blue-600'}
+                  `}>
                     {isPix ? '💠' : '🏦'}
                   </div>
-                  <div>
+                  <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
-                      <p className={`font-bold ${isPrimary ? 'text-brand-900' : 'text-gray-900'}`}>
+                      <h3 className="font-bold text-gray-900 truncate" title={method.display_text}>
                           {method.display_text}
-                      </p>
-                      {isPrimary && (
-                        <span className="text-xs bg-brand-600 text-white px-2 py-0.5 rounded-full font-bold shadow-sm">
-                            Principal
-                        </span>
-                      )}
+                      </h3>
                     </div>
+                    
                     {!isPix && (
                         <p className="text-sm text-gray-500 mt-1">
-                           {method.bank_name || method.banks?.name} • Ag: {method.agency}
+                           {method.bank_name || method.banks?.name}
+                           <br />
+                           Ag: {method.agency}
                         </p>
                     )}
                     {isPix && (
-                        <p className="text-sm text-gray-500 font-mono mt-1">
-                           Chave: {method.pix_key || method.pix_key_masked}
+                        <p className="text-sm text-gray-500 font-mono mt-1 break-all">
+                           {method.pix_key || method.pix_key_masked}
                         </p>
                     )}
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2 self-end md:self-auto border-t md:border-t-0 border-gray-100 pt-3 md:pt-0 w-full md:w-auto justify-end">
+                <div className="flex items-center justify-between border-t border-gray-100 pt-3 mt-auto">
+                   {/* Botão de Estrela (Favoritar) */}
                    <button 
-                      onClick={(e) => handleSetPrimary(e, method.id)}
-                      disabled={isPrimary}
-                      className={`p-2 rounded-full transition-colors flex items-center gap-2 text-sm font-medium ${
+                      onClick={(e) => handleSetPrimary(e, method.id, isPrimary)}
+                      className={`flex items-center gap-2 text-sm font-medium px-3 py-1.5 rounded-lg transition-colors ${
                           isPrimary 
-                          ? 'text-brand-600 bg-brand-100 cursor-default' 
-                          : 'text-gray-300 hover:text-yellow-500 hover:bg-yellow-50'
+                          ? 'text-brand-700 bg-brand-100 hover:bg-brand-200' 
+                          : 'text-gray-500 hover:text-yellow-600 hover:bg-yellow-50'
                       }`}
-                      title={isPrimary ? "Método Principal (Visível)" : "Definir como Principal"}
+                      title={isPrimary ? "Remover dos favoritos" : "Definir como principal"}
                    >
-                      <Star size={20} fill={isPrimary ? "currentColor" : "none"} />
-                   </button>
-                   
-                   <div className="h-6 w-px bg-gray-200 mx-1"></div>
-
-                   <button 
-                      onClick={(e) => { e.stopPropagation(); handleEdit(method); }}
-                      className="p-2 text-gray-400 hover:text-brand-600 hover:bg-gray-100 rounded-full transition-colors"
-                      title="Editar"
-                   >
-                      <Pencil size={18} />
+                      <Star size={16} fill={isPrimary ? "currentColor" : "none"} />
+                      {isPrimary ? 'Principal' : 'Favoritar'}
                    </button>
 
-                   <button 
-                      onClick={(e) => handleDeleteMethod(e, method.id)}
-                      className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-full transition-colors"
-                      title="Excluir"
-                   >
-                      <Trash2 size={18} />
-                   </button>
+                   <div className="flex gap-1">
+                       <button 
+                          onClick={(e) => { e.stopPropagation(); handleEdit(method); }}
+                          className="p-2 text-gray-400 hover:text-brand-600 hover:bg-gray-50 rounded-lg transition-colors"
+                          title="Editar"
+                       >
+                          <Pencil size={18} />
+                       </button>
+
+                       <button 
+                          onClick={(e) => handleDeleteMethod(e, method.id)}
+                          className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                          title="Excluir"
+                       >
+                          <Trash2 size={18} />
+                       </button>
+                   </div>
                 </div>
               </div>
             )})
