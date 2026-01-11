@@ -2,7 +2,7 @@
 import type { Config } from 'tailwindcss';
 
 const config: Config = {
-  darkMode: 'class', // Habilita o modo escuro via classe CSS 'dark'
+  darkMode: 'class',
   content: [
     './app/**/*.{js,ts,jsx,tsx,mdx}',
     './components/**/*.{js,ts,jsx,tsx,mdx}',
@@ -27,55 +27,33 @@ const config: Config = {
           900: '#4c1d95',
           950: '#2e1065',
         },
+        // Escala Dark personalizada para melhor contraste
         dark: {
-          bg: '#111827',     // gray-900
-          card: '#1f2937',   // gray-800
-          border: '#374151', // gray-700
-          text: '#f9fafb',   // gray-50
-          muted: '#9ca3af',  // gray-400
-        },
-        light: '#f5f5f5',
+          950: '#0a0a0c', // Fundo profundo
+          900: '#121214', // Superfície principal
+          800: '#1e1e20', // Cards e Modais
+          700: '#2a2a2c', // Bordas e Dividers
+          600: '#3a3a3c',
+        }
       },
       screens: {
-        xs: '320px',
-        sm: '375px',
-        md: '768px',
-        lg: '1024px',
-        xl: '1280px',
+        'xs': '375px',
       },
       animation: {
         'ping-slow': 'ping 3s cubic-bezier(0, 0, 0.2, 1) infinite',
-        'bounce-delay-1': 'bounce 1s infinite 200ms',
-        'bounce-delay-2': 'bounce 1s infinite 400ms',
-        'bounce-delay-3': 'bounce 1s infinite 600ms',
         'float': 'float 3s ease-in-out infinite',
-        'draw-circle': 'draw-circle 0.5s ease-out forwards',
-        'draw-check': 'draw-check 0.5s ease-out 0.5s forwards',
-        'slide-in': 'slide-in 0.5s ease-out forwards',
-        'fade-in-down': 'fade-in-down 0.5s ease-out forwards',
+        'fade-in-up': 'fadeInUp 0.5s ease-out forwards',
       },
       keyframes: {
         float: {
           '0%, 100%': { transform: 'translateY(0)' },
           '50%': { transform: 'translateY(-10px)' },
         },
-        'draw-circle': {
-          '0%': { strokeDasharray: '0, 100' },
-          '100%': { strokeDasharray: '100, 100' },
-        },
-        'draw-check': {
-          '0%': { strokeDashoffset: '100' },
-          '100%': { strokeDashoffset: '0' },
-        },
-        'slide-in': {
-          '0%': { transform: 'translateY(20px)', opacity: '0' },
-          '100%': { transform: 'translateY(0)', opacity: '1' },
-        },
-        'fade-in-down': {
-          '0%': { transform: 'translateY(-10px)', opacity: '0' },
-          '100%': { transform: 'translateY(0)', opacity: '1' },
-        },
-      },
+        fadeInUp: {
+          '0%': { opacity: '0', transform: 'translateY(10px)' },
+          '100%': { opacity: '1', transform: 'translateY(0)' },
+        }
+      }
     },
   },
   plugins: [],
