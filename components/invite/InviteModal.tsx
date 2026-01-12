@@ -6,7 +6,7 @@ import { Input } from '../ui/Input';
 import { Modal } from '../ui/Modal';
 import SuccessCheck from '../ui/SuccessCheck';
 import toast from 'react-hot-toast';
-import { Copy, Share2 } from 'lucide-react';
+import { Copy, Share2, Send } from 'lucide-react';
 import QRCode from 'qrcode';
 
 interface InviteModalProps {
@@ -98,6 +98,11 @@ export default function InviteModal({
     window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
   };
 
+  const handleTelegram = () => {
+    const text = `Venha participar do grupo "${divvyName}" no Divvy!`;
+    window.open(`https://t.me/share/url?url=${encodeURIComponent(inviteLink)}&text=${encodeURIComponent(text)}`, '_blank');
+  };
+
   return (
     <Modal
       isOpen={isOpen}
@@ -173,6 +178,12 @@ export default function InviteModal({
               className="flex items-center justify-center gap-2 p-3 rounded-lg bg-green-50 hover:bg-green-100 text-green-700 transition-colors border border-green-200 font-semibold"
             >
               <Share2 size={18} /> Compartilhar no WhatsApp
+            </button>
+            <button
+              onClick={handleTelegram}
+              className="flex items-center justify-center gap-2 p-3 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-600 transition-colors border border-blue-200 font-semibold"
+            >
+              <Send size={18} /> Compartilhar no Telegram
             </button>
           </div>
 

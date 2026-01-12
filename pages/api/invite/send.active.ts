@@ -13,12 +13,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   const supabase = createServerSupabaseClient();
   
-  // 1. Verificar Autenticação
-  // Nota: Em API Routes do Pages Router, pegamos o token do header ou cookies. 
-  // O createServerSupabaseClient usa a service role, então confiamos na validação manual ou passamos o token do cliente.
-  // Aqui, vamos confiar no corpo da requisição contendo o ID do usuário, mas idealmente validaríamos o JWT.
-  // Para simplificar e manter compatibilidade com o hook useAuth no client, vamos validar se o usuário existe no banco.
-  
   const { divvyId, email, invitedByUserId } = req.body;
 
   if (!divvyId || !email || !invitedByUserId) {
@@ -47,30 +41,40 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       .eq('status', 'pending')
       .single();
 
-    if (existing) {
-      return res.status(400).json({ error: 'Já existe um convite pendente para este email.' });
-    }
-
-    // 4. Criar Convite
-    const inviteToken = uuid();
+    let inviteToken;
     const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(); // 7 dias
 
-    const { error: insertError } = await supabase.from('divvyinvites').insert({
-      id: inviteToken,
-      divvyid: divvyId,
-      invitedemail: email.toLowerCase(),
-      invitedbyuserid: invitedByUserId,
-      status: 'pending',
-      expiresat: expiresAt,
-    });
+    if (existing) {
+      // Se já existe, reutilizamos o token, renovamos a validade e reenviamos
+      inviteToken = existing.id;
+      
+      const { error: updateError } = await supabase
+        .from('divvyinvites')
+        .update({ expiresat: expiresAt })
+        .eq('id', inviteToken);
 
-    if (insertError) throw insertError;
+      if (updateError) throw updateError;
+    } else {
+      // 4. Criar Novo Convite
+      inviteToken = uuid();
+
+      const { error: insertError } = await supabase.from('divvyinvites').insert({
+        id: inviteToken,
+        divvyid: divvyId,
+        invitedemail: email.toLowerCase(),
+        invitedbyuserid: invitedByUserId,
+        status: 'pending',
+        expiresat: expiresAt,
+      });
+
+      if (insertError) throw insertError;
+    }
 
     // 5. Preparar dados para email
     const { data: divvy } = await supabase.from('divvies').select('name').eq('id', divvyId).single();
     const { data: inviterProfile } = await supabase.from('userprofiles').select('fullname, displayname').eq('id', invitedByUserId).single();
     
-    // Fallback se não tiver userprofiles preenchido (usa email do auth se possível, mas aqui usamos placeholders)
+    // Fallback se não tiver userprofiles preenchido
     const inviterName = inviterProfile?.displayname || inviterProfile?.fullname || 'Um amigo';
     const divvyName = divvy?.name || 'Grupo de Despesas';
 
