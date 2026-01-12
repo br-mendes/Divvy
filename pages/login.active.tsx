@@ -150,7 +150,14 @@ export default function Login() {
         
         <form onSubmit={handleLogin} className="space-y-4">
           <Input label="Email" type="email" value={email} onChange={e => setEmail(e.target.value)} required placeholder="seu@email.com" />
-          <Input label="Senha" type="password" value={password} onChange={e => setPassword(e.target.value)} required placeholder="••••••••" />
+          <div className="space-y-1">
+            <Input label="Senha" type="password" value={password} onChange={e => setPassword(e.target.value)} required placeholder="••••••••" />
+            <div className="flex justify-end">
+              <Link href="/auth/reset" className="text-xs text-brand-600 hover:underline">
+                Esqueceu a senha?
+              </Link>
+            </div>
+          </div>
           <Button type="submit" fullWidth isLoading={loading}>Entrar</Button>
         </form>
 
