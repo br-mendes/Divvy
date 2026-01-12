@@ -14,7 +14,7 @@ import LoadingSpinner from '../../components/ui/LoadingSpinner';
 import EmptyState from '../../components/ui/EmptyState';
 import { 
   Plus, UserPlus, Receipt, PieChart, Users, Lock, LockOpen, 
-  ArrowRight, Wallet, CheckCircle, Info, Archive, Clock, AlertCircle, Check, LucideIcon
+  ArrowRight, Wallet, CheckCircle, Info, Archive, Clock, AlertTriangle, Check, LucideIcon
 } from 'lucide-react';
 import { ProtectedRoute } from '../../components/ProtectedRoute';
 import toast from 'react-hot-toast';
@@ -79,17 +79,42 @@ const DivvyDetailContent: React.FC = () => {
       const { data: divvyData, error: dErr } = await supabase.from('divvies').select('*').eq('id', divvyId).single();
       if (dErr || !divvyData) { setLoading(false); return; }
 
-      // CRITICAL FIX: Use explicit join syntax `profiles:user_id(*)` to ensure Supabase understands the relationship
+      // 1. Busca recursos básicos em paralelo
       const [membersRes, expensesRes, settlementsRes] = await Promise.all([
-        supabase.from('divvy_members').select('*, profiles:user_id(*)').eq('divvy_id', divvyId),
+        supabase.from('divvy_members').select('*').eq('divvy_id', divvyId),
         supabase.from('expenses').select('*').eq('divvy_id', divvyId).order('date', { ascending: false }),
         supabase.from('settlements').select('*').eq('divvy_id', divvyId).order('created_at', { ascending: false })
       ]);
 
       setDivvy(divvyData);
-      setMembers(membersRes.data || []);
       setExpenses(expensesRes.data || []);
       setSettlements(settlementsRes.data || []);
+
+      // 2. Processamento robusto de Membros e Perfis (Manual Join)
+      // Isso evita falhas caso a Foreign Key não esteja configurada corretamente no banco
+      const membersRaw = membersRes.data || [];
+      let finalMembers: DivvyMember[] = [];
+
+      if (membersRaw.length > 0) {
+          const userIds = membersRaw.map(m => m.user_id);
+          
+          // Busca perfis separadamente
+          const { data: profilesData } = await supabase
+              .from('profiles')
+              .select('*')
+              .in('id', userIds);
+          
+          // Une os dados manualmente no cliente
+          finalMembers = membersRaw.map(m => {
+              const profile = profilesData?.find(p => p.id === m.user_id);
+              return {
+                  ...m,
+                  profiles: profile // Anexa o perfil encontrado
+              };
+          });
+      }
+      
+      setMembers(finalMembers);
 
       if (expensesRes.data && expensesRes.data.length > 0) {
         const { data: splitData } = await supabase.from('expense_splits').select('*').in('expense_id', expensesRes.data.map(e => e.id));
@@ -105,8 +130,8 @@ const DivvyDetailContent: React.FC = () => {
     const m = members.find(m => m.user_id === uid);
     if (!m) return 'Membro desconhecido';
     
-    // Robustez para profiles sendo array ou objeto
-    const profile: any = Array.isArray(m.profiles) ? m.profiles[0] : m.profiles;
+    // Como fizemos o join manual, profiles é um objeto direto, não array
+    const profile: any = m.profiles;
     
     return profile?.nickname || profile?.full_name || m.email?.split('@')[0] || 'Membro';
   };
@@ -359,11 +384,11 @@ const DivvyDetailContent: React.FC = () => {
 
   // Cálculos para exibição no modal
   const assignedTotal: number = splitType === 'exact' 
-    ? Object.values(manualAmounts).reduce((acc: number, curr: string) => acc + (parseFloat(curr) || 0), 0)
+    ? (Object.values(manualAmounts) as string[]).reduce((acc, curr) => acc + (parseFloat(curr) || 0), 0)
     : parseFloat(amount) || 0;
   
   const assignedPercentage: number = splitType === 'percentage'
-    ? Object.values(manualPercentages).reduce((acc: number, curr: string) => acc + (parseFloat(curr) || 0), 0)
+    ? (Object.values(manualPercentages) as string[]).reduce((acc, curr) => acc + (parseFloat(curr) || 0), 0)
     : 100;
 
   const remainingTotal = (parseFloat(amount) || 0) - assignedTotal;
