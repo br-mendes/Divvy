@@ -10,7 +10,7 @@ import LoadingSpinner from '../components/ui/LoadingSpinner';
 import EmptyState from '../components/ui/EmptyState';
 import toast from 'react-hot-toast';
 import { ProtectedRoute } from '../components/ProtectedRoute';
-import { Archive, LayoutGrid, Plus, Sparkles, RefreshCcw, AlertTriangle, Database } from 'lucide-react';
+import { Archive, LayoutGrid, Plus, Sparkles, RefreshCcw, WifiOff } from 'lucide-react';
 
 const DashboardContent: React.FC = () => {
   const { user } = useAuth();
@@ -18,16 +18,16 @@ const DashboardContent: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [viewMode, setViewMode] = useState<'active' | 'archived'>('active');
-  const [errorType, setErrorType] = useState<'network' | 'database' | null>(null);
+  const [hasError, setHasError] = useState(false);
 
   const fetchDivvies = useCallback(async (silent = false) => {
     if (!user) return;
     
     if (!silent) setLoading(true);
-    setErrorType(null);
+    setHasError(false);
 
     try {
-      // 1. Tenta via RPC V2 (Nova versão para evitar cache da antiga)
+      // Tenta via RPC (Otimizado)
       const { data: rpcData, error: rpcError } = await supabase.rpc('get_dashboard_data_v2');
 
       if (!rpcError && rpcData) {
@@ -40,12 +40,7 @@ const DashboardContent: React.FC = () => {
         return;
       }
 
-      if (rpcError) {
-         console.warn("RPC V2 failed, falling back to manual fetch:", rpcError.message);
-      }
-
-      // 2. Fallback Manual Seguro (Tenta buscar apenas o básico se tudo falhar)
-      // Busca apenas grupos criados pelo usuário (geralmente não bloqueia em RLS simples)
+      // Fallback Silencioso (Sem expor erros técnicos)
       const { data: created, error: createdError } = await supabase
         .from('divvies')
         .select('*')
@@ -53,7 +48,6 @@ const DashboardContent: React.FC = () => {
       
       if (createdError) throw createdError;
 
-      // Tenta buscar grupos onde é membro
       let joinedDivvies: Divvy[] = [];
       try {
         const { data: memberships } = await supabase
@@ -68,21 +62,20 @@ const DashboardContent: React.FC = () => {
             if (joined) joinedDivvies = joined;
         }
       } catch (e) {
-        console.warn("Falha ao buscar grupos participados (provável erro RLS), exibindo apenas criados.");
+        // Silently fail on joined groups if RLS blocks, show only created
+        console.warn("Partial load");
       }
 
       const allDivvies = [...(created || []), ...joinedDivvies];
-      // Ordenação e unicidade
       allDivvies.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
       const uniqueDivvies = Array.from(new Map(allDivvies.map(item => [item.id, item])).values());
       
       setDivvies(uniqueDivvies);
 
     } catch (err: any) {
-      console.error("Dashboard Fatal Error:", err);
-      // Se falhou até o fallback básico, é problema de banco
-      setErrorType('database');
-      if (!silent) toast.error('Erro de configuração no banco de dados.');
+      console.error("Erro interno ao carregar dados"); // Log apenas no console do dev
+      setHasError(true);
+      if (!silent) toast.error('Não foi possível atualizar os dados.');
     } finally {
       setLoading(false);
     }
@@ -123,7 +116,7 @@ const DashboardContent: React.FC = () => {
             <button 
               onClick={() => fetchDivvies()}
               className="p-3 text-gray-500 hover:text-brand-600 dark:text-gray-400 dark:hover:text-brand-400 bg-white dark:bg-dark-900 border border-gray-200 dark:border-dark-800 rounded-xl transition-all shadow-sm hover:shadow-md active:scale-95"
-              title="Sincronizar agora"
+              title="Atualizar"
             >
               <RefreshCcw size={20} className={loading ? 'animate-spin' : ''} />
             </button>
@@ -173,18 +166,18 @@ const DashboardContent: React.FC = () => {
           {loading && divvies.length === 0 ? (
             <div className="py-32 flex flex-col items-center gap-4">
               <LoadingSpinner />
-              <p className="text-gray-400 text-sm animate-pulse font-medium">Buscando seus grupos...</p>
+              <p className="text-gray-400 text-sm animate-pulse font-medium">Carregando...</p>
             </div>
-          ) : errorType ? (
-            <div className="flex flex-col items-center justify-center py-20 text-center animate-fade-in-up bg-white dark:bg-dark-900 rounded-3xl border border-red-100 dark:border-red-900/20 p-8">
-                <div className="w-16 h-16 bg-red-50 dark:bg-red-900/20 rounded-full flex items-center justify-center mb-4">
-                    <Database className="text-red-500" size={32} />
+          ) : hasError ? (
+            <div className="flex flex-col items-center justify-center py-20 text-center animate-fade-in-up bg-white dark:bg-dark-900 rounded-3xl border border-gray-100 dark:border-dark-800 p-8">
+                <div className="w-16 h-16 bg-gray-100 dark:bg-dark-800 rounded-full flex items-center justify-center mb-4">
+                    <WifiOff className="text-gray-400" size={32} />
                 </div>
                 <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-2">
-                    Configuração do Banco Necessária
+                    Serviço Indisponível
                 </h3>
                 <p className="text-gray-500 max-w-sm mb-6">
-                    Copie e execute o script SQL fornecido no painel do Supabase para corrigir as permissões.
+                    Não foi possível conectar ao servidor no momento. Verifique sua internet ou tente novamente mais tarde.
                 </p>
                 <Button onClick={() => fetchDivvies()}>Tentar Novamente</Button>
             </div>
@@ -195,11 +188,11 @@ const DashboardContent: React.FC = () => {
           ) : (
             <div className="pt-12">
               <EmptyState 
-                message={viewMode === 'active' ? "Tudo limpo por aqui!" : "Arquivo vazio"} 
+                message={viewMode === 'active' ? "Nenhum grupo encontrado" : "Arquivo vazio"} 
                 description={
                   viewMode === 'active' 
-                  ? "Seus grupos ativos aparecerão aqui. Crie um novo grupo para começar." 
-                  : "Grupos que você arquivar ficarão guardados aqui."
+                  ? "Crie um novo grupo para começar a dividir despesas." 
+                  : "Seus grupos arquivados aparecerão aqui."
                 }
               />
             </div>
