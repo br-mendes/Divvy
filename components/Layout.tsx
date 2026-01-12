@@ -15,7 +15,8 @@ import {
   X,
   Moon,
   Sun,
-  User
+  User,
+  Bell
 } from 'lucide-react';
 
 export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -41,18 +42,18 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
   }, [user]);
 
   const displayName = liveProfile?.nickname || liveProfile?.full_name || user?.email?.split('@')[0] || 'Usuário';
-  const userAvatar = liveProfile?.avatar_url || user?.user_metadata?.avatar_url;
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-dark-950 transition-colors duration-300 flex flex-col md:flex-row overflow-hidden">
       
       {/* Sidebar Desktop */}
       <aside className="hidden md:flex flex-col w-64 bg-white dark:bg-dark-900 border-r border-gray-200 dark:border-dark-700 flex-shrink-0">
-        <div className="p-6">
+        <div className="p-6 flex items-center justify-between">
           <Link href="/dashboard" className="flex items-center gap-3">
             <DivvyLogo className="w-8 h-8" />
             <span className="text-xl font-bold dark:text-white">Divvy</span>
           </Link>
+          <Notifications />
         </div>
 
         <nav className="flex-1 px-4 space-y-1">
@@ -75,7 +76,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
         </div>
       </aside>
 
-      {/* Header Mobile Otimizada */}
+      {/* Header Mobile */}
       <header className="md:hidden flex items-center justify-between px-4 h-16 bg-white dark:bg-dark-900 border-b border-gray-200 dark:border-dark-700 sticky top-0 z-50">
         <Link href="/dashboard" className="flex items-center gap-2">
           <DivvyLogo className="w-6 h-6" />
@@ -89,7 +90,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
         </div>
       </header>
 
-      {/* Menu Mobile Fullscreen Overlay */}
+      {/* Menu Mobile Overlay */}
       {isMobileMenuOpen && (
         <div className="fixed inset-0 z-40 bg-white dark:bg-dark-950 md:hidden animate-fade-in-down">
           <div className="flex flex-col h-full pt-20 px-6 gap-2">
@@ -109,7 +110,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
         </div>
       )}
 
-      {/* Main Content Area */}
+      {/* Main Content */}
       <main className="flex-1 overflow-y-auto bg-gray-50 dark:bg-dark-950 transition-colors duration-300 scroll-smooth">
         <div className="max-w-6xl mx-auto px-4 py-6 md:px-8 md:py-10">
           {children}
