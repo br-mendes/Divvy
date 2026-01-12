@@ -10,7 +10,7 @@ import LoadingSpinner from '../components/ui/LoadingSpinner';
 import EmptyState from '../components/ui/EmptyState';
 import toast from 'react-hot-toast';
 import { ProtectedRoute } from '../components/ProtectedRoute';
-import { Archive, LayoutGrid, Plus, Sparkles, RefreshCcw, WifiOff } from 'lucide-react';
+import { Archive, LayoutGrid, Plus, Sparkles, RefreshCcw, AlertTriangle, Database } from 'lucide-react';
 
 const DashboardContent: React.FC = () => {
   const { user } = useAuth();
@@ -18,21 +18,19 @@ const DashboardContent: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [viewMode, setViewMode] = useState<'active' | 'archived'>('active');
-  const [hasError, setHasError] = useState(false);
+  const [errorType, setErrorType] = useState<'network' | 'database' | null>(null);
 
   const fetchDivvies = useCallback(async (silent = false) => {
     if (!user) return;
     
     if (!silent) setLoading(true);
-    setHasError(false);
+    setErrorType(null);
 
     try {
-      // --- TENTATIVA 1: RPC (Mais rápida e segura) ---
-      // Tenta chamar a função de banco de dados otimizada
+      // 1. Tenta via RPC (Rápido e Seguro)
       const { data: rpcData, error: rpcError } = await supabase.rpc('get_dashboard_divvies');
 
       if (!rpcError && rpcData) {
-        // Sucesso via RPC
         const formattedData: Divvy[] = rpcData.map((d: any) => ({
             ...d,
             member_count: Number(d.member_count || 1)
@@ -42,13 +40,12 @@ const DashboardContent: React.FC = () => {
         return;
       }
 
-      // Se falhar (ex: função não existe), fazemos o fallback silenciosamente
+      // Se RPC falhar, loga warning
       if (rpcError) {
-         console.warn("RPC falhou, tentando método manual:", rpcError.message);
+         console.warn("RPC fetch failed, falling back:", rpcError.message);
       }
 
-      // --- TENTATIVA 2: FALLBACK MANUAL (Busca tradicional) ---
-      // 1. Buscar grupos que criei
+      // 2. Fallback Manual (Se RPC não existir)
       const { data: created, error: createdError } = await supabase
         .from('divvies')
         .select('*')
@@ -56,7 +53,6 @@ const DashboardContent: React.FC = () => {
       
       if (createdError) throw createdError;
 
-      // 2. Buscar IDs dos grupos que participo (evita join complexo que trava RLS)
       const { data: memberships, error: memberError } = await supabase
         .from('divvy_members')
         .select('divvy_id')
@@ -64,7 +60,6 @@ const DashboardContent: React.FC = () => {
 
       if (memberError) throw memberError;
 
-      // 3. Buscar detalhes dos grupos participados
       const joinedIds = memberships?.map((m: any) => m.divvy_id).filter(id => !created?.find(c => c.id === id)) || [];
       
       let joinedDivvies: Divvy[] = [];
@@ -73,19 +68,22 @@ const DashboardContent: React.FC = () => {
          if (joined) joinedDivvies = joined;
       }
 
-      // 4. Combinar e Ordenar
       const allDivvies = [...(created || []), ...joinedDivvies];
       allDivvies.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
       
-      // Remover duplicatas
       const uniqueDivvies = Array.from(new Map(allDivvies.map(item => [item.id, item])).values());
-      
       setDivvies(uniqueDivvies);
 
     } catch (err: any) {
-      console.error("Critical Dashboard Error:", err);
-      setHasError(true);
-      if (!silent) toast.error('Falha ao carregar grupos. Verifique sua conexão.');
+      console.error("Dashboard Sync Error:", err);
+      // Detectar se é erro de RLS/Policy
+      if (err.message?.includes('policy') || err.message?.includes('recursion') || err.code === '42501') {
+          setErrorType('database');
+      } else {
+          setErrorType('network');
+      }
+      
+      if (!silent) toast.error('Falha na sincronização.');
     } finally {
       setLoading(false);
     }
@@ -111,7 +109,7 @@ const DashboardContent: React.FC = () => {
     <div className="min-h-screen bg-gray-50 dark:bg-dark-950 transition-colors duration-300 pb-20">
       <div className="max-w-6xl mx-auto px-4 py-8 md:py-12 space-y-8">
         
-        {/* Header Section */}
+        {/* Header */}
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
           <div className="animate-fade-in-up">
             <h1 className="text-3xl md:text-4xl font-bold text-gray-900 dark:text-white flex items-center gap-3 tracking-tight">
@@ -164,28 +162,32 @@ const DashboardContent: React.FC = () => {
           </button>
         </div>
 
-        {/* Form Container */}
+        {/* Form */}
         {showForm && (
           <div className="p-6 md:p-8 bg-white dark:bg-dark-900 border border-gray-200 dark:border-dark-800 rounded-3xl shadow-xl animate-fade-in-up ring-4 ring-gray-50 dark:ring-dark-800/50">
             <DivvyForm onSuccess={() => { setShowForm(false); fetchDivvies(); }} />
           </div>
         )}
 
-        {/* List Content */}
+        {/* List & States */}
         <div className="min-h-[400px]">
           {loading && divvies.length === 0 ? (
             <div className="py-32 flex flex-col items-center gap-4">
               <LoadingSpinner />
               <p className="text-gray-400 text-sm animate-pulse font-medium">Buscando seus grupos...</p>
             </div>
-          ) : hasError && divvies.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-20 text-center animate-fade-in-up">
+          ) : errorType ? (
+            <div className="flex flex-col items-center justify-center py-20 text-center animate-fade-in-up bg-white dark:bg-dark-900 rounded-3xl border border-red-100 dark:border-red-900/20 p-8">
                 <div className="w-16 h-16 bg-red-50 dark:bg-red-900/20 rounded-full flex items-center justify-center mb-4">
-                    <WifiOff className="text-red-500" size={32} />
+                    {errorType === 'database' ? <Database className="text-red-500" size={32} /> : <AlertTriangle className="text-red-500" size={32} />}
                 </div>
-                <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-2">Erro de Conexão</h3>
+                <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-2">
+                    {errorType === 'database' ? 'Configuração Pendente' : 'Erro de Conexão'}
+                </h3>
                 <p className="text-gray-500 max-w-sm mb-6">
-                    Não foi possível carregar seus grupos.
+                    {errorType === 'database' 
+                        ? 'O banco de dados precisa ser configurado. Execute o script SQL fornecido no Supabase.' 
+                        : 'Não foi possível carregar seus grupos. Verifique sua conexão.'}
                 </p>
                 <Button onClick={() => fetchDivvies()}>Tentar Novamente</Button>
             </div>
