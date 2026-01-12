@@ -1,5 +1,4 @@
-
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import { useRouter } from 'next/router';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../context/AuthContext';
@@ -14,7 +13,7 @@ import LoadingSpinner from '../../components/ui/LoadingSpinner';
 import EmptyState from '../../components/ui/EmptyState';
 import { 
   Plus, UserPlus, Receipt, PieChart, Users, Lock, LockOpen, 
-  ArrowRight, Wallet, CheckCircle, Info, Archive, Clock, AlertTriangle, Check
+  ArrowRight, Wallet, CheckCircle, Clock, Archive, LucideIcon
 } from 'lucide-react';
 import { ProtectedRoute } from '../../components/ProtectedRoute';
 import toast from 'react-hot-toast';
@@ -43,102 +42,92 @@ const DivvyDetailContent: React.FC = () => {
   const [category, setCategory] = useState('food');
   const [desc, setDesc] = useState('');
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
-  const [payerId, setPayerId] = useState(''); // Quem pagou
+  const [payerId, setPayerId] = useState('');
   const [splitType, setSplitType] = useState<'equal' | 'exact' | 'percentage'>('equal');
   const [selectedParticipants, setSelectedParticipants] = useState<Set<string>>(new Set());
   
-  // Estados para valores manuais
   const [manualAmounts, setManualAmounts] = useState<Record<string, string>>({});
   const [manualPercentages, setManualPercentages] = useState<Record<string, string>>({});
-  
   const [submitLoading, setSubmitLoading] = useState(false);
 
-  useEffect(() => {
-    if (divvyId && user) fetchDivvyData();
-  }, [divvyId, user]);
-
-  // Define valores padrão quando o modal abre ou os membros carregam
-  useEffect(() => {
-    if (members.length > 0 && user) {
-        // Se payerId ainda não estiver definido ou não estiver na lista de membros, define o usuário atual
-        if (!payerId || !members.find(m => m.user_id === payerId)) {
-            const me = members.find(m => m.user_id === user.id);
-            if (me) setPayerId(me.user_id);
-            else if (members[0]) setPayerId(members[0].user_id); // Fallback
-        }
-        
-        // Se nenhum participante selecionado, seleciona todos
-        if (selectedParticipants.size === 0) {
-            setSelectedParticipants(new Set(members.map(m => m.user_id)));
-        }
-    }
-  }, [members, user, isExpenseModalOpen]);
-
-  const fetchDivvyData = async () => {
+  // Memoized fetch logic for reuse
+  const fetchDivvyData = useCallback(async () => {
+    if (!divvyId || !user) return;
+    
     try {
+      // 1. Detalhes do Grupo
       const { data: divvyData, error: dErr } = await supabase.from('divvies').select('*').eq('id', divvyId).single();
-      if (dErr || !divvyData) { setLoading(false); return; }
+      if (dErr || !divvyData) { 
+        console.error("Group fetch error:", dErr);
+        setLoading(false); 
+        return; 
+      }
+      setDivvy(divvyData);
 
-      // 1. Busca recursos básicos em paralelo
-      const [membersRes, expensesRes, settlementsRes] = await Promise.all([
-        supabase.from('divvy_members').select('*').eq('divvy_id', divvyId),
+      // 2. Membros e Perfis com Query Única (Inner Join)
+      // Se profiles vier nulo, o RLS está bloqueando ou a FK não existe.
+      const { data: membersData, error: mErr } = await supabase
+        .from('divvy_members')
+        .select('*, profiles:user_id(*)')
+        .eq('divvy_id', divvyId);
+
+      if (mErr) throw mErr;
+      
+      const processedMembers = (membersData || []).map(m => ({
+        ...m,
+        // Garante que o objeto profiles não seja um array de um elemento (comum em algumas configs de JS SDK)
+        profiles: Array.isArray(m.profiles) ? m.profiles[0] : m.profiles
+      }));
+
+      setMembers(processedMembers);
+
+      // 3. Despesas e Acertos
+      const [expensesRes, settlementsRes] = await Promise.all([
         supabase.from('expenses').select('*').eq('divvy_id', divvyId).order('date', { ascending: false }),
         supabase.from('settlements').select('*').eq('divvy_id', divvyId).order('created_at', { ascending: false })
       ]);
 
-      setDivvy(divvyData);
       setExpenses(expensesRes.data || []);
       setSettlements(settlementsRes.data || []);
-
-      // 2. Processamento robusto de Membros e Perfis (Manual Join)
-      // Evita falhas se a Foreign Key não estiver configurada corretamente e previne crashes
-      const membersRaw = membersRes.data || [];
-      let finalMembers: DivvyMember[] = [];
-
-      if (membersRaw.length > 0) {
-          const userIds = membersRaw.map(m => m.user_id);
-          
-          // Busca perfis separadamente
-          const { data: profilesData } = await supabase
-              .from('profiles')
-              .select('*')
-              .in('id', userIds);
-          
-          // Une os dados manualmente no cliente
-          finalMembers = membersRaw.map(m => {
-              const profile = profilesData?.find(p => p.id === m.user_id);
-              // Garante que haja um fallback para o email se não vier no membersRaw
-              // Isso é CRÍTICO para evitar crash ao acessar .email
-              const email = m.email || profile?.email || 'Email não disponível';
-              
-              return {
-                  ...m,
-                  email,
-                  profiles: profile // Anexa o perfil encontrado
-              };
-          });
-      }
-      
-      setMembers(finalMembers);
 
       if (expensesRes.data && expensesRes.data.length > 0) {
         const { data: splitData } = await supabase.from('expense_splits').select('*').in('expense_id', expensesRes.data.map(e => e.id));
         setAllSplits(splitData || []);
       }
     } catch (error) { 
-        console.error("Erro ao carregar dados do grupo:", error); 
-        toast.error("Erro ao carregar dados.");
-    } finally { setLoading(false); }
-  };
+        console.error("Erro geral no fetch:", error); 
+        toast.error("Erro ao sincronizar dados.");
+    } finally { 
+        setLoading(false); 
+    }
+  }, [divvyId, user]);
+
+  useEffect(() => {
+    fetchDivvyData();
+  }, [fetchDivvyData]);
+
+  // Sincroniza formulário sempre que membros carregarem ou modal abrir
+  useEffect(() => {
+    if (isExpenseModalOpen && members.length > 0 && user) {
+        // Se payerId vazio, define usuário atual
+        if (!payerId) {
+            const me = members.find(m => m.user_id === user.id);
+            if (me) setPayerId(me.user_id);
+            else setPayerId(members[0].user_id);
+        }
+        
+        // Seleciona todos por padrão para a divisão igual
+        if (selectedParticipants.size === 0) {
+            setSelectedParticipants(new Set(members.map(m => m.user_id)));
+        }
+    }
+  }, [isExpenseModalOpen, members, user, payerId, selectedParticipants.size]);
 
   const getMemberName = (uid: string) => {
     const m = members.find(m => m.user_id === uid);
-    if (!m) return 'Membro desconhecido';
-    
-    // Prioriza o perfil carregado manualmente
-    const profile: any = m.profiles;
-    
-    return profile?.nickname || profile?.full_name || m.email?.split('@')[0] || 'Membro';
+    if (!m) return 'Membro';
+    const p: any = m.profiles;
+    return p?.nickname || p?.full_name || m.email?.split('@')[0] || 'Participante';
   };
 
   const formatMoney = (v: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v);
@@ -168,241 +157,99 @@ const DivvyDetailContent: React.FC = () => {
     }
 
     const hasPendingSettlements = settlements.some(s => s.status === 'pending');
-    const isGroupBalanced = expenses.length > 0 && plan.length === 0 && !hasPendingSettlements;
-
-    return { plan, isGroupBalanced };
+    return { plan, isGroupBalanced: expenses.length > 0 && plan.length === 0 && !hasPendingSettlements };
   }, [expenses, allSplits, members, settlements]);
 
   const isBlocked = (exp: Expense) => {
     if (!divvy?.last_settled_at) return false;
-    const settledTime = new Date(divvy.last_settled_at).getTime();
-    const expenseTime = new Date(exp.created_at).getTime();
-    return expenseTime < settledTime && !exp.is_manually_unlocked;
+    return new Date(exp.created_at).getTime() < new Date(divvy.last_settled_at).getTime() && !exp.is_manually_unlocked;
   };
 
   const handleUpdateSettlement = async (s: Settlement, status: 'confirmed' | 'rejected') => {
-    const action = status === 'confirmed' ? 'confirmar' : 'recusar';
-    if (!confirm(`Deseja ${action} este pagamento?`)) return;
-    
+    if (!confirm(`Deseja ${status === 'confirmed' ? 'confirmar' : 'recusar'} o recebimento?`)) return;
     try {
-      const { error } = await supabase.from('settlements').update({ status }).eq('id', s.id);
-      if (error) throw error;
-      
+      await supabase.from('settlements').update({ status }).eq('id', s.id);
       await supabase.from('notifications').insert({
-        user_id: s.payer_id, 
-        divvy_id: divvyId, 
-        type: 'settlement',
+        user_id: s.payer_id, divvy_id: divvyId, type: 'settlement',
         title: status === 'confirmed' ? 'Pagamento confirmado!' : 'Pagamento recusado',
-        message: `${getMemberName(s.receiver_id)} ${status === 'confirmed' ? 'confirmou' : 'recusou'} o recebimento de ${formatMoney(s.amount)}.`
+        message: `${getMemberName(s.receiver_id)} ${status === 'confirmed' ? 'confirmou' : 'recusou'} seu pagamento de ${formatMoney(s.amount)}.`
       });
-
       fetchDivvyData();
-      toast.success(`Pagamento ${status === 'confirmed' ? 'confirmado' : 'recusado'}.`);
-    } catch (e: any) { toast.error(e.message); }
-  };
-
-  const handleUnlockExpense = async (exp: Expense) => {
-    if (!user || user.id !== divvy?.creator_id) return;
-    if (!confirm('Deseja desbloquear esta despesa manualmente? Todos os membros serão notificados.')) return;
-
-    try {
-        await supabase.from('expenses').update({ is_manually_unlocked: true }).eq('id', exp.id);
-        await supabase.from('notifications').insert(
-            members.map(m => ({
-                user_id: m.user_id,
-                divvy_id: divvyId,
-                type: 'info',
-                title: 'Despesa desbloqueada',
-                message: `O criador do grupo desbloqueou a despesa "${exp.description || exp.category}" para edição.`
-            }))
-        );
-        toast.success('Despesa desbloqueada para edição.');
-        fetchDivvyData();
-        setIsViewModalOpen(false);
+      toast.success('Status atualizado.');
     } catch (e: any) { toast.error(e.message); }
   };
 
   const handleMarkAsPaid = async (to: string, amount: number) => {
-    if (!confirm(`Confirmar que você enviou ${formatMoney(amount)} para ${getMemberName(to)}?`)) return;
+    if (!confirm(`Informar que pagou ${formatMoney(amount)} para ${getMemberName(to)}?`)) return;
     try {
-      const { error } = await supabase.from('settlements').insert({
+      await supabase.from('settlements').insert({
         divvy_id: divvyId, payer_id: user?.id, receiver_id: to, amount, status: 'pending'
       });
-      if (error) throw error;
-      
       await supabase.from('notifications').insert({
-        user_id: to, 
-        divvy_id: divvyId, 
-        type: 'settlement',
+        user_id: to, divvy_id: divvyId, type: 'settlement',
         title: 'Pagamento enviado', 
-        message: `${getMemberName(user?.id!)} informou que enviou o pagamento de ${formatMoney(amount)}.`
+        message: `${getMemberName(user?.id!)} informou que enviou ${formatMoney(amount)}.`
       });
-      toast.success('Aviso enviado! Aguarde a confirmação do credor.');
+      toast.success('Aviso enviado!');
       fetchDivvyData();
     } catch (e: any) { toast.error(e.message); }
-  };
-
-  // --- Lógica de Split do Formulário ---
-  const handleToggleParticipant = (userId: string) => {
-      const newSet = new Set(selectedParticipants);
-      if (newSet.has(userId)) newSet.delete(userId);
-      else newSet.add(userId);
-      setSelectedParticipants(newSet);
-  };
-
-  const handleManualAmountChange = (userId: string, value: string) => {
-      setManualAmounts(prev => ({ ...prev, [userId]: value }));
-  };
-
-  const handleManualPercentageChange = (userId: string, value: string) => {
-      setManualPercentages(prev => ({ ...prev, [userId]: value }));
-  };
-
-  const resetForm = () => {
-      setAmount('');
-      setDesc('');
-      setCategory('food');
-      setDate(new Date().toISOString().split('T')[0]);
-      if(user) setPayerId(user.id);
-      setSelectedParticipants(new Set(members.map(m => m.user_id)));
-      setManualAmounts({});
-      setManualPercentages({});
-      setSplitType('equal');
   };
 
   const handleSaveExpense = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user || !divvy) return;
-    
     const val = parseFloat(amount);
-    if (isNaN(val) || val <= 0) {
-        toast.error("Insira um valor válido.");
+    if (isNaN(val) || val <= 0 || !desc.trim() || !payerId) {
+        toast.error("Preencha todos os campos corretamente.");
         return;
     }
 
-    if (!desc.trim()) {
-        toast.error("Adicione uma descrição.");
-        return;
-    }
+    let splitsPayload: { participant_user_id: string; amount_owed: number; }[] = [];
 
-    if (selectedParticipants.size === 0 && splitType === 'equal') {
-        toast.error("Selecione pelo menos uma pessoa para dividir.");
-        return;
-    }
-
-    if (!payerId) {
-        toast.error("Selecione quem pagou a despesa.");
-        return;
-    }
-
-    // Validação da Divisão
-    interface SplitItem { participant_user_id: string; amount_owed: number; }
-    let splitsPayload: SplitItem[] = [];
-    
     if (splitType === 'equal') {
         if (selectedParticipants.size === 0) return;
         const splitVal = val / selectedParticipants.size;
-        splitsPayload = Array.from(selectedParticipants).map((uid) => ({
-            participant_user_id: uid as string,
-            amount_owed: splitVal
-        }));
+        // Fix for Type '{ participant_user_id: unknown; amount_owed: number; }[]' is not assignable error by adding explicit type to uid
+        splitsPayload = Array.from(selectedParticipants).map((uid: string) => ({ participant_user_id: uid, amount_owed: splitVal }));
     } else if (splitType === 'exact') {
         let sum = 0;
-        const potentialSplits = members.map((m): SplitItem | null => {
-            const raw = manualAmounts[m.user_id];
-            const v = parseFloat(raw || '0');
-            if (!isNaN(v) && v > 0) {
-                sum += v;
-                return { participant_user_id: m.user_id, amount_owed: v };
-            }
-            return null;
-        });
-
-        splitsPayload = potentialSplits.filter((item): item is SplitItem => item !== null);
-
-        if (Math.abs(sum - val) > 0.05) {
-            toast.error(`A soma das divisões (R$ ${sum.toFixed(2)}) deve ser igual ao total (R$ ${val.toFixed(2)}).`);
-            return;
-        }
+        splitsPayload = members.map(m => {
+            const v = parseFloat(manualAmounts[m.user_id] || '0');
+            sum += v;
+            return { participant_user_id: m.user_id, amount_owed: v };
+        }).filter(s => s.amount_owed > 0);
+        if (Math.abs(sum - val) > 0.05) { toast.error("A soma deve ser igual ao total."); return; }
     } else if (splitType === 'percentage') {
         let totalPct = 0;
-        const potentialSplits = members.map((m): SplitItem | null => {
-            const raw = manualPercentages[m.user_id];
-            const pct = parseFloat(raw || '0');
-            if (!isNaN(pct) && pct > 0) {
-                totalPct += pct;
-                const owed = (val * pct) / 100;
-                return { participant_user_id: m.user_id, amount_owed: owed };
-            }
-            return null;
-        });
-
-        if (Math.abs(totalPct - 100) > 0.5) { // margem de erro
-            toast.error(`A soma das porcentagens (${totalPct.toFixed(1)}%) deve ser 100%.`);
-            return;
-        }
-
-        splitsPayload = potentialSplits.filter((item): item is SplitItem => item !== null);
-    }
-
-    if (splitsPayload.length === 0) {
-        toast.error("Defina a divisão da despesa.");
-        return;
+        splitsPayload = members.map(m => {
+            const pct = parseFloat(manualPercentages[m.user_id] || '0');
+            totalPct += pct;
+            return { participant_user_id: m.user_id, amount_owed: (val * pct) / 100 };
+        }).filter(s => s.amount_owed > 0);
+        if (Math.abs(totalPct - 100) > 0.5) { toast.error("A soma das % deve ser 100."); return; }
     }
 
     setSubmitLoading(true);
     try {
-      // 1. Criar Despesa
-      const { data: expense, error } = await supabase.from('expenses').insert({
-        divvy_id: divvyId, 
-        paid_by_user_id: payerId, 
-        amount: val, 
-        category, 
-        description: desc, 
-        date: date
+      const { data: exp, error } = await supabase.from('expenses').insert({
+        divvy_id: divvyId, paid_by_user_id: payerId, amount: val, category, description: desc, date
       }).select().single();
-
       if (error) throw error;
-
-      // 2. Criar Splits
-      const splits = splitsPayload.map(s => ({
-          expense_id: expense.id,
-          participant_user_id: s.participant_user_id,
-          amount_owed: s.amount_owed
-      }));
-      
-      const { error: splitError } = await supabase.from('expense_splits').insert(splits);
-      if (splitError) throw splitError;
-
-      toast.success('Despesa adicionada!');
+      await supabase.from('expense_splits').insert(splitsPayload.map(s => ({ ...s, expense_id: exp.id })));
+      toast.success('Despesa salva!');
       setIsExpenseModalOpen(false);
-      resetForm();
+      setAmount(''); setDesc(''); setManualAmounts({}); setManualPercentages({});
       fetchDivvyData();
-    } catch (e: any) { 
-        console.error(e);
-        toast.error(e.message); 
-    }
+    } catch (e: any) { toast.error(e.message); }
     finally { setSubmitLoading(false); }
   };
 
-  // Cálculos para exibição no modal
-  const assignedTotal: number = splitType === 'exact' 
-    ? (Object.values(manualAmounts) as string[]).reduce((acc, curr) => acc + (parseFloat(curr) || 0), 0)
-    : parseFloat(amount) || 0;
-  
-  const assignedPercentage: number = splitType === 'percentage'
-    ? (Object.values(manualPercentages) as string[]).reduce((acc, curr) => acc + (parseFloat(curr) || 0), 0)
-    : 100;
+  if (loading) return <div className="flex justify-center p-20"><LoadingSpinner /></div>;
+  if (!divvy) return <EmptyState message="Grupo não acessível" />;
 
-  const remainingTotal = (parseFloat(amount) || 0) - assignedTotal;
-  const remainingPercentage = 100 - assignedPercentage;
-
-  if (loading) return <div className="flex justify-center p-12"><LoadingSpinner /></div>;
-  if (!divvy) return <div className="p-12 text-center text-gray-500">Grupo não encontrado.</div>;
-
-  const tabs = [
+  const tabs: { id: any, label: string, icon: LucideIcon }[] = [
     { id: 'expenses', label: 'Despesas', icon: Receipt },
-    { id: 'balances', label: 'Balanços', icon: Wallet },
+    { id: 'balances', label: 'Saldos', icon: Wallet },
     { id: 'charts', label: 'Análise', icon: PieChart },
     { id: 'members', label: 'Membros', icon: Users },
   ];
@@ -414,26 +261,19 @@ const DivvyDetailContent: React.FC = () => {
       {calculateBalances.isGroupBalanced && !divvy.is_archived && (
         <div className="bg-brand-50 dark:bg-brand-900/20 border border-brand-200 dark:border-brand-800 p-5 rounded-2xl flex flex-col md:flex-row items-center justify-between gap-4 animate-fade-in-down shadow-md">
           <div className="flex items-center gap-4">
-            <div className="w-12 h-12 rounded-full bg-brand-500 text-white flex items-center justify-center shadow-lg">
-              <CheckCircle size={24} />
-            </div>
+            <div className="w-12 h-12 rounded-full bg-brand-500 text-white flex items-center justify-center shadow-lg"><CheckCircle size={24} /></div>
             <div>
-              <h3 className="font-bold text-gray-900 dark:text-white">Dívidas Quitadas! 🎉</h3>
-              <p className="text-sm text-gray-600 dark:text-gray-400">Todos os saldos foram confirmados. Deseja arquivar o grupo agora?</p>
+              <h3 className="font-bold">Dívidas Quitadas! 🎉</h3>
+              <p className="text-sm text-gray-500">Tudo em dia. Deseja arquivar o grupo?</p>
             </div>
           </div>
-          <div className="flex gap-2">
-            <Button variant="ghost" size="sm" onClick={() => toast('A sugestão sumirá ao adicionar novas despesas.', { icon: 'ℹ️' })}>Não agora</Button>
-            <Button size="sm" className="bg-brand-600" onClick={() => supabase.from('divvies').update({ is_archived: true }).eq('id', divvyId).then(() => router.push('/dashboard'))}>
-              <Archive size={16} className="mr-2" /> Arquivar Grupo
-            </Button>
-          </div>
+          <Button size="sm" className="bg-brand-600" onClick={() => supabase.from('divvies').update({ is_archived: true }).eq('id', divvyId).then(() => router.push('/dashboard'))}>Arquivar</Button>
         </div>
       )}
 
       <div className="flex justify-end gap-3 px-1">
         <Button variant="outline" onClick={() => setIsInviteModalOpen(true)}><UserPlus size={18} className="mr-2" /> Convidar</Button>
-        <Button onClick={() => { resetForm(); setIsExpenseModalOpen(true); }} disabled={divvy.is_archived}><Plus size={18} className="mr-2" /> Nova Despesa</Button>
+        <Button onClick={() => setIsExpenseModalOpen(true)} disabled={divvy.is_archived}><Plus size={18} className="mr-2" /> Nova Despesa</Button>
       </div>
 
       <div className="border-b border-gray-200 dark:border-dark-700">
@@ -441,7 +281,7 @@ const DivvyDetailContent: React.FC = () => {
           {tabs.map((tab) => (
             <button
               key={tab.id}
-              onClick={() => setActiveTab(tab.id as any)}
+              onClick={() => setActiveTab(tab.id)}
               className={`pb-4 px-1 border-b-2 font-medium text-sm flex items-center gap-2 transition-colors whitespace-nowrap ${
                 activeTab === tab.id ? 'border-brand-500 text-brand-600 dark:text-brand-400' : 'border-transparent text-gray-500'
               }`}
@@ -455,21 +295,18 @@ const DivvyDetailContent: React.FC = () => {
       <div className="min-h-[400px]">
         {activeTab === 'expenses' && (
           <div className="space-y-4">
-            {expenses.length === 0 ? <EmptyState /> : expenses.map(exp => (
-              <div key={exp.id} onClick={() => { setViewingExpense(exp); setIsViewModalOpen(true); }} className="bg-white dark:bg-dark-800 p-4 rounded-xl shadow-sm border border-gray-100 dark:border-dark-700 flex justify-between items-center cursor-pointer hover:bg-gray-50 dark:hover:bg-dark-700 transition-all group">
+            {expenses.length === 0 ? <EmptyState message="Sem despesas ainda" /> : expenses.map(exp => (
+              <div key={exp.id} onClick={() => { setViewingExpense(exp); setIsViewModalOpen(true); }} className="bg-white dark:bg-dark-900 p-4 rounded-xl shadow-sm border border-gray-100 dark:border-dark-800 flex justify-between items-center cursor-pointer hover:bg-gray-50 dark:hover:bg-dark-800 transition-all">
                 <div className="flex items-center gap-4">
                   <div className="h-10 w-10 rounded-full bg-brand-50 dark:bg-brand-900/30 flex items-center justify-center text-xl">
                     {exp.category === 'food' ? '🍽️' : exp.category === 'transport' ? '🚗' : '💰'}
                   </div>
                   <div>
-                    <div className="flex items-center gap-2">
-                        <p className="font-bold text-gray-900 dark:text-white">{exp.description || exp.category}</p>
-                        {isBlocked(exp) && <Lock size={12} className="text-gray-400" title="Despesa Bloqueada" />}
-                    </div>
-                    <p className="text-xs text-gray-500">{new Date(exp.date).toLocaleDateString()} • Pago por {getMemberName(exp.paid_by_user_id)}</p>
+                    <p className="font-bold">{exp.description || exp.category} {isBlocked(exp) && <Lock size={12} className="inline text-gray-400" />}</p>
+                    <p className="text-xs text-gray-500">{new Date(exp.date).toLocaleDateString()} • {getMemberName(exp.paid_by_user_id)}</p>
                   </div>
                 </div>
-                <span className="font-bold text-gray-900 dark:text-white">{formatMoney(exp.amount)}</span>
+                <span className="font-bold text-lg">{formatMoney(exp.amount)}</span>
               </div>
             ))}
           </div>
@@ -479,74 +316,47 @@ const DivvyDetailContent: React.FC = () => {
           <div className="space-y-6">
             {settlements.filter(s => s.status === 'pending' && s.receiver_id === user?.id).map(s => (
               <div key={s.id} className="bg-yellow-50 dark:bg-yellow-900/10 p-5 rounded-2xl border border-yellow-200 dark:border-yellow-900/30 flex flex-col md:flex-row justify-between items-center gap-4 border-l-4 border-l-yellow-500">
-                <div className="flex items-center gap-3">
-                   <Clock className="text-yellow-600" />
-                   <p className="text-sm"><b>{getMemberName(s.payer_id)}</b> informou que te pagou <b>{formatMoney(s.amount)}</b>.</p>
-                </div>
+                <p className="text-sm"><b>{getMemberName(s.payer_id)}</b> informou que te pagou <b>{formatMoney(s.amount)}</b>.</p>
                 <div className="flex gap-2 w-full md:w-auto">
-                  <Button size="sm" variant="outline" className="flex-1 text-red-600 border-red-200" onClick={() => handleUpdateSettlement(s, 'rejected')}>Recusar</Button>
-                  <Button size="sm" className="flex-1 bg-green-600 text-white" onClick={() => handleUpdateSettlement(s, 'confirmed')}>Confirmar</Button>
+                  <Button size="sm" variant="outline" onClick={() => handleUpdateSettlement(s, 'rejected')}>Recusar</Button>
+                  <Button size="sm" className="bg-green-600 text-white" onClick={() => handleUpdateSettlement(s, 'confirmed')}>Confirmar</Button>
                 </div>
               </div>
             ))}
-
-            <div className="bg-white dark:bg-dark-800 p-6 rounded-2xl border border-gray-100 dark:border-dark-700 shadow-sm">
-              <h3 className="font-bold mb-6 flex items-center gap-2 text-gray-900 dark:text-white"><Wallet size={20} className="text-brand-500" /> Como quitar as dívidas</h3>
+            <div className="bg-white dark:bg-dark-900 p-6 rounded-2xl border border-gray-100 dark:border-dark-800 shadow-sm">
+              <h3 className="font-bold mb-6 flex items-center gap-2"><Wallet size={20} className="text-brand-500" /> Acertos Sugeridos</h3>
               <div className="space-y-3">
-                {calculateBalances.plan.length === 0 ? (
-                  <div className="text-center py-12 bg-gray-50 dark:bg-dark-900/50 rounded-xl border-2 border-dashed border-gray-200 dark:border-dark-700">
-                    <CheckCircle className="mx-auto text-green-500 mb-2" size={32} />
-                    <p className="text-gray-500 font-medium">Tudo em dia!</p>
+                {calculateBalances.plan.length === 0 ? <p className="text-gray-500 text-center py-10">Tudo em dia!</p> : calculateBalances.plan.map((p, i) => (
+                  <div key={i} className="p-4 bg-gray-50 dark:bg-dark-800/50 rounded-xl flex flex-col sm:flex-row justify-between items-center gap-4">
+                    <div className="flex items-center gap-3">
+                      <span className="font-semibold">{getMemberName(p.from)}</span>
+                      <ArrowRight size={14} className="text-gray-400" />
+                      <span className="font-semibold">{getMemberName(p.to)}</span>
+                    </div>
+                    <div className="flex items-center gap-4">
+                      <span className="font-bold text-brand-600 text-lg">{formatMoney(p.amount)}</span>
+                      {p.from === user?.id && !settlements.some(s => s.payer_id === p.from && s.receiver_id === p.to && s.status === 'pending') && (
+                        <Button size="sm" className="bg-green-600 text-white" onClick={() => handleMarkAsPaid(p.to, p.amount)}>Paguei</Button>
+                      )}
+                    </div>
                   </div>
-                ) : (
-                  calculateBalances.plan.map((p, i) => {
-                    const isMeDebtor = p.from === user?.id;
-                    const hasSentPayment = settlements.some(s => s.payer_id === p.from && s.receiver_id === p.to && s.status === 'pending');
-                    return (
-                      <div key={i} className="p-4 bg-gray-50 dark:bg-dark-900/50 rounded-xl flex flex-col sm:flex-row justify-between items-center gap-4 border border-gray-100 dark:border-dark-700">
-                        <div className="flex items-center gap-3">
-                          <span className="font-semibold">{getMemberName(p.from)}</span>
-                          <ArrowRight size={14} className="text-gray-400" />
-                          <span className="font-semibold">{getMemberName(p.to)}</span>
-                        </div>
-                        <div className="flex items-center gap-4">
-                          <span className="font-bold text-brand-600 dark:text-brand-400 text-lg">{formatMoney(p.amount)}</span>
-                          {isMeDebtor && (
-                             <div className="flex gap-2">
-                               {hasSentPayment ? (
-                                  <span className="text-xs font-bold text-yellow-600 bg-yellow-100 px-3 py-2 rounded-lg border border-yellow-200">Aguardando...</span>
-                               ) : (
-                                  <Button size="sm" className="bg-green-600 text-white" onClick={() => handleMarkAsPaid(p.to, p.amount)}>Paguei</Button>
-                               )}
-                             </div>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })
-                )}
+                ))}
               </div>
             </div>
           </div>
         )}
         
-        {activeTab === 'charts' && <div className="bg-white dark:bg-dark-800 p-6 rounded-2xl border border-gray-100"><ExpenseCharts expenses={expenses} /></div>}
+        {activeTab === 'charts' && <div className="bg-white dark:bg-dark-900 p-6 rounded-2xl border border-gray-100 dark:border-dark-800"><ExpenseCharts expenses={expenses} /></div>}
         
         {activeTab === 'members' && (
            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
              {members.map(member => (
-               <div key={member.id} className="bg-white dark:bg-dark-800 p-4 rounded-xl border border-gray-100 flex items-center justify-between">
+               <div key={member.id} className="bg-white dark:bg-dark-900 p-4 rounded-xl border border-gray-100 dark:border-dark-800 flex items-center justify-between">
                  <div className="flex items-center gap-3">
-                   <div className="h-10 w-10 rounded-full bg-gray-100 flex items-center justify-center font-bold">
-                      {/* Robust access to name/email to prevent crash if data is incomplete */}
-                      {(member.profiles?.full_name || member.email || '?').charAt(0).toUpperCase()}
-                   </div>
-                   <div>
-                     <p className="font-bold">{getMemberName(member.user_id)}</p>
-                     <p className="text-xs text-gray-500">{member.email}</p>
-                   </div>
+                   <div className="h-10 w-10 rounded-full bg-gray-100 dark:bg-dark-800 flex items-center justify-center font-bold">{(member.profiles?.full_name || member.email || '?').charAt(0).toUpperCase()}</div>
+                   <div><p className="font-bold">{getMemberName(member.user_id)}</p><p className="text-xs text-gray-500">{member.email}</p></div>
                  </div>
-                 <span className="text-[10px] uppercase font-black px-2 py-1 bg-gray-100 rounded">{member.role}</span>
+                 <span className="text-[10px] uppercase font-black px-2 py-1 bg-gray-100 dark:bg-dark-800 rounded">{member.role}</span>
                </div>
              ))}
            </div>
@@ -563,42 +373,21 @@ const DivvyDetailContent: React.FC = () => {
               </div>
               <span className="text-2xl font-black text-brand-600">{formatMoney(viewingExpense.amount)}</span>
             </div>
-            
-            {isBlocked(viewingExpense) ? (
-              <div className="bg-gray-100 dark:bg-dark-700 p-4 rounded-2xl flex flex-col gap-3 border border-gray-200">
-                <div className="flex items-center gap-3 text-sm text-gray-500">
-                  <Lock size={18} className="text-red-400"/> 
-                  <p>Esta despesa foi <b>bloqueada</b> automaticamente após o fechamento do balanço do grupo.</p>
-                </div>
-                {user?.id === divvy?.creator_id && (
-                    <Button variant="outline" size="sm" onClick={() => handleUnlockExpense(viewingExpense)}>
-                        <LockOpen size={14} className="mr-2" /> Desbloquear Despesa (Criador)
-                    </Button>
-                )}
-              </div>
-            ) : (
-              <div className="flex gap-3 pt-4">
-                <Button fullWidth variant="outline" disabled={divvy.is_archived}>Editar</Button>
-                <Button fullWidth variant="outline" className="text-red-600" disabled={divvy.is_archived}>Excluir</Button>
-              </div>
-            )}
+            {isBlocked(viewingExpense) && <p className="text-xs text-red-500 font-bold bg-red-50 p-2 rounded">Bloqueada após acerto.</p>}
+            <div className="flex gap-3 pt-4">
+              <Button fullWidth variant="outline" disabled={divvy.is_archived || isBlocked(viewingExpense)}>Editar</Button>
+              <Button fullWidth variant="outline" className="text-red-600" disabled={divvy.is_archived || isBlocked(viewingExpense)}>Excluir</Button>
+            </div>
           </div>
         )}
       </Modal>
 
       <Modal isOpen={isExpenseModalOpen} onClose={() => setIsExpenseModalOpen(false)} title="Nova Despesa" size="lg">
         <form onSubmit={handleSaveExpense} className="space-y-5">
-          {/* Header Inputs */}
           <div className="grid grid-cols-2 gap-4">
-             <div className="col-span-2">
-                 <Input label="Descrição" value={desc} onChange={e => setDesc(e.target.value)} placeholder="Ex: Almoço no shopping" autoFocus />
-             </div>
-             <div>
-                <Input label="Valor (R$)" type="number" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} required placeholder="0.00" />
-             </div>
-             <div>
-                <Input label="Data" type="date" value={date} onChange={e => setDate(e.target.value)} />
-             </div>
+             <div className="col-span-2"><Input label="Descrição" value={desc} onChange={e => setDesc(e.target.value)} placeholder="O que foi comprado?" required /></div>
+             <Input label="Valor (R$)" type="number" step="0.01" value={amount} onChange={e => setAmount(e.target.value)} required />
+             <Input label="Data" type="date" value={date} onChange={e => setDate(e.target.value)} />
              <div>
                 <label className="block text-sm font-medium mb-1">Categoria</label>
                 <select className="w-full rounded-lg border border-gray-300 px-3 py-2 dark:bg-dark-800" value={category} onChange={e => setCategory(e.target.value)}>
@@ -612,137 +401,37 @@ const DivvyDetailContent: React.FC = () => {
              </div>
              <div>
                 <label className="block text-sm font-medium mb-1">Quem pagou?</label>
-                <select 
-                    className="w-full rounded-lg border border-gray-300 px-3 py-2 dark:bg-dark-800" 
-                    value={payerId} 
-                    onChange={e => setPayerId(e.target.value)}
-                >
-                   {members.map(m => (
-                       <option key={m.user_id} value={m.user_id}>
-                           {m.user_id === user?.id ? 'Eu' : getMemberName(m.user_id)}
-                       </option>
-                   ))}
+                <select className="w-full rounded-lg border border-gray-300 px-3 py-2 dark:bg-dark-800" value={payerId} onChange={e => setPayerId(e.target.value)}>
+                   {members.map(m => <option key={m.user_id} value={m.user_id}>{m.user_id === user?.id ? 'Eu' : getMemberName(m.user_id)}</option>)}
                 </select>
              </div>
           </div>
 
-          <div className="border-t border-gray-100 pt-4">
-             <label className="block text-sm font-bold mb-3 text-gray-700 dark:text-gray-300">Como dividir?</label>
-             
-             <div className="flex gap-2 mb-4 bg-gray-50 p-1 rounded-lg w-fit">
-                <button 
-                   type="button" 
-                   onClick={() => setSplitType('equal')}
-                   className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all ${splitType === 'equal' ? 'bg-white shadow text-brand-600' : 'text-gray-500 hover:text-gray-900'}`}
-                >
-                   Igualmente
-                </button>
-                <button 
-                   type="button" 
-                   onClick={() => setSplitType('exact')}
-                   className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all ${splitType === 'exact' ? 'bg-white shadow text-brand-600' : 'text-gray-500 hover:text-gray-900'}`}
-                >
-                   Valor Exato
-                </button>
-                <button 
-                   type="button" 
-                   onClick={() => setSplitType('percentage')}
-                   className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all ${splitType === 'percentage' ? 'bg-white shadow text-brand-600' : 'text-gray-500 hover:text-gray-900'}`}
-                >
-                   Porcentagem
-                </button>
+          <div className="border-t pt-4">
+             <label className="block text-sm font-bold mb-3">Como dividir?</label>
+             <div className="flex gap-2 mb-4 bg-gray-50 dark:bg-dark-800 p-1 rounded-lg w-fit">
+                {['equal', 'exact', 'percentage'].map(t => (
+                  <button key={t} type="button" onClick={() => setSplitType(t as any)} className={`px-4 py-1.5 rounded-md text-sm font-medium ${splitType === t ? 'bg-white dark:bg-dark-900 shadow text-brand-600' : 'text-gray-500'}`}>{t === 'equal' ? 'Igual' : t === 'exact' ? 'Valor' : '%'}</button>
+                ))}
              </div>
-
-             <div className="space-y-2 max-h-60 overflow-y-auto custom-scrollbar bg-gray-50/50 p-2 rounded-xl">
-                 {members.map(m => {
-                     const isSelected = selectedParticipants.has(m.user_id);
-                     const splitAmount = splitType === 'equal' && isSelected && amount 
-                        ? (parseFloat(amount) / selectedParticipants.size) 
-                        : 0;
-                     
-                     const pctVal = parseFloat(manualPercentages[m.user_id] || '0');
-                     const calculatedFromPct = (parseFloat(amount || '0') * pctVal) / 100;
-
-                     return (
-                         <div key={m.user_id} className="flex items-center justify-between p-2 hover:bg-white rounded-lg transition-colors">
-                             <div className="flex items-center gap-3">
-                                 {splitType === 'equal' && (
-                                     <input 
-                                       type="checkbox" 
-                                       checked={isSelected} 
-                                       onChange={() => handleToggleParticipant(m.user_id)}
-                                       className="w-5 h-5 rounded text-brand-600 focus:ring-brand-500 border-gray-300"
-                                     />
-                                 )}
-                                 <span className="text-sm font-medium text-gray-700 dark:text-gray-300 flex items-center gap-2">
-                                     {m.user_id === user?.id ? 'Eu' : getMemberName(m.user_id)}
-                                     {m.user_id === payerId && <span className="text-[10px] bg-green-100 text-green-700 px-1.5 py-0.5 rounded">Pagador</span>}
-                                 </span>
-                             </div>
-
-                             {splitType === 'equal' && (
-                                 <span className={`text-sm ${isSelected ? 'font-bold text-gray-900' : 'text-gray-400'}`}>
-                                     {isSelected ? formatMoney(splitAmount) : '-'}
-                                 </span>
-                             )}
-
-                             {splitType === 'exact' && (
-                                 <div className="relative">
-                                     <span className="absolute left-2 top-1.5 text-xs text-gray-400">R$</span>
-                                     <input 
-                                        type="number"
-                                        step="0.01"
-                                        placeholder="0.00"
-                                        value={manualAmounts[m.user_id] || ''}
-                                        onChange={(e) => handleManualAmountChange(m.user_id, e.target.value)}
-                                        className="w-24 pl-7 pr-2 py-1 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-brand-500 text-right"
-                                     />
-                                 </div>
-                             )}
-
-                             {splitType === 'percentage' && (
-                                 <div className="flex items-center gap-2">
-                                     <span className="text-xs text-gray-400 w-16 text-right">
-                                         {pctVal > 0 ? formatMoney(calculatedFromPct) : '-'}
-                                     </span>
-                                     <div className="relative">
-                                        <input 
-                                            type="number"
-                                            step="0.1"
-                                            placeholder="0"
-                                            value={manualPercentages[m.user_id] || ''}
-                                            onChange={(e) => handleManualPercentageChange(m.user_id, e.target.value)}
-                                            className="w-16 pl-2 pr-6 py-1 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-brand-500 text-right"
-                                        />
-                                        <span className="absolute right-2 top-1.5 text-xs text-gray-400">%</span>
-                                     </div>
-                                 </div>
-                             )}
+             <div className="space-y-2 max-h-60 overflow-y-auto p-2 bg-gray-50 dark:bg-dark-800 rounded-xl">
+                 {members.map(m => (
+                     <div key={m.user_id} className="flex items-center justify-between p-2">
+                         <div className="flex items-center gap-3">
+                             {splitType === 'equal' && <input type="checkbox" checked={selectedParticipants.has(m.user_id)} onChange={() => { const s = new Set(selectedParticipants); s.has(m.user_id) ? s.delete(m.user_id) : s.add(m.user_id); setSelectedParticipants(s); }} className="w-5 h-5 rounded text-brand-600" />}
+                             <span className="text-sm font-medium">{getMemberName(m.user_id)}</span>
                          </div>
-                     );
-                 })}
+                         {splitType === 'equal' && <span className="text-xs">{selectedParticipants.has(m.user_id) ? formatMoney(parseFloat(amount || '0') / selectedParticipants.size) : '-'}</span>}
+                         {splitType === 'exact' && <input type="number" step="0.01" value={manualAmounts[m.user_id] || ''} onChange={e => setManualAmounts({ ...manualAmounts, [m.user_id]: e.target.value })} className="w-20 p-1 border rounded text-right text-sm" placeholder="0.00" />}
+                         {splitType === 'percentage' && <div className="flex items-center gap-2"><span className="text-xs text-gray-400">{formatMoney((parseFloat(amount || '0') * (parseFloat(manualPercentages[m.user_id] || '0'))) / 100)}</span><input type="number" value={manualPercentages[m.user_id] || ''} onChange={e => setManualPercentages({ ...manualPercentages, [m.user_id]: e.target.value })} className="w-16 p-1 border rounded text-right text-sm" placeholder="0%" /></div>}
+                     </div>
+                 ))}
              </div>
-
-             {splitType === 'exact' && (
-                 <div className="flex justify-end mt-2 text-xs font-medium">
-                     <span className={Math.abs(remainingTotal) > 0.05 ? "text-red-500" : "text-green-600"}>
-                        Restante: {formatMoney(remainingTotal)}
-                     </span>
-                 </div>
-             )}
-
-             {splitType === 'percentage' && (
-                 <div className="flex justify-end mt-2 text-xs font-medium">
-                     <span className={Math.abs(remainingPercentage) > 0.5 ? "text-red-500" : "text-green-600"}>
-                        Restante: {remainingPercentage.toFixed(1)}%
-                     </span>
-                 </div>
-             )}
           </div>
 
           <div className="flex justify-end gap-3 pt-4">
             <Button type="button" variant="outline" onClick={() => setIsExpenseModalOpen(false)}>Cancelar</Button>
-            <Button type="submit" isLoading={submitLoading}>Salvar Despesa</Button>
+            <Button type="submit" isLoading={submitLoading}>Salvar</Button>
           </div>
         </form>
       </Modal>
@@ -751,6 +440,4 @@ const DivvyDetailContent: React.FC = () => {
   );
 };
 
-export default function DivvyDetail() {
-  return <ProtectedRoute><DivvyDetailContent /></ProtectedRoute>;
-}
+export default function DivvyDetail() { return <ProtectedRoute><DivvyDetailContent /></ProtectedRoute>; }
