@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { useRouter } from 'next/router';
 import { supabase } from '../lib/supabase';
@@ -7,6 +8,7 @@ import DivvyLogo from '../components/branding/DivvyLogo';
 import toast from 'react-hot-toast';
 import Link from 'next/link';
 import { getURL } from '../lib/getURL';
+import { ShieldCheck } from 'lucide-react';
 
 export default function Login() {
   const router = useRouter();
@@ -15,27 +17,80 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
 
+  // 2FA State
+  const [showMfaInput, setShowMfaInput] = useState(false);
+  const [mfaCode, setMfaCode] = useState('');
+  const [mfaFactorId, setMfaFactorId] = useState('');
+
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) {
+
+    try {
+      // 1. Login inicial (Email/Senha)
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+      
+      if (error) {
+        throw error;
+      }
+
+      if (data.user) {
+         // 2. Verificar se o nível de segurança exige 2FA (AAL2)
+         // O Supabase retorna os fatores registrados na sessão ou no usuário
+         const { data: mfaData, error: mfaError } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+         
+         if (mfaError) throw mfaError;
+
+         // Se o próximo nível for aal2, significa que o usuário tem 2FA configurado mas logou apenas com senha (aal1)
+         if (mfaData.nextLevel === 'aal2' && mfaData.currentLevel === 'aal1') {
+            // Buscar o ID do fator TOTP para desafiar
+            const { data: factors } = await supabase.auth.mfa.listFactors();
+            const totpFactor = factors.totp[0]; // Pega o primeiro fator TOTP
+
+            if (totpFactor) {
+               setMfaFactorId(totpFactor.id);
+               setShowMfaInput(true);
+               setLoading(false);
+               toast('Autenticação de dois fatores necessária.', { icon: '🛡️' });
+               return; // Interrompe redirecionamento, aguarda código
+            }
+         }
+
+         // Se não tiver 2FA ou já estiver validado, segue para o dashboard
+         router.push('/dashboard');
+      }
+
+    } catch (error: any) {
       toast.error(error.message);
       setLoading(false);
-    } else {
+    }
+  }
+
+  async function handleMfaVerify(e: React.FormEvent) {
+    e.preventDefault();
+    if (!mfaCode || mfaCode.length !== 6) return;
+    setLoading(true);
+
+    try {
+      const { data, error } = await supabase.auth.mfa.challengeAndVerify({
+        factorId: mfaFactorId,
+        code: mfaCode,
+      });
+
+      if (error) throw error;
+
+      toast.success("Login verificado!");
       router.push('/dashboard');
+    } catch (error: any) {
+      toast.error("Código incorreto. Tente novamente.");
+      setLoading(false);
     }
   }
 
   async function handleGoogleLogin() {
     setGoogleLoading(true);
-    
-    // getURL() retorna 'https://dominio.com' (sem barra)
-    // Então adicionamos '/auth/callback'
     const redirectTo = `${getURL()}/auth/callback`;
     
-    console.log('Redirecionando para:', redirectTo);
-
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
@@ -51,6 +106,37 @@ export default function Login() {
       toast.error(error.message);
       setGoogleLoading(false);
     }
+  }
+
+  if (showMfaInput) {
+     return (
+        <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
+           <div className="w-full max-w-md bg-white p-8 rounded-lg shadow-md border border-gray-100 text-center">
+              <div className="mx-auto w-16 h-16 bg-brand-100 text-brand-600 rounded-full flex items-center justify-center mb-6">
+                  <ShieldCheck size={32} />
+              </div>
+              <h2 className="text-2xl font-bold text-gray-900 mb-2">Verificação em Duas Etapas</h2>
+              <p className="text-gray-500 text-sm mb-6">
+                 Digite o código de 6 dígitos do seu aplicativo autenticador para continuar.
+              </p>
+
+              <form onSubmit={handleMfaVerify} className="space-y-4">
+                 <Input 
+                    value={mfaCode}
+                    onChange={(e) => setMfaCode(e.target.value.replace(/[^0-9]/g, '').slice(0, 6))}
+                    placeholder="000 000"
+                    className="text-center text-2xl tracking-widest font-mono py-3"
+                    autoFocus
+                 />
+                 <Button type="submit" fullWidth isLoading={loading}>Verificar</Button>
+              </form>
+              
+              <button onClick={() => setShowMfaInput(false)} className="mt-4 text-sm text-gray-400 hover:text-gray-600 underline">
+                 Voltar para login
+              </button>
+           </div>
+        </div>
+     );
   }
 
   return (

@@ -67,13 +67,30 @@ const DashboardContent: React.FC = () => {
       // Unificar listas
       const allGroups = [...myCreatedGroups, ...myJoinedGroups];
 
-      // Remover duplicatas por segurança (Map garante unicidade por ID)
+      // 4. Buscar contagem de membros para cada grupo
+      const allIds = allGroups.map(g => g.id);
+      const countsMap: Record<string, number> = {};
+      
+      if (allIds.length > 0) {
+          const { data: allMembers } = await supabase
+             .from('divvy_members')
+             .select('divvy_id')
+             .in('divvy_id', allIds);
+          
+          if (allMembers) {
+             allMembers.forEach((m: any) => {
+                countsMap[m.divvy_id] = (countsMap[m.divvy_id] || 0) + 1;
+             });
+          }
+      }
+
+      // Remover duplicatas por segurança (Map garante unicidade por ID) e adicionar contagem
       const uniqueMap = new Map();
       allGroups.forEach(g => {
         if (g && g.id) {
              uniqueMap.set(g.id, { 
                  ...g, 
-                 member_count: g.member_count || 1 // Fallback visual
+                 member_count: countsMap[g.id] || 1 
              });
         }
       });

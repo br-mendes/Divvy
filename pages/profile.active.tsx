@@ -7,10 +7,11 @@ import { Input } from '../components/ui/Input';
 import { Modal } from '../components/ui/Modal';
 import { ProtectedRoute } from '../components/ProtectedRoute';
 import toast from 'react-hot-toast';
-import { User, CreditCard, Plus, Trash2, Star, Pencil, X, Camera, Loader2, AlertTriangle, LogOut, ShieldAlert } from 'lucide-react';
+import { User, CreditCard, Plus, Trash2, Star, Pencil, X, Camera, Loader2, AlertTriangle, LogOut, ShieldAlert, ShieldCheck, Smartphone, Copy } from 'lucide-react';
 import { PaymentMethod, Bank } from '../types';
 import { POPULAR_BANKS } from '../lib/constants';
 import { useRouter } from 'next/router';
+import QRCode from 'qrcode';
 
 // Mapeamento para exibição amigável
 const pixTypeMap: Record<string, string> = {
@@ -45,7 +46,7 @@ function ProfileContent() {
   const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([]);
   const [banks, setBanks] = useState<Bank[]>([]);
   const [isFormOpen, setIsFormOpen] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null); // Track which ID is being edited
+  const [editingId, setEditingId] = useState<string | null>(null); 
   const [paymentLoading, setPaymentLoading] = useState(false);
   
   // Payment Form State
@@ -68,17 +69,26 @@ function ProfileContent() {
   const [deleteConfirmationInput, setDeleteConfirmationInput] = useState('');
   const [dangerLoading, setDangerLoading] = useState(false);
 
+  // --- 2FA STATE ---
+  const [mfaFactors, setMfaFactors] = useState<any[]>([]);
+  const [isMfaSetupOpen, setIsMfaSetupOpen] = useState(false);
+  const [mfaQrCode, setMfaQrCode] = useState('');
+  const [mfaSecret, setMfaSecret] = useState('');
+  const [mfaFactorId, setMfaFactorId] = useState('');
+  const [mfaVerifyCode, setMfaVerifyCode] = useState('');
+  const [mfaLoading, setMfaLoading] = useState(false);
+
   useEffect(() => {
     if (user) {
       loadProfileData();
       fetchPaymentData();
+      fetchMfaFactors();
     }
   }, [user]);
 
   const loadProfileData = async () => {
     if (!user) return;
     
-    // First try to load from public profiles table (source of truth for groups)
     const { data: profile, error } = await supabase
       .from('profiles')
       .select('full_name, nickname, avatar_url')
@@ -86,15 +96,90 @@ function ProfileContent() {
       .single();
 
     if (profile && !error) {
-      // Priorizamos o nickname se existir, pois é como ele "se vê", senão o nome completo
       setName(profile.nickname || profile.full_name || user.user_metadata?.full_name || '');
       setAvatarUrl(profile.avatar_url || user.user_metadata?.avatar_url || null);
     } else {
-      // Fallback to auth metadata if profile row doesn't exist yet
       setName(user.user_metadata?.nickname || user.user_metadata?.full_name || '');
       setAvatarUrl(user.user_metadata?.avatar_url || null);
     }
     setEmail(user.email || '');
+  };
+
+  const fetchMfaFactors = async () => {
+    try {
+      const { data, error } = await supabase.auth.mfa.listFactors();
+      if (error) throw error;
+      // Filtra apenas fatores verificados ('totp')
+      setMfaFactors(data.totp || []);
+    } catch (e) {
+      console.error("Erro ao buscar fatores MFA", e);
+    }
+  };
+
+  const handleEnrollMfa = async () => {
+    setMfaLoading(true);
+    try {
+      const { data, error } = await supabase.auth.mfa.enroll({
+        factorType: 'totp',
+      });
+      if (error) throw error;
+
+      setMfaFactorId(data.id);
+      setMfaSecret(data.totp.secret);
+      
+      // Gerar QR Code para exibição
+      const qrCodeUrl = await QRCode.toDataURL(data.totp.uri);
+      setMfaQrCode(qrCodeUrl);
+      
+      setIsMfaSetupOpen(true);
+    } catch (error: any) {
+      toast.error("Erro ao iniciar configuração 2FA: " + error.message);
+    } finally {
+      setMfaLoading(false);
+    }
+  };
+
+  const handleVerifyMfa = async () => {
+    if (!mfaVerifyCode || mfaVerifyCode.length !== 6) {
+      toast.error("Digite o código de 6 dígitos.");
+      return;
+    }
+    setMfaLoading(true);
+
+    try {
+      const { data, error } = await supabase.auth.mfa.challengeAndVerify({
+        factorId: mfaFactorId,
+        code: mfaVerifyCode,
+      });
+
+      if (error) throw error;
+
+      toast.success("2FA Ativado com sucesso!");
+      setIsMfaSetupOpen(false);
+      setMfaVerifyCode('');
+      fetchMfaFactors();
+    } catch (error: any) {
+      toast.error("Código inválido ou erro na verificação.");
+    } finally {
+      setMfaLoading(false);
+    }
+  };
+
+  const handleUnenrollMfa = async (factorId: string) => {
+    if (!confirm("Tem certeza que deseja desativar a autenticação de dois fatores? Sua conta ficará menos segura.")) return;
+    
+    setMfaLoading(true);
+    try {
+      const { error } = await supabase.auth.mfa.unenroll({ factorId });
+      if (error) throw error;
+      
+      toast.success("2FA Desativado.");
+      fetchMfaFactors();
+    } catch (error: any) {
+      toast.error("Erro ao desativar: " + error.message);
+    } finally {
+      setMfaLoading(false);
+    }
   };
 
   const handleAvatarUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -437,7 +522,6 @@ function ProfileContent() {
     }
   };
 
-
   return (
     <div className="max-w-4xl mx-auto space-y-8 pb-12">
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 md:p-8">
@@ -513,6 +597,43 @@ function ProfileContent() {
         </form>
       </div>
 
+      {/* --- SECURITY & 2FA --- */}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 md:p-8">
+        <h2 className="text-xl font-bold text-gray-900 mb-6 flex items-center gap-2">
+            <ShieldCheck size={24} className="text-brand-600" />
+            Segurança
+        </h2>
+        
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center p-4 bg-gray-50 border border-gray-200 rounded-xl gap-4">
+           <div>
+              <h3 className="font-bold text-gray-900 flex items-center gap-2">
+                 Autenticação de Dois Fatores (2FA)
+                 {mfaFactors.length > 0 ? (
+                    <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-bold">Ativado</span>
+                 ) : (
+                    <span className="text-xs bg-gray-200 text-gray-600 px-2 py-0.5 rounded-full font-bold">Desativado</span>
+                 )}
+              </h3>
+              <p className="text-sm text-gray-500 mt-1 max-w-lg">
+                 Adicione uma camada extra de segurança à sua conta exigindo um código do seu aplicativo autenticador (Google Authenticator, Authy, etc) ao fazer login.
+              </p>
+           </div>
+           
+           <div>
+              {mfaFactors.length > 0 ? (
+                 <Button variant="outline" className="border-red-200 text-red-600 hover:bg-red-50" onClick={() => handleUnenrollMfa(mfaFactors[0].id)} isLoading={mfaLoading}>
+                    Desativar 2FA
+                 </Button>
+              ) : (
+                 <Button onClick={handleEnrollMfa} isLoading={mfaLoading}>
+                    Ativar 2FA
+                 </Button>
+              )}
+           </div>
+        </div>
+      </div>
+
+      {/* --- PAYMENT METHODS --- */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 md:p-8">
         <div className="flex justify-between items-center mb-6">
           <div>
@@ -891,6 +1012,57 @@ function ProfileContent() {
                    </div>
                </div>
            )}
+        </div>
+      </Modal>
+
+      {/* --- MODAL CONFIGURAÇÃO 2FA --- */}
+      <Modal 
+        isOpen={isMfaSetupOpen} 
+        onClose={() => setIsMfaSetupOpen(false)} 
+        title="Configurar 2FA"
+      >
+        <div className="space-y-6">
+           <div className="text-center">
+              <div className="mx-auto w-12 h-12 bg-brand-100 text-brand-600 rounded-full flex items-center justify-center mb-4">
+                 <Smartphone size={24} />
+              </div>
+              <p className="text-sm text-gray-600 mb-4">
+                 Escaneie o QR Code abaixo com seu aplicativo autenticador (Google Authenticator, Authy, Microsoft Authenticator).
+              </p>
+           </div>
+           
+           <div className="flex flex-col items-center p-4 bg-gray-50 border rounded-lg">
+               {mfaQrCode ? (
+                   <img src={mfaQrCode} alt="QR Code 2FA" className="w-40 h-40 mb-4 bg-white p-2 rounded" />
+               ) : (
+                   <div className="w-40 h-40 bg-gray-200 animate-pulse rounded mb-4"></div>
+               )}
+               
+               <div className="w-full">
+                  <p className="text-xs text-center text-gray-500 mb-1">Ou digite o código manualmente:</p>
+                  <div className="flex items-center gap-2 bg-white p-2 border rounded">
+                     <code className="text-xs font-mono text-gray-800 flex-1 text-center select-all">{mfaSecret}</code>
+                     <button onClick={() => { navigator.clipboard.writeText(mfaSecret); toast.success("Copiado!"); }} className="p-1 hover:bg-gray-100 rounded">
+                        <Copy size={14} className="text-gray-500" />
+                     </button>
+                  </div>
+               </div>
+           </div>
+
+           <div>
+              <label className="block text-sm font-medium text-gray-900 mb-2">Digite o código de 6 dígitos gerado:</label>
+              <Input 
+                 placeholder="000 000"
+                 value={mfaVerifyCode}
+                 onChange={(e) => setMfaVerifyCode(e.target.value.replace(/[^0-9]/g, '').slice(0, 6))}
+                 className="text-center text-2xl tracking-widest font-mono"
+                 autoFocus
+              />
+           </div>
+
+           <Button fullWidth onClick={handleVerifyMfa} isLoading={mfaLoading} disabled={mfaVerifyCode.length !== 6}>
+              Verificar e Ativar
+           </Button>
         </div>
       </Modal>
     </div>
