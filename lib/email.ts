@@ -1,8 +1,15 @@
 
+import { getURL } from './getURL';
+
 // Helper to send email via our own API Route (Server-Side)
 async function sendViaApiRoute(payload: { to: string | string[], subject: string, html: string }) {
   try {
-    const response = await fetch('/api/send-email', {
+    // CRITICAL FIX: Node.js fetch requires absolute URL.
+    // When running on server (API Route -> API Route), we must prepend the domain.
+    const baseUrl = typeof window === 'undefined' ? getURL() : '';
+    const url = `${baseUrl}/api/send-email`;
+
+    const response = await fetch(url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
