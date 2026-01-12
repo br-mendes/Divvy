@@ -10,7 +10,7 @@ import LoadingSpinner from '../components/ui/LoadingSpinner';
 import EmptyState from '../components/ui/EmptyState';
 import toast from 'react-hot-toast';
 import { ProtectedRoute } from '../components/ProtectedRoute';
-import { Archive, LayoutGrid } from 'lucide-react';
+import { Archive, LayoutGrid, Plus } from 'lucide-react';
 
 const DashboardContent: React.FC = () => {
   const { user } = useAuth();
@@ -27,25 +27,17 @@ const DashboardContent: React.FC = () => {
     try {
       if (!user) return;
       
-      // Tentamos primeiro pelo RPC que é mais performático para o Dashboard completo
-      const { data: rpcData, error: rpcError } = await supabase.rpc('get_dashboard_divvies');
+      // Busca direta via tabelas - O RLS configurado via SQL cuidará de filtrar apenas o que o usuário tem acesso
+      const { data, error } = await supabase
+        .from('divvies')
+        .select(`
+          *,
+          divvy_members!inner(user_id)
+        `)
+        .order('created_at', { ascending: false });
 
-      if (!rpcError && rpcData) {
-        setDivvies(rpcData as Divvy[]);
-      } else {
-        // Fallback: Busca direta via tabelas caso o RPC falhe ou esteja desatualizado
-        // Graças ao RLS (ajustado via SQL), esta query retornará apenas o que o usuário tem acesso
-        const { data: directData, error: directError } = await supabase
-          .from('divvies')
-          .select(`
-            *,
-            divvy_members!inner(user_id)
-          `)
-          .order('created_at', { ascending: false });
-
-        if (directError) throw directError;
-        setDivvies(directData as any[]);
-      }
+      if (error) throw error;
+      setDivvies(data as any[]);
 
     } catch (err: any) {
       console.error("Fetch Divvies Error:", err);
@@ -62,7 +54,7 @@ const DashboardContent: React.FC = () => {
   );
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-dark-950 py-8 px-4 transition-colors duration-200">
+    <div className="min-h-screen bg-gray-50 dark:bg-dark-950 py-8 px-4 transition-colors duration-500">
       <div className="max-w-7xl mx-auto space-y-6">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
           <div>
@@ -75,9 +67,9 @@ const DashboardContent: React.FC = () => {
                 <Button 
                     onClick={() => setShowForm(!showForm)} 
                     variant={showForm ? 'outline' : 'primary'}
-                    className="flex-1 md:flex-none"
+                    className="flex-1 md:flex-none shadow-sm"
                 >
-                    {showForm ? 'Cancelar' : '+ Novo Grupo'}
+                    {showForm ? 'Cancelar' : <><Plus size={18} className="mr-2" /> Novo Grupo</>}
                 </Button>
              )}
           </div>
@@ -111,7 +103,7 @@ const DashboardContent: React.FC = () => {
         </div>
 
         {showForm && viewMode === 'active' && (
-          <div className="p-6 bg-white dark:bg-dark-800 rounded-xl shadow-sm border border-brand-100 dark:border-dark-700 animate-fade-in-down">
+          <div className="p-6 bg-white dark:bg-dark-800 rounded-2xl shadow-sm border border-brand-100 dark:border-dark-700 animate-fade-in-down">
             <DivvyForm onSuccess={() => { setShowForm(false); fetchDivvies(); }} />
           </div>
         )}

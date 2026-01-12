@@ -27,13 +27,12 @@ const config: Config = {
           900: '#4c1d95',
           950: '#2e1065',
         },
-        // Escala Dark personalizada para melhor contraste
         dark: {
-          950: '#0a0a0c', // Fundo profundo
-          900: '#121214', // Superfície principal
-          800: '#1e1e20', // Cards e Modais
-          700: '#2a2a2c', // Bordas e Dividers
-          600: '#3a3a3c',
+          950: '#070709', // Fundo principal mais profundo
+          900: '#0f0f12', // Sidebar/Header
+          800: '#16161a', // Cards (mais elevado)
+          700: '#222226', // Bordas e Dividers
+          600: '#2d2d33', // Input focus/Hovels
         }
       },
       screens: {
@@ -43,6 +42,7 @@ const config: Config = {
         'ping-slow': 'ping 3s cubic-bezier(0, 0, 0.2, 1) infinite',
         'float': 'float 3s ease-in-out infinite',
         'fade-in-up': 'fadeInUp 0.5s ease-out forwards',
+        'slide-in': 'slideIn 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards',
       },
       keyframes: {
         float: {
@@ -52,6 +52,10 @@ const config: Config = {
         fadeInUp: {
           '0%': { opacity: '0', transform: 'translateY(10px)' },
           '100%': { opacity: '1', transform: 'translateY(0)' },
+        },
+        slideIn: {
+          '0%': { opacity: '0', transform: 'translateX(-20px)' },
+          '100%': { opacity: '1', transform: 'translateX(0)' },
         }
       }
     },
