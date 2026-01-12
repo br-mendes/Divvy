@@ -10,7 +10,7 @@ import LoadingSpinner from '../components/ui/LoadingSpinner';
 import EmptyState from '../components/ui/EmptyState';
 import toast from 'react-hot-toast';
 import { ProtectedRoute } from '../components/ProtectedRoute';
-import { Archive, LayoutGrid, Plus, Sparkles, RefreshCcw, WifiOff } from 'lucide-react';
+import { Archive, LayoutGrid, Plus, Sparkles, RefreshCcw } from 'lucide-react';
 
 const DashboardContent: React.FC = () => {
   const { user } = useAuth();
@@ -18,66 +18,68 @@ const DashboardContent: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [viewMode, setViewMode] = useState<'active' | 'archived'>('active');
-  const [hasError, setHasError] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   const fetchDivvies = useCallback(async (silent = false) => {
     if (!user) return;
     
     if (!silent) setLoading(true);
-    setHasError(false);
+    else setIsRefreshing(true);
 
     try {
-      // Tenta via RPC (Otimizado)
-      const { data: rpcData, error: rpcError } = await supabase.rpc('get_dashboard_data_v2');
-
-      if (!rpcError && rpcData) {
-        const formattedData: Divvy[] = rpcData.map((d: any) => ({
-            ...d,
-            member_count: Number(d.member_count || 1)
-        }));
-        setDivvies(formattedData);
-        setLoading(false);
-        return;
-      }
-
-      // Fallback Silencioso (Sem expor erros técnicos)
-      const { data: created, error: createdError } = await supabase
+      // Estratégia Robusta: Consultas paralelas simples (sem RPC)
+      // 1. Grupos que eu criei
+      const fetchCreated = supabase
         .from('divvies')
         .select('*')
         .eq('creator_id', user.id);
-      
-      if (createdError) throw createdError;
 
-      let joinedDivvies: Divvy[] = [];
-      try {
-        const { data: memberships } = await supabase
-            .from('divvy_members')
-            .select('divvy_id')
-            .eq('user_id', user.id);
-            
-        const joinedIds = memberships?.map((m: any) => m.divvy_id).filter(id => !created?.find(c => c.id === id)) || [];
-        
-        if (joinedIds.length > 0) {
-            const { data: joined } = await supabase.from('divvies').select('*').in('id', joinedIds);
-            if (joined) joinedDivvies = joined;
+      // 2. Grupos que eu participo
+      const fetchMemberships = supabase
+        .from('divvy_members')
+        .select('divvy:divvies(*)')
+        .eq('user_id', user.id);
+
+      const [createdRes, memberRes] = await Promise.all([fetchCreated, fetchMemberships]);
+
+      // Processamento defensivo: Se uma falhar, tentamos mostrar a outra
+      const createdGroups = createdRes.data || [];
+      
+      // Extrair grupos da resposta de membros, filtrando nulos
+      const joinedGroups = (memberRes.data || [])
+        .map((item: any) => item.divvy)
+        .filter((g: any) => g && g.id); // Remove nulos caso o join falhe
+
+      // Combinar e remover duplicatas
+      const allGroups = [...createdGroups, ...joinedGroups];
+      const uniqueMap = new Map();
+      allGroups.forEach(g => {
+        if (!uniqueMap.has(g.id)) {
+            // Adiciona contagem padrão de membros para evitar query extra complexa
+            uniqueMap.set(g.id, { ...g, member_count: g.member_count || 1 });
         }
-      } catch (e) {
-        // Silently fail on joined groups if RLS blocks, show only created
-        console.warn("Partial load");
-      }
-
-      const allDivvies = [...(created || []), ...joinedDivvies];
-      allDivvies.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-      const uniqueDivvies = Array.from(new Map(allDivvies.map(item => [item.id, item])).values());
+      });
       
+      const uniqueDivvies = Array.from(uniqueMap.values());
+
+      // Ordenar por data de criação (mais recente primeiro)
+      uniqueDivvies.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+
       setDivvies(uniqueDivvies);
 
+      // Log discreto apenas se houver erro real em ambas as pontas
+      if (createdRes.error && memberRes.error) {
+         console.warn("Falha ao carregar grupos:", createdRes.error);
+         if (!silent) toast.error("Não foi possível carregar todos os grupos.");
+      }
+
     } catch (err: any) {
-      console.error("Erro interno ao carregar dados"); // Log apenas no console do dev
-      setHasError(true);
-      if (!silent) toast.error('Não foi possível atualizar os dados.');
+      console.error("Erro na busca:", err);
+      // Não bloqueamos a UI com tela de erro, apenas avisamos
+      if (!silent) toast.error('Erro de conexão. Tente novamente.');
     } finally {
       setLoading(false);
+      setIsRefreshing(false);
     }
   }, [user]);
 
@@ -116,9 +118,9 @@ const DashboardContent: React.FC = () => {
             <button 
               onClick={() => fetchDivvies()}
               className="p-3 text-gray-500 hover:text-brand-600 dark:text-gray-400 dark:hover:text-brand-400 bg-white dark:bg-dark-900 border border-gray-200 dark:border-dark-800 rounded-xl transition-all shadow-sm hover:shadow-md active:scale-95"
-              title="Atualizar"
+              title="Atualizar lista"
             >
-              <RefreshCcw size={20} className={loading ? 'animate-spin' : ''} />
+              <RefreshCcw size={20} className={isRefreshing || loading ? 'animate-spin' : ''} />
             </button>
             <Button 
                 onClick={() => setShowForm(!showForm)} 
@@ -166,20 +168,7 @@ const DashboardContent: React.FC = () => {
           {loading && divvies.length === 0 ? (
             <div className="py-32 flex flex-col items-center gap-4">
               <LoadingSpinner />
-              <p className="text-gray-400 text-sm animate-pulse font-medium">Carregando...</p>
-            </div>
-          ) : hasError ? (
-            <div className="flex flex-col items-center justify-center py-20 text-center animate-fade-in-up bg-white dark:bg-dark-900 rounded-3xl border border-gray-100 dark:border-dark-800 p-8">
-                <div className="w-16 h-16 bg-gray-100 dark:bg-dark-800 rounded-full flex items-center justify-center mb-4">
-                    <WifiOff className="text-gray-400" size={32} />
-                </div>
-                <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-2">
-                    Serviço Indisponível
-                </h3>
-                <p className="text-gray-500 max-w-sm mb-6">
-                    Não foi possível conectar ao servidor no momento. Verifique sua internet ou tente novamente mais tarde.
-                </p>
-                <Button onClick={() => fetchDivvies()}>Tentar Novamente</Button>
+              <p className="text-gray-400 text-sm animate-pulse font-medium">Carregando seus grupos...</p>
             </div>
           ) : filteredDivvies.length > 0 ? (
             <div className="animate-fade-in-up">
@@ -191,7 +180,7 @@ const DashboardContent: React.FC = () => {
                 message={viewMode === 'active' ? "Nenhum grupo encontrado" : "Arquivo vazio"} 
                 description={
                   viewMode === 'active' 
-                  ? "Crie um novo grupo para começar a dividir despesas." 
+                  ? "Seus grupos aparecerão aqui. Crie um novo para começar." 
                   : "Seus grupos arquivados aparecerão aqui."
                 }
               />
