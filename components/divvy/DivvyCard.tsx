@@ -18,7 +18,7 @@ interface DivvyCardProps {
 }
 
 const DivvyCard: React.FC<DivvyCardProps> = ({ divvy }) => {
-  const date = new Date(divvy.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' });
+  const date = new Date(divvy.createdat).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' });
   const config = typeConfig[divvy.type] || typeConfig.general;
   
   // Lógica para visualização de membros
@@ -40,7 +40,7 @@ const DivvyCard: React.FC<DivvyCardProps> = ({ divvy }) => {
           </div>
           
           <div className="flex flex-col items-end gap-2">
-             {divvy.is_archived && (
+             {divvy.isarchived && (
                <span className="inline-flex items-center gap-1 bg-gray-100 dark:bg-dark-800 text-gray-500 text-[10px] uppercase font-extrabold px-2.5 py-1 rounded-full border border-gray-200 dark:border-dark-700 tracking-wider">
                  <Lock size={10} /> Arquivado
                </span>
@@ -78,19 +78,19 @@ const DivvyCard: React.FC<DivvyCardProps> = ({ divvy }) => {
                {previewMembers.length > 0 ? (
                  previewMembers.map((member) => (
                     <div 
-                      key={member.user_id} 
+                      key={member.userid} 
                       className="w-8 h-8 rounded-full border-2 border-white dark:border-dark-900 bg-gray-100 dark:bg-dark-800 flex items-center justify-center overflow-hidden"
-                      title={member.profiles?.full_name || member.email}
+                      title={member.userprofiles?.fullname || member.email}
                     >
-                      {member.profiles?.avatar_url ? (
+                      {member.userprofiles?.avatarurl ? (
                         <img 
-                          src={member.profiles.avatar_url} 
+                          src={member.userprofiles.avatarurl} 
                           alt="Avatar" 
                           className="w-full h-full object-cover"
                         />
                       ) : (
                         <span className="text-[10px] font-bold text-gray-500 dark:text-gray-400">
-                          {(member.profiles?.nickname || member.profiles?.full_name || member.email || '?').charAt(0).toUpperCase()}
+                          {(member.userprofiles?.displayname || member.userprofiles?.fullname || member.email || '?').charAt(0).toUpperCase()}
                         </span>
                       )}
                     </div>

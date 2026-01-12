@@ -30,19 +30,20 @@ const DashboardContent: React.FC = () => {
       const { data: createdGroups, error: createdError } = await supabase
         .from('divvies')
         .select('*')
-        .eq('creator_id', user.id);
+        .eq('creatorid', user.id);
       
       if (createdError) throw createdError;
 
       // 2. Buscar IDs dos grupos onde sou apenas membro (participante)
+      // Using table 'divvymembers' as per schema
       const { data: membershipRows, error: memberError } = await supabase
-        .from('divvy_members')
-        .select('divvy_id')
-        .eq('user_id', user.id);
+        .from('divvymembers')
+        .select('divvyid')
+        .eq('userid', user.id);
       
       if (memberError) throw memberError;
 
-      const joinedIds = (membershipRows || []).map(m => m.divvy_id);
+      const joinedIds = (membershipRows || []).map((m: any) => m.divvyid);
       
       // 3. Buscar os detalhes desses outros grupos
       let joinedGroups: Divvy[] = [];
@@ -66,30 +67,30 @@ const DashboardContent: React.FC = () => {
       const allGroupIds = finalGroups.map(g => g.id);
 
       // 5. Buscar TODOS os membros de todos esses grupos de uma vez
-      // Importante: profiles(id, avatar_url) precisa estar com permissão de leitura pública no RLS
+      // Using table 'divvymembers' and 'userprofiles'
       const { data: allMembers, error: fetchMembersError } = await supabase
-        .from('divvy_members')
+        .from('divvymembers')
         .select(`
-          divvy_id, 
-          user_id, 
+          divvyid, 
+          userid, 
           email,
-          profiles:user_id (
+          userprofiles:userid (
             id,
-            full_name,
-            nickname,
-            avatar_url
+            fullname,
+            displayname,
+            avatarurl
           )
         `)
-        .in('divvy_id', allGroupIds);
+        .in('divvyid', allGroupIds);
 
       // 6. Mapear membros para seus respectivos grupos
       const membersByGroup: Record<string, DivvyMember[]> = {};
       if (allMembers) {
         allMembers.forEach((m: any) => {
-          if (!membersByGroup[m.divvy_id]) {
-            membersByGroup[m.divvy_id] = [];
+          if (!membersByGroup[m.divvyid]) {
+            membersByGroup[m.divvyid] = [];
           }
-          membersByGroup[m.divvy_id].push(m);
+          membersByGroup[m.divvyid].push(m);
         });
       }
 
@@ -106,8 +107,8 @@ const DashboardContent: React.FC = () => {
         };
       });
 
-      // Ordenar por data
-      enrichedDivvies.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+      // Ordenar por data (createdat)
+      enrichedDivvies.sort((a, b) => new Date(b.createdat).getTime() - new Date(a.createdat).getTime());
 
       setDivvies(enrichedDivvies);
     } catch (err) {
@@ -124,14 +125,14 @@ const DashboardContent: React.FC = () => {
     // Inscrição para atualizações em tempo real
     const channel = supabase.channel('dashboard_realtime')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'divvies' }, () => fetchDivvies(true))
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'divvy_members' }, () => fetchDivvies(true))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'divvymembers' }, () => fetchDivvies(true))
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
   }, [fetchDivvies]);
 
   const filteredDivvies = divvies.filter(d => 
-    viewMode === 'active' ? !d.is_archived : d.is_archived
+    viewMode === 'active' ? !d.isarchived : d.isarchived
   );
 
   const displayName = user?.user_metadata?.full_name?.split(' ')[0] || user?.email?.split('@')[0] || 'Usuário';

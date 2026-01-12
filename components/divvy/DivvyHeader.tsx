@@ -39,7 +39,7 @@ export default function DivvyHeader({ divvy, onUpdate }: DivvyHeaderProps) {
   // Proteção máxima contra objeto nulo ou indefinido
   if (!divvy || !divvy.id) return null;
 
-  const isCreator = user?.id === divvy.creator_id;
+  const isCreator = user?.id === divvy.creatorid;
 
   const handleDelete = async () => {
     if (!window.confirm('Tem certeza que deseja excluir este grupo? Todas as despesas serão apagadas permanentemente.')) {
@@ -61,7 +61,7 @@ export default function DivvyHeader({ divvy, onUpdate }: DivvyHeaderProps) {
   };
 
   const handleToggleArchive = async () => {
-     const currentStatus = !!divvy.is_archived;
+     const currentStatus = !!divvy.isarchived;
      const newStatus = !currentStatus;
      const action = newStatus ? 'arquivar' : 'desarquivar';
      
@@ -71,7 +71,7 @@ export default function DivvyHeader({ divvy, onUpdate }: DivvyHeaderProps) {
      try {
        const { error } = await supabase
         .from('divvies')
-        .update({ is_archived: newStatus })
+        .update({ isarchived: newStatus })
         .eq('id', divvy.id);
        
        if (error) throw error;
@@ -104,7 +104,7 @@ export default function DivvyHeader({ divvy, onUpdate }: DivvyHeaderProps) {
   return (
     <>
       <div className={`border-b -mx-4 md:-mx-8 -mt-4 md:-mt-8 mb-8 transition-colors duration-200 
-          ${divvy.is_archived 
+          ${divvy.isarchived 
             ? 'bg-gray-100 dark:bg-gray-800 border-gray-300 dark:border-gray-600' 
             : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-dark-700'
           }`}
@@ -116,7 +116,7 @@ export default function DivvyHeader({ divvy, onUpdate }: DivvyHeaderProps) {
               <div>
                 <h1 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
                   {divvy.name}
-                  {divvy.is_archived && (
+                  {divvy.isarchived && (
                     <span className="text-xs bg-gray-600 dark:bg-gray-700 text-white px-2 py-1 rounded-full font-bold flex items-center gap-1">
                       <Archive size={10} /> Arquivado
                     </span>
@@ -125,16 +125,16 @@ export default function DivvyHeader({ divvy, onUpdate }: DivvyHeaderProps) {
                 <div className="text-sm text-gray-500 dark:text-gray-400 flex flex-wrap items-center gap-2 mt-1">
                   <span>{typeLabel[divvy.type]}</span>
                   <span>•</span>
-                  <span>Criado em {new Date(divvy.created_at).toLocaleDateString('pt-BR')}</span>
+                  <span>Criado em {new Date(divvy.createdat).toLocaleDateString('pt-BR')}</span>
                   
-                  {(divvy.start_date || divvy.end_date) && (
+                  {(divvy.endedat) && (
                      <>
                        <span className="hidden sm:inline">•</span>
                        <span className="flex items-center gap-1 text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 px-2 py-0.5 rounded">
                           <Calendar size={12} />
-                          {formatDate(divvy.start_date) || '...'} 
+                          {formatDate(divvy.createdat) || '...'} 
                           {' → '} 
-                          {formatDate(divvy.end_date) || '...'}
+                          {formatDate(divvy.endedat) || '...'}
                        </span>
                      </>
                   )}
@@ -154,7 +154,7 @@ export default function DivvyHeader({ divvy, onUpdate }: DivvyHeaderProps) {
                     size="sm" 
                     onClick={() => setIsEditModalOpen(true)}
                     title="Editar Grupo"
-                    disabled={divvy.is_archived}
+                    disabled={divvy.isarchived}
                   >
                     <Pencil size={16} />
                   </Button>
@@ -163,11 +163,11 @@ export default function DivvyHeader({ divvy, onUpdate }: DivvyHeaderProps) {
                     variant="outline" 
                     size="sm" 
                     onClick={handleToggleArchive}
-                    title={divvy.is_archived ? "Desarquivar" : "Arquivar"}
+                    title={divvy.isarchived ? "Desarquivar" : "Arquivar"}
                     isLoading={actionLoading}
-                    className={divvy.is_archived ? "text-brand-600 dark:text-brand-400 border-brand-200 dark:border-brand-800" : "text-gray-600 dark:text-gray-400"}
+                    className={divvy.isarchived ? "text-brand-600 dark:text-brand-400 border-brand-200 dark:border-brand-800" : "text-gray-600 dark:text-gray-400"}
                   >
-                    {divvy.is_archived ? <RotateCcw size={16} /> : <Archive size={16} />}
+                    {divvy.isarchived ? <RotateCcw size={16} /> : <Archive size={16} />}
                   </Button>
 
                   <Button 

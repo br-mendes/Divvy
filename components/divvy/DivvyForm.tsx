@@ -33,8 +33,9 @@ export default function DivvyForm({ onSuccess, initialData }: DivvyFormProps) {
       setName(initialData.name);
       setDescription(initialData.description || '');
       setType(initialData.type);
-      setStartDate(initialData.start_date ? initialData.start_date.split('T')[0] : '');
-      setEndDate(initialData.end_date ? initialData.end_date.split('T')[0] : '');
+      // Map createdat to start date for editing, as Divvy doesn't have start_date column
+      setStartDate(initialData.createdat ? initialData.createdat.split('T')[0] : '');
+      setEndDate(initialData.endedat ? initialData.endedat.split('T')[0] : '');
     }
   }, [initialData]);
 
@@ -50,8 +51,8 @@ export default function DivvyForm({ onSuccess, initialData }: DivvyFormProps) {
         name,
         description,
         type,
-        start_date: startDate || null,
-        end_date: endDate || null,
+        // createdat: startDate ? new Date(startDate).toISOString() : undefined, // Optional: Update createdat if desired, otherwise leave as default
+        endedat: endDate ? new Date(endDate).toISOString() : null,
       };
 
       if (initialData) {
@@ -62,8 +63,8 @@ export default function DivvyForm({ onSuccess, initialData }: DivvyFormProps) {
         // 1. Criar o grupo
         const { data: newDivvy, error: divvyError } = await supabase.from('divvies').insert({
           ...payload,
-          creator_id: user.id,
-          is_archived: false
+          creatorid: user.id,
+          isarchived: false
         }).select().single();
 
         if (divvyError) throw divvyError;
@@ -71,9 +72,9 @@ export default function DivvyForm({ onSuccess, initialData }: DivvyFormProps) {
         // 2. CRÍTICO: Adicionar o criador como membro
         // Sem isso, o RLS bloqueia a visualização do próprio grupo criado
         if (newDivvy) {
-          const { error: memberError } = await supabase.from('divvy_members').insert({
-            divvy_id: newDivvy.id,
-            user_id: user.id,
+          const { error: memberError } = await supabase.from('divvymembers').insert({
+            divvyid: newDivvy.id,
+            userid: user.id,
             email: user.email,
             role: 'admin'
           });
@@ -118,7 +119,8 @@ export default function DivvyForm({ onSuccess, initialData }: DivvyFormProps) {
       </div>
 
       <div className="grid grid-cols-2 gap-4">
-        <Input type="date" label="Data Início" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+        {/* Note: Start Date maps to createdat in this implementation as schema lacks start_date */}
+        <Input type="date" label="Data Início (Criação)" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
         <Input type="date" label="Data Fim" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
       </div>
 
