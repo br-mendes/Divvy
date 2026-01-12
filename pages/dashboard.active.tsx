@@ -27,36 +27,65 @@ const DashboardContent: React.FC = () => {
     setHasError(false);
 
     try {
-      // CHAMADA RPC (Remote Procedure Call)
-      // Esta função executa no banco com permissões de sistema,
-      // contornando qualquer problema de RLS (Row Level Security).
-      const { data, error } = await supabase.rpc('get_dashboard_divvies');
+      // --- TENTATIVA 1: RPC (Mais rápida e segura) ---
+      // Tenta chamar a função de banco de dados otimizada
+      const { data: rpcData, error: rpcError } = await supabase.rpc('get_dashboard_divvies');
 
-      if (error) throw error;
-
-      if (data) {
-        // Garantir que member_count seja número (Postgres retorna bigint como string as vezes)
-        const formattedData: Divvy[] = data.map((d: any) => ({
+      if (!rpcError && rpcData) {
+        // Sucesso via RPC
+        const formattedData: Divvy[] = rpcData.map((d: any) => ({
             ...d,
             member_count: Number(d.member_count || 1)
         }));
         setDivvies(formattedData);
-      } else {
-        setDivvies([]);
+        setLoading(false);
+        return;
       }
 
-    } catch (err: any) {
-      console.error("Dashboard RPC Error:", err);
-      setHasError(true);
-      // Evita spam de erro se for apenas atualização em background
-      if (!silent) {
-        // Se o erro for "function not found", o usuário esqueceu de rodar o SQL
-        if (err.message?.includes('function') && err.message?.includes('not found')) {
-            toast.error('Erro de Configuração: Execute o script SQL fornecido.');
-        } else {
-            toast.error('Não foi possível carregar os grupos.');
-        }
+      // Se falhar (ex: função não existe), fazemos o fallback silenciosamente
+      if (rpcError) {
+         console.warn("RPC falhou, tentando método manual:", rpcError.message);
       }
+
+      // --- TENTATIVA 2: FALLBACK MANUAL (Busca tradicional) ---
+      // 1. Buscar grupos que criei
+      const { data: created, error: createdError } = await supabase
+        .from('divvies')
+        .select('*')
+        .eq('creator_id', user.id);
+      
+      if (createdError) throw createdError;
+
+      // 2. Buscar IDs dos grupos que participo (evita join complexo que trava RLS)
+      const { data: memberships, error: memberError } = await supabase
+        .from('divvy_members')
+        .select('divvy_id')
+        .eq('user_id', user.id);
+
+      if (memberError) throw memberError;
+
+      // 3. Buscar detalhes dos grupos participados
+      const joinedIds = memberships?.map((m: any) => m.divvy_id).filter(id => !created?.find(c => c.id === id)) || [];
+      
+      let joinedDivvies: Divvy[] = [];
+      if (joinedIds.length > 0) {
+         const { data: joined } = await supabase.from('divvies').select('*').in('id', joinedIds);
+         if (joined) joinedDivvies = joined;
+      }
+
+      // 4. Combinar e Ordenar
+      const allDivvies = [...(created || []), ...joinedDivvies];
+      allDivvies.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+      
+      // Remover duplicatas
+      const uniqueDivvies = Array.from(new Map(allDivvies.map(item => [item.id, item])).values());
+      
+      setDivvies(uniqueDivvies);
+
+    } catch (err: any) {
+      console.error("Critical Dashboard Error:", err);
+      setHasError(true);
+      if (!silent) toast.error('Falha ao carregar grupos. Verifique sua conexão.');
     } finally {
       setLoading(false);
     }
@@ -65,7 +94,6 @@ const DashboardContent: React.FC = () => {
   useEffect(() => {
     fetchDivvies();
     
-    // Inscrição simplificada para atualizações
     const channel = supabase.channel('dashboard_updates')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'divvies' }, () => fetchDivvies(true))
       .subscribe();
@@ -157,7 +185,7 @@ const DashboardContent: React.FC = () => {
                 </div>
                 <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-2">Erro de Conexão</h3>
                 <p className="text-gray-500 max-w-sm mb-6">
-                    Não foi possível carregar seus grupos. Verifique se o script SQL foi executado no Supabase.
+                    Não foi possível carregar seus grupos.
                 </p>
                 <Button onClick={() => fetchDivvies()}>Tentar Novamente</Button>
             </div>
