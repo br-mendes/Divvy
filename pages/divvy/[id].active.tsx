@@ -19,8 +19,6 @@ import {
 import { ProtectedRoute } from '../../components/ProtectedRoute';
 import toast from 'react-hot-toast';
 
-type SplitMode = 'equal' | 'amount' | 'percentage';
-
 const DivvyDetailContent: React.FC = () => {
   const router = useRouter();
   const { id } = router.query;
@@ -40,15 +38,12 @@ const DivvyDetailContent: React.FC = () => {
   const [isViewModalOpen, setIsViewModalOpen] = useState(false);
   
   const [viewingExpense, setViewingExpense] = useState<Expense | null>(null);
-  const [viewingSplits, setViewingSplits] = useState<ExpenseSplit[]>([]);
 
   // Expense Form State
-  const [editingExpenseId, setEditingExpenseId] = useState<string | null>(null);
   const [amount, setAmount] = useState('');
   const [category, setCategory] = useState('food');
   const [desc, setDesc] = useState('');
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
-  const [payerId, setPayerId] = useState('');
   const [submitLoading, setSubmitLoading] = useState(false);
 
   useEffect(() => {
@@ -57,24 +52,37 @@ const DivvyDetailContent: React.FC = () => {
 
   const fetchDivvyData = async () => {
     try {
+      // Busca dados do grupo
       const { data: divvyData, error: dErr } = await supabase.from('divvies').select('*').eq('id', divvyId).single();
       if (dErr || !divvyData) {
          setLoading(false);
          return;
       }
 
-      const { data: memberData } = await supabase.from('divvy_members').select('*, profiles(*)').eq('divvy_id', divvyId);
-      const { data: expenseData } = await supabase.from('expenses').select('*').eq('divvy_id', divvyId).order('date', { ascending: false });
-      const { data: settlementData } = await supabase.from('settlements').select('*').eq('divvy_id', divvyId).order('created_at', { ascending: false });
+      // Busca membros, despesas e acertos simultaneamente
+      const [membersRes, expensesRes, settlementsRes] = await Promise.all([
+        supabase.from('divvy_members').select('*, profiles(*)').eq('divvy_id', divvyId),
+        supabase.from('expenses').select('*').eq('divvy_id', divvyId).order('date', { ascending: false }),
+        supabase.from('settlements').select('*').eq('divvy_id', divvyId).order('created_at', { ascending: false })
+      ]);
 
       setDivvy(divvyData);
-      setMembers(memberData || []);
-      setExpenses(expenseData || []);
-      setSettlements(settlementData || []);
+      setMembers(membersRes.data || []);
+      setExpenses(expensesRes.data || []);
+      setSettlements(settlementsRes.data || []);
 
-      if (expenseData && expenseData.length > 0) {
-        const { data: splitData } = await supabase.from('expense_splits').select('*').in('expense_id', expenseData.map(e => e.id));
+      // Busca as divisões apenas se houver despesas
+      if (expensesRes.data && expensesRes.data.length > 0) {
+        const expenseIds = expensesRes.data.map(e => e.id);
+        const { data: splitData, error: sErr } = await supabase
+          .from('expense_splits')
+          .select('*')
+          .in('expense_id', expenseIds);
+        
+        if (sErr) console.error("Erro ao carregar divisões:", sErr);
         setAllSplits(splitData || []);
+      } else {
+        setAllSplits([]);
       }
     } catch (error) {
       console.error("Fetch Error:", error);
@@ -86,12 +94,18 @@ const DivvyDetailContent: React.FC = () => {
   const calculateBalances = useMemo(() => {
     const balances: Record<string, number> = {};
     members.forEach(m => balances[m.user_id] = 0);
+
+    // Soma o que cada um pagou
     expenses.forEach(e => {
         if (balances[e.paid_by_user_id] !== undefined) balances[e.paid_by_user_id] += e.amount;
     });
+
+    // Subtrai o que cada um deve (splits)
     allSplits.forEach(s => {
         if (balances[s.participant_user_id] !== undefined) balances[s.participant_user_id] -= s.amount_owed;
     });
+
+    // Ajusta conforme pagamentos já confirmados
     settlements.filter(s => s.status === 'confirmed').forEach(s => {
       if (balances[s.payer_id] !== undefined) balances[s.payer_id] += s.amount;
       if (balances[s.receiver_id] !== undefined) balances[s.receiver_id] -= s.amount;
@@ -101,10 +115,13 @@ const DivvyDetailContent: React.FC = () => {
     const debtors = Object.entries(balances).filter(([_, b]) => b < -0.01).map(([id, b]) => ({ id, b: Math.abs(b) }));
     const creditors = Object.entries(balances).filter(([_, b]) => b > 0.01).map(([id, b]) => ({ id, b }));
 
+    // Algoritmo de minimização de transferências
     let i = 0, j = 0;
     while (i < debtors.length && j < creditors.length) {
       const amount = Math.min(debtors[i].b, creditors[j].b);
-      plan.push({ from: debtors[i].id, to: creditors[j].id, amount });
+      if (amount > 0.01) {
+        plan.push({ from: debtors[i].id, to: creditors[j].id, amount });
+      }
       debtors[i].b -= amount;
       creditors[j].b -= amount;
       if (debtors[i].b < 0.01) i++;
@@ -116,7 +133,8 @@ const DivvyDetailContent: React.FC = () => {
       ? new Date(Math.max(...confirmedSettlements.map(s => new Date(s.created_at).getTime())))
       : null;
 
-    const isGroupBalanced = plan.length === 0 && expenses.length > 0;
+    // Um grupo só é considerado balanceado se houver despesas E o plano de pagamentos for zero
+    const isGroupBalanced = expenses.length > 0 && plan.length === 0 && allSplits.length > 0;
 
     return { plan, isGroupBalanced, lastConfirmedDate };
   }, [expenses, allSplits, members, settlements]);
@@ -135,8 +153,11 @@ const DivvyDetailContent: React.FC = () => {
       if (error) throw error;
       
       await supabase.from('notifications').insert({
-        user_id: to, divvy_id: divvyId, type: 'settlement',
-        title: 'Pagamento enviado', message: `${getMemberName(user?.id!)} informou que enviou o pagamento de ${formatMoney(amount)}.`
+        user_id: to, 
+        divvy_id: divvyId, 
+        type: 'settlement',
+        title: 'Pagamento enviado', 
+        message: `${getMemberName(user?.id!)} informou que enviou o pagamento de ${formatMoney(amount)}.`
       });
       toast.success('Aviso enviado! O credor precisa confirmar o recebimento.');
       fetchDivvyData();
@@ -154,7 +175,9 @@ const DivvyDetailContent: React.FC = () => {
       }).eq('id', s.id);
       
       await supabase.from('notifications').insert({
-        user_id: s.payer_id, divvy_id: divvyId, type: 'settlement',
+        user_id: s.payer_id, 
+        divvy_id: divvyId, 
+        type: 'settlement',
         title: status === 'confirmed' ? 'Pagamento confirmado!' : 'Pagamento recusado',
         message: `${getMemberName(s.receiver_id)} ${status === 'confirmed' ? 'confirmou' : 'não reconheceu'} o recebimento de ${formatMoney(s.amount)}.`
       });
@@ -166,8 +189,11 @@ const DivvyDetailContent: React.FC = () => {
   const handleRequestPaymentInfo = async (to: string) => {
     try {
       await supabase.from('notifications').insert({
-        user_id: to, divvy_id: divvyId, type: 'info',
-        title: 'Pedido de dados PIX', message: `${getMemberName(user?.id!)} quer te pagar e solicitou seus dados de pagamento.`
+        user_id: to, 
+        divvy_id: divvyId, 
+        type: 'info',
+        title: 'Pedido de dados PIX', 
+        message: `${getMemberName(user?.id!)} quer te pagar e solicitou seus dados de pagamento.`
       });
       toast.success('Solicitação enviada!');
     } catch (e: any) { toast.error(e.message); }
@@ -188,7 +214,7 @@ const DivvyDetailContent: React.FC = () => {
       const val = parseFloat(amount);
       const { data: expense, error } = await supabase.from('expenses').insert({
         divvy_id: divvyId,
-        paid_by_user_id: payerId || user.id,
+        paid_by_user_id: user.id,
         amount: val,
         category,
         description: desc,
@@ -207,6 +233,8 @@ const DivvyDetailContent: React.FC = () => {
 
       toast.success('Despesa adicionada!');
       setIsExpenseModalOpen(false);
+      setAmount('');
+      setDesc('');
       fetchDivvyData();
     } catch (e: any) { toast.error(e.message); }
     finally { setSubmitLoading(false); }
@@ -219,6 +247,7 @@ const DivvyDetailContent: React.FC = () => {
     <div className="space-y-6">
       <DivvyHeader divvy={divvy} onUpdate={fetchDivvyData} />
 
+      {/* Alerta de Grupo Quitado */}
       {calculateBalances.isGroupBalanced && !divvy.is_archived && (
         <div className="bg-brand-50 dark:bg-brand-900/20 border border-brand-200 dark:border-brand-800 p-5 rounded-2xl flex flex-col md:flex-row items-center justify-between gap-4 animate-fade-in-down shadow-sm">
           <div className="flex items-center gap-4">
@@ -238,7 +267,7 @@ const DivvyDetailContent: React.FC = () => {
 
       <div className="flex justify-end gap-3 px-1">
         <Button variant="outline" onClick={() => setIsInviteModalOpen(true)}><UserPlus size={18} className="mr-2" /> Convidar</Button>
-        <Button onClick={() => { setEditingExpenseId(null); setAmount(''); setIsExpenseModalOpen(true); }} disabled={divvy.is_archived}><Plus size={18} className="mr-2" /> Nova Despesa</Button>
+        <Button onClick={() => { setAmount(''); setIsExpenseModalOpen(true); }} disabled={divvy.is_archived}><Plus size={18} className="mr-2" /> Nova Despesa</Button>
       </div>
 
       <div className="border-b border-gray-200 dark:border-dark-700">
@@ -270,7 +299,9 @@ const DivvyDetailContent: React.FC = () => {
             {expenses.length === 0 ? <EmptyState /> : expenses.map(exp => (
               <div key={exp.id} onClick={() => { setViewingExpense(exp); setIsViewModalOpen(true); }} className="bg-white dark:bg-dark-800 p-4 rounded-xl shadow-sm border border-gray-100 dark:border-dark-700 flex justify-between items-center cursor-pointer hover:bg-gray-50 dark:hover:bg-dark-700 transition-all group">
                 <div className="flex items-center gap-4">
-                  <div className="h-10 w-10 rounded-full bg-brand-50 dark:bg-brand-900/30 flex items-center justify-center text-xl">{exp.category === 'food' ? '🍽️' : '💰'}</div>
+                  <div className="h-10 w-10 rounded-full bg-brand-50 dark:bg-brand-900/30 flex items-center justify-center text-xl">
+                    {exp.category === 'food' ? '🍽️' : exp.category === 'transport' ? '🚗' : '💰'}
+                  </div>
                   <div>
                     <p className="font-bold text-gray-900 dark:text-white flex items-center gap-2">
                       {exp.description || exp.category}
@@ -287,6 +318,7 @@ const DivvyDetailContent: React.FC = () => {
 
         {activeTab === 'balances' && (
           <div className="space-y-6">
+            {/* Pagamentos Aguardando Confirmação */}
             {settlements.filter(s => s.status === 'pending' && s.receiver_id === user?.id).map(s => (
               <div key={s.id} className="bg-yellow-50 dark:bg-yellow-900/10 p-5 rounded-2xl border border-yellow-200 dark:border-yellow-900/30 flex flex-col md:flex-row justify-between items-center gap-4">
                 <div className="flex items-center gap-3">
@@ -304,7 +336,11 @@ const DivvyDetailContent: React.FC = () => {
               <h3 className="font-bold mb-6 flex items-center gap-2 text-gray-900 dark:text-white"><Wallet size={20} className="text-brand-500" /> Como quitar as dívidas</h3>
               <div className="space-y-3">
                 {calculateBalances.plan.length === 0 ? (
-                  <div className="text-center py-8 text-gray-500">Nenhum saldo pendente.</div>
+                  <div className="text-center py-8 text-gray-500">
+                    {expenses.length > 0 && allSplits.length === 0 
+                      ? "Carregando divisões..." 
+                      : "Nenhum saldo pendente."}
+                  </div>
                 ) : calculateBalances.plan.map((p, i) => {
                   const isMeDebtor = p.from === user?.id;
                   const hasSentPayment = settlements.some(s => s.payer_id === p.from && s.receiver_id === p.to && s.status === 'pending');
@@ -324,7 +360,7 @@ const DivvyDetailContent: React.FC = () => {
                                 <Info size={16} />
                              </Button>
                              {hasSentPayment ? (
-                                <span className="text-xs font-bold text-yellow-600 bg-yellow-100 px-3 py-2 rounded-lg">Pendente...</span>
+                                <span className="text-xs font-bold text-yellow-600 bg-yellow-100 px-3 py-2 rounded-lg">Aguardando...</span>
                              ) : (
                                 <Button size="sm" className="bg-green-600 text-white" onClick={() => handleMarkAsPaid(p.to, p.amount)}>Paguei</Button>
                              )}
@@ -339,6 +375,7 @@ const DivvyDetailContent: React.FC = () => {
           </div>
         )}
 
+        {/* ... outras abas mantidas ... */}
         {activeTab === 'charts' && (
           <div className="bg-white dark:bg-dark-800 p-6 rounded-2xl border border-gray-100">
              <ExpenseCharts expenses={expenses} />
