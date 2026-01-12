@@ -28,26 +28,25 @@ const config: Config = {
           950: '#2e1065',
         },
         dark: {
-          950: '#050505', // Deep Midnight Black
-          900: '#0a0a0c', // Dark surfaces
-          800: '#121216', // Cards & Inputs
-          700: '#1a1a1f', // Borders & Dividers
-          600: '#26262e', // Hover states
-          500: '#3f3f46', // Muted text
+          950: '#030303', // Fundo Absoluto
+          900: '#080808', // Camada 1
+          800: '#0f0f12', // Cards
+          700: '#1a1a1f', // Bordas
+          600: '#2d2d35', // Hover
+          500: '#71717a', // Texto Mudo
         }
       },
       animation: {
-        'ping-slow': 'ping 3s cubic-bezier(0, 0, 0.2, 1) infinite',
-        'float': 'float 3s ease-in-out infinite',
-        'fade-in-down': 'fadeInDown 0.4s ease-out forwards',
+        'glow': 'glow 2s ease-in-out infinite alternate',
+        'fade-in-up': 'fadeInUp 0.5s ease-out forwards',
       },
       keyframes: {
-        float: {
-          '0%, 100%': { transform: 'translateY(0)' },
-          '50%': { transform: 'translateY(-6px)' },
+        glow: {
+          '0%': { filter: 'drop-shadow(0 0 2px #8b5cf6)' },
+          '100%': { filter: 'drop-shadow(0 0 10px #8b5cf6)' },
         },
-        fadeInDown: {
-          '0%': { opacity: '0', transform: 'translateY(-10px)' },
+        fadeInUp: {
+          '0%': { opacity: '0', transform: 'translateY(10px)' },
           '100%': { opacity: '1', transform: 'translateY(0)' },
         }
       }
