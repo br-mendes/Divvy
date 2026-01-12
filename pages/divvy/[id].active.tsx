@@ -52,14 +52,14 @@ const DivvyDetailContent: React.FC = () => {
 
   const fetchDivvyData = async () => {
     try {
-      // Busca dados do grupo
+      // 1. Busca dados do grupo
       const { data: divvyData, error: dErr } = await supabase.from('divvies').select('*').eq('id', divvyId).single();
       if (dErr || !divvyData) {
          setLoading(false);
          return;
       }
 
-      // Busca membros, despesas e acertos simultaneamente
+      // 2. Busca membros, despesas e acertos simultaneamente para melhor performance
       const [membersRes, expensesRes, settlementsRes] = await Promise.all([
         supabase.from('divvy_members').select('*, profiles(*)').eq('divvy_id', divvyId),
         supabase.from('expenses').select('*').eq('divvy_id', divvyId).order('date', { ascending: false }),
@@ -71,7 +71,7 @@ const DivvyDetailContent: React.FC = () => {
       setExpenses(expensesRes.data || []);
       setSettlements(settlementsRes.data || []);
 
-      // Busca as divisões apenas se houver despesas
+      // 3. Busca TODAS as divisões (splits) das despesas do grupo
       if (expensesRes.data && expensesRes.data.length > 0) {
         const expenseIds = expensesRes.data.map(e => e.id);
         const { data: splitData, error: sErr } = await supabase
@@ -79,7 +79,7 @@ const DivvyDetailContent: React.FC = () => {
           .select('*')
           .in('expense_id', expenseIds);
         
-        if (sErr) console.error("Erro ao carregar divisões:", sErr);
+        if (sErr) console.error("Erro ao carregar divisões (RLS pode estar bloqueando):", sErr);
         setAllSplits(splitData || []);
       } else {
         setAllSplits([]);
@@ -95,27 +95,32 @@ const DivvyDetailContent: React.FC = () => {
     const balances: Record<string, number> = {};
     members.forEach(m => balances[m.user_id] = 0);
 
-    // Soma o que cada um pagou
+    // Soma créditos (quem pagou)
     expenses.forEach(e => {
         if (balances[e.paid_by_user_id] !== undefined) balances[e.paid_by_user_id] += e.amount;
     });
 
-    // Subtrai o que cada um deve (splits)
+    // Subtrai débitos (quem deve)
     allSplits.forEach(s => {
         if (balances[s.participant_user_id] !== undefined) balances[s.participant_user_id] -= s.amount_owed;
     });
 
-    // Ajusta conforme pagamentos já confirmados
+    // Ajusta conforme pagamentos já confirmados (settlements)
     settlements.filter(s => s.status === 'confirmed').forEach(s => {
       if (balances[s.payer_id] !== undefined) balances[s.payer_id] += s.amount;
       if (balances[s.receiver_id] !== undefined) balances[s.receiver_id] -= s.amount;
     });
 
     const plan: { from: string; to: string; amount: number }[] = [];
-    const debtors = Object.entries(balances).filter(([_, b]) => b < -0.01).map(([id, b]) => ({ id, b: Math.abs(b) }));
-    const creditors = Object.entries(balances).filter(([_, b]) => b > 0.01).map(([id, b]) => ({ id, b }));
+    const debtors = Object.entries(balances)
+        .filter(([_, b]) => b < -0.01)
+        .map(([id, b]) => ({ id, b: Math.abs(b) }));
+    
+    const creditors = Object.entries(balances)
+        .filter(([_, b]) => b > 0.01)
+        .map(([id, b]) => ({ id, b }));
 
-    // Algoritmo de minimização de transferências
+    // Algoritmo para sugerir transferências
     let i = 0, j = 0;
     while (i < debtors.length && j < creditors.length) {
       const amount = Math.min(debtors[i].b, creditors[j].b);
@@ -133,8 +138,8 @@ const DivvyDetailContent: React.FC = () => {
       ? new Date(Math.max(...confirmedSettlements.map(s => new Date(s.created_at).getTime())))
       : null;
 
-    // Um grupo só é considerado balanceado se houver despesas E o plano de pagamentos for zero
-    const isGroupBalanced = expenses.length > 0 && plan.length === 0 && allSplits.length > 0;
+    // Um grupo é balanceado se houver despesas, as divisões foram carregadas e não há plano de transferência
+    const isGroupBalanced = expenses.length > 0 && allSplits.length > 0 && plan.length === 0;
 
     return { plan, isGroupBalanced, lastConfirmedDate };
   }, [expenses, allSplits, members, settlements]);
@@ -241,13 +246,13 @@ const DivvyDetailContent: React.FC = () => {
   };
 
   if (loading) return <div className="flex justify-center p-12"><LoadingSpinner /></div>;
-  if (!divvy) return <div className="p-12 text-center text-gray-500">Grupo não encontrado ou você não tem permissão para acessá-lo.</div>;
+  if (!divvy) return <div className="p-12 text-center text-gray-500">Grupo não encontrado ou sem permissão.</div>;
 
   return (
     <div className="space-y-6">
       <DivvyHeader divvy={divvy} onUpdate={fetchDivvyData} />
 
-      {/* Alerta de Grupo Quitado */}
+      {/* Banner de Grupo Quitado */}
       {calculateBalances.isGroupBalanced && !divvy.is_archived && (
         <div className="bg-brand-50 dark:bg-brand-900/20 border border-brand-200 dark:border-brand-800 p-5 rounded-2xl flex flex-col md:flex-row items-center justify-between gap-4 animate-fade-in-down shadow-sm">
           <div className="flex items-center gap-4">
@@ -323,7 +328,7 @@ const DivvyDetailContent: React.FC = () => {
               <div key={s.id} className="bg-yellow-50 dark:bg-yellow-900/10 p-5 rounded-2xl border border-yellow-200 dark:border-yellow-900/30 flex flex-col md:flex-row justify-between items-center gap-4">
                 <div className="flex items-center gap-3">
                    <Clock className="text-yellow-600" />
-                   <p className="text-sm"><b>{getMemberName(s.payer_id)}</b> informou que te enviou <b>{formatMoney(s.amount)}</b>. Confirma o recebimento?</p>
+                   <p className="text-sm text-gray-800"><b>{getMemberName(s.payer_id)}</b> informou que te enviou <b>{formatMoney(s.amount)}</b>. Confirma o recebimento?</p>
                 </div>
                 <div className="flex gap-2 w-full md:w-auto">
                   <Button size="sm" variant="outline" className="flex-1 text-red-600" onClick={() => handleUpdateSettlement(s, 'rejected')}>Recusar</Button>
@@ -332,52 +337,53 @@ const DivvyDetailContent: React.FC = () => {
               </div>
             ))}
 
-            <div className="bg-white dark:bg-dark-800 p-6 rounded-2xl border border-gray-100 dark:border-dark-700">
+            <div className="bg-white dark:bg-dark-800 p-6 rounded-2xl border border-gray-100 dark:border-dark-700 shadow-sm">
               <h3 className="font-bold mb-6 flex items-center gap-2 text-gray-900 dark:text-white"><Wallet size={20} className="text-brand-500" /> Como quitar as dívidas</h3>
               <div className="space-y-3">
                 {calculateBalances.plan.length === 0 ? (
-                  <div className="text-center py-8 text-gray-500">
+                  <div className="text-center py-8 text-gray-500 bg-gray-50 dark:bg-dark-900/50 rounded-xl border border-dashed border-gray-200 dark:border-dark-700">
                     {expenses.length > 0 && allSplits.length === 0 
-                      ? "Carregando divisões..." 
+                      ? "Calculando divisões..." 
                       : "Nenhum saldo pendente."}
                   </div>
-                ) : calculateBalances.plan.map((p, i) => {
-                  const isMeDebtor = p.from === user?.id;
-                  const hasSentPayment = settlements.some(s => s.payer_id === p.from && s.receiver_id === p.to && s.status === 'pending');
-                  
-                  return (
-                    <div key={i} className="p-4 bg-gray-50 dark:bg-dark-900/50 rounded-xl flex flex-col sm:flex-row justify-between items-center gap-4 border border-gray-100 dark:border-dark-700">
-                      <div className="flex items-center gap-3">
-                        <span className="font-semibold">{getMemberName(p.from)}</span>
-                        <ArrowRight size={14} className="text-gray-400" />
-                        <span className="font-semibold">{getMemberName(p.to)}</span>
+                ) : (
+                  calculateBalances.plan.map((p, i) => {
+                    const isMeDebtor = p.from === user?.id;
+                    const hasSentPayment = settlements.some(s => s.payer_id === p.from && s.receiver_id === p.to && s.status === 'pending');
+                    
+                    return (
+                      <div key={i} className="p-4 bg-gray-50 dark:bg-dark-900/50 rounded-xl flex flex-col sm:flex-row justify-between items-center gap-4 border border-gray-100 dark:border-dark-700 hover:border-brand-100 transition-colors">
+                        <div className="flex items-center gap-3">
+                          <span className="font-semibold text-gray-900 dark:text-white">{getMemberName(p.from)}</span>
+                          <ArrowRight size={14} className="text-gray-400" />
+                          <span className="font-semibold text-gray-900 dark:text-white">{getMemberName(p.to)}</span>
+                        </div>
+                        <div className="flex items-center gap-4">
+                          <span className="font-bold text-brand-600 dark:text-brand-400 text-lg">{formatMoney(p.amount)}</span>
+                          {isMeDebtor && (
+                            <div className="flex gap-2">
+                               <Button variant="outline" size="sm" onClick={() => handleRequestPaymentInfo(p.to)} title="Pedir chave PIX">
+                                  <Info size={16} />
+                               </Button>
+                               {hasSentPayment ? (
+                                  <span className="text-xs font-bold text-yellow-600 bg-yellow-100 dark:bg-yellow-900/30 px-3 py-2 rounded-lg border border-yellow-200 dark:border-yellow-800">Aguardando...</span>
+                               ) : (
+                                  <Button size="sm" className="bg-green-600 hover:bg-green-700 text-white" onClick={() => handleMarkAsPaid(p.to, p.amount)}>Paguei</Button>
+                               )}
+                            </div>
+                          )}
+                        </div>
                       </div>
-                      <div className="flex items-center gap-4">
-                        <span className="font-bold text-brand-600 dark:text-brand-400 text-lg">{formatMoney(p.amount)}</span>
-                        {isMeDebtor && (
-                          <div className="flex gap-2">
-                             <Button variant="outline" size="sm" onClick={() => handleRequestPaymentInfo(p.to)} title="Pedir chave PIX">
-                                <Info size={16} />
-                             </Button>
-                             {hasSentPayment ? (
-                                <span className="text-xs font-bold text-yellow-600 bg-yellow-100 px-3 py-2 rounded-lg">Aguardando...</span>
-                             ) : (
-                                <Button size="sm" className="bg-green-600 text-white" onClick={() => handleMarkAsPaid(p.to, p.amount)}>Paguei</Button>
-                             )}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  )
-                })}
+                    )
+                  })
+                )}
               </div>
             </div>
           </div>
         )}
 
-        {/* ... outras abas mantidas ... */}
         {activeTab === 'charts' && (
-          <div className="bg-white dark:bg-dark-800 p-6 rounded-2xl border border-gray-100">
+          <div className="bg-white dark:bg-dark-800 p-6 rounded-2xl border border-gray-100 dark:border-dark-700">
              <ExpenseCharts expenses={expenses} />
           </div>
         )}
@@ -385,9 +391,9 @@ const DivvyDetailContent: React.FC = () => {
         {activeTab === 'members' && (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {members.map(member => (
-              <div key={member.id} className="bg-white dark:bg-dark-800 p-4 rounded-xl border border-gray-100 flex items-center justify-between">
+              <div key={member.id} className="bg-white dark:bg-dark-800 p-4 rounded-xl border border-gray-100 dark:border-dark-700 flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  <div className="h-10 w-10 rounded-full bg-gray-100 flex items-center justify-center font-bold text-gray-500">
+                  <div className="h-10 w-10 rounded-full bg-gray-100 dark:bg-dark-900 flex items-center justify-center font-bold text-gray-500">
                     {member.email.charAt(0).toUpperCase()}
                   </div>
                   <div>
@@ -395,7 +401,7 @@ const DivvyDetailContent: React.FC = () => {
                     <p className="text-xs text-gray-500">{member.email}</p>
                   </div>
                 </div>
-                <span className="text-[10px] uppercase font-black px-2 py-1 bg-gray-100 rounded">{member.role}</span>
+                <span className="text-[10px] uppercase font-black px-2 py-1 bg-gray-100 dark:bg-dark-900 rounded text-gray-600 dark:text-gray-400">{member.role}</span>
               </div>
             ))}
           </div>
@@ -407,7 +413,7 @@ const DivvyDetailContent: React.FC = () => {
           <div className="space-y-6">
             <div className="flex justify-between items-center">
               <div>
-                <h3 className="text-xl font-bold">{viewingExpense.description || viewingExpense.category}</h3>
+                <h3 className="text-xl font-bold text-gray-900 dark:text-white">{viewingExpense.description || viewingExpense.category}</h3>
                 <p className="text-sm text-gray-500">{new Date(viewingExpense.date).toLocaleDateString()} • {getMemberName(viewingExpense.paid_by_user_id)}</p>
               </div>
               <span className="text-2xl font-black text-brand-600">{formatMoney(viewingExpense.amount)}</span>
@@ -450,7 +456,7 @@ const DivvyDetailContent: React.FC = () => {
         </form>
       </Modal>
 
-      <InviteModal divvyId={divvyId} divvyName={divvy.name} isOpen={isInviteModalOpen} onClose={() => setIsInviteModalOpen(false)} />
+      <InviteModal divvyId={divvyId} divvyName={divvy?.name || ''} isOpen={isInviteModalOpen} onClose={() => setIsInviteModalOpen(false)} />
     </div>
   );
 };
