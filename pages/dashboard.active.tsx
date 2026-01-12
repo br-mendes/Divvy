@@ -27,73 +27,71 @@ const DashboardContent: React.FC = () => {
     setHasError(false);
 
     try {
-      // ESTRATÉGIA RESILIENTE: Busca paralela independente
-      // Isso impede que a falha em uma permissão bloqueie todo o painel
+      // --- ESTRATÉGIA "SPLIT & MERGE" (INFALÍVEL PARA RLS) ---
+      // Em vez de pedir "todos os grupos que tenho acesso" numa query só (que falha no RLS),
+      // pedimos explicitamente:
+      // 1. O que eu criei
+      // 2. Onde estou marcado como membro
       
-      const [createdResult, membershipResult] = await Promise.allSettled([
-        // 1. Grupos que criei
-        supabase
+      // A. Buscar IDs onde sou Criador
+      const { data: createdDivvies, error: createdError } = await supabase
+        .from('divvies')
+        .select('*')
+        .eq('creator_id', user.id);
+      
+      if (createdError) throw createdError;
+
+      // B. Buscar IDs onde sou Membro
+      const { data: memberships, error: memberError } = await supabase
+        .from('divvy_members')
+        .select('divvy_id')
+        .eq('user_id', user.id);
+
+      if (memberError) throw memberError;
+
+      const memberDivvyIds = memberships?.map((m: any) => m.divvy_id) || [];
+      
+      // Filtrar IDs que já peguei na lista de criados para não buscar 2x
+      const createdIds = new Set((createdDivvies || []).map(d => d.id));
+      const idsToFetch = memberDivvyIds.filter(id => !createdIds.has(id));
+
+      let joinedDivvies: Divvy[] = [];
+
+      // C. Buscar detalhes dos grupos onde sou apenas membro
+      if (idsToFetch.length > 0) {
+        const { data: fetchedJoined, error: joinFetchError } = await supabase
           .from('divvies')
           .select('*')
-          .eq('creator_id', user.id)
-          .order('created_at', { ascending: false }),
+          .in('id', idsToFetch);
         
-        // 2. Grupos que participo (pegar IDs primeiro é mais seguro para RLS)
-        supabase
-          .from('divvy_members')
-          .select('divvy_id')
-          .eq('user_id', user.id)
-      ]);
-
-      const myDivvies: Divvy[] = [];
-      const divvyIdsToFetch = new Set<string>();
-
-      // Processar Criados
-      if (createdResult.status === 'fulfilled' && createdResult.value.data) {
-        myDivvies.push(...createdResult.value.data);
-      } else if (createdResult.status === 'rejected') {
-        console.error('Erro ao buscar criados:', createdResult.reason);
+        if (joinFetchError) console.warn("Erro ao buscar detalhes de grupos:", joinFetchError);
+        if (fetchedJoined) joinedDivvies = fetchedJoined;
       }
 
-      // Processar Membros
-      if (membershipResult.status === 'fulfilled' && membershipResult.value.data) {
-        membershipResult.value.data.forEach((m: any) => divvyIdsToFetch.add(m.divvy_id));
-      }
+      // D. Unificar Listas
+      const allDivvies = [...(createdDivvies || []), ...joinedDivvies];
+      
+      // Ordenar por data de criação (mais recente primeiro)
+      allDivvies.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
-      // Remover duplicatas (se eu criei, já está em myDivvies)
-      myDivvies.forEach(d => divvyIdsToFetch.delete(d.id));
+      // Remover duplicatas por segurança (Map garante unicidade por ID)
+      const uniqueDivvies = Array.from(new Map(allDivvies.map(item => [item.id, item])).values());
 
-      // Buscar detalhes dos grupos onde sou apenas membro
-      if (divvyIdsToFetch.size > 0) {
-        const { data: joinedData, error: joinedError } = await supabase
-          .from('divvies')
-          .select('*')
-          .in('id', Array.from(divvyIdsToFetch));
-        
-        if (!joinedError && joinedData) {
-          myDivvies.push(...joinedData);
-        } else if (joinedError) {
-           console.warn('Erro ao buscar detalhes dos grupos participados:', joinedError);
-        }
-      }
+      setDivvies(uniqueDivvies);
 
-      // Ordenação final unificada
-      myDivvies.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-
-      setDivvies(myDivvies);
     } catch (err: any) {
-      console.error("Dashboard Sync Critical Error:", err);
+      console.error("Critical Dashboard Sync Error:", err);
       setHasError(true);
-      if (!silent) toast.error('Falha na conexão com o banco de dados.');
+      if (!silent) toast.error('Não foi possível sincronizar seus grupos.');
     } finally {
       setLoading(false);
     }
   }, [user]);
 
-  // Carregar ao montar e ao focar na janela
   useEffect(() => {
     fetchDivvies();
     
+    // Inscrição simplificada para atualizações
     const channel = supabase.channel('dashboard_updates')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'divvies' }, () => fetchDivvies(true))
       .subscribe();
