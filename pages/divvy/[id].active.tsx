@@ -44,9 +44,12 @@ const DivvyDetailContent: React.FC = () => {
   const [desc, setDesc] = useState('');
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [payerId, setPayerId] = useState(''); // Quem pagou
-  const [splitType, setSplitType] = useState<'equal' | 'exact'>('equal');
+  const [splitType, setSplitType] = useState<'equal' | 'exact' | 'percentage'>('equal');
   const [selectedParticipants, setSelectedParticipants] = useState<Set<string>>(new Set());
+  
+  // Estados para valores manuais
   const [manualAmounts, setManualAmounts] = useState<Record<string, string>>({});
+  const [manualPercentages, setManualPercentages] = useState<Record<string, string>>({});
   
   const [submitLoading, setSubmitLoading] = useState(false);
 
@@ -56,12 +59,11 @@ const DivvyDetailContent: React.FC = () => {
 
   // Define valores padrão quando o modal abre ou os membros carregam
   useEffect(() => {
-    if (members.length > 0 && user) {
-        // Padrão: Pago por mim, todos participam
-        if (!payerId) setPayerId(user.id);
-        if (selectedParticipants.size === 0) {
-            setSelectedParticipants(new Set(members.map(m => m.user_id)));
-        }
+    if (members.length > 0 && user && !payerId) {
+        setPayerId(user.id); // Define o pagador padrão como eu
+    }
+    if (members.length > 0 && selectedParticipants.size === 0) {
+        setSelectedParticipants(new Set(members.map(m => m.user_id)));
     }
   }, [members, user, isExpenseModalOpen]);
 
@@ -237,6 +239,10 @@ const DivvyDetailContent: React.FC = () => {
       setManualAmounts(prev => ({ ...prev, [userId]: value }));
   };
 
+  const handleManualPercentageChange = (userId: string, value: string) => {
+      setManualPercentages(prev => ({ ...prev, [userId]: value }));
+  };
+
   const resetForm = () => {
       setAmount('');
       setDesc('');
@@ -245,6 +251,7 @@ const DivvyDetailContent: React.FC = () => {
       if(user) setPayerId(user.id);
       setSelectedParticipants(new Set(members.map(m => m.user_id)));
       setManualAmounts({});
+      setManualPercentages({});
       setSplitType('equal');
   };
 
@@ -268,6 +275,11 @@ const DivvyDetailContent: React.FC = () => {
         return;
     }
 
+    if (!payerId) {
+        toast.error("Selecione quem pagou a despesa.");
+        return;
+    }
+
     // Validação da Divisão
     let splitsPayload: { participant_user_id: string, amount_owed: number }[] = [];
     
@@ -277,10 +289,9 @@ const DivvyDetailContent: React.FC = () => {
             participant_user_id: uid,
             amount_owed: splitVal
         }));
-    } else {
-        // Exact
+    } else if (splitType === 'exact') {
         let sum = 0;
-        const potentialSplits = members.map(m => {
+        const potentialSplits = members.map((m): { participant_user_id: string, amount_owed: number } | null => {
             const raw = manualAmounts[m.user_id];
             const v = parseFloat(raw || '0');
             if (!isNaN(v) && v > 0) {
@@ -296,6 +307,25 @@ const DivvyDetailContent: React.FC = () => {
             toast.error(`A soma das divisões (R$ ${sum.toFixed(2)}) deve ser igual ao total (R$ ${val.toFixed(2)}).`);
             return;
         }
+    } else if (splitType === 'percentage') {
+        let totalPct = 0;
+        const potentialSplits = members.map((m): { participant_user_id: string, amount_owed: number } | null => {
+            const raw = manualPercentages[m.user_id];
+            const pct = parseFloat(raw || '0');
+            if (!isNaN(pct) && pct > 0) {
+                totalPct += pct;
+                const owed = (val * pct) / 100;
+                return { participant_user_id: m.user_id, amount_owed: owed };
+            }
+            return null;
+        });
+
+        if (Math.abs(totalPct - 100) > 0.5) { // margem de erro pequena para floats
+            toast.error(`A soma das porcentagens (${totalPct.toFixed(1)}%) deve ser 100%.`);
+            return;
+        }
+
+        splitsPayload = potentialSplits.filter((item): item is { participant_user_id: string, amount_owed: number } => item !== null);
     }
 
     setSubmitLoading(true);
@@ -334,11 +364,16 @@ const DivvyDetailContent: React.FC = () => {
   };
 
   // Cálculos para exibição no modal
-  const assignedTotal = splitType === 'exact' 
+  const assignedTotal: number = splitType === 'exact' 
     ? Object.values(manualAmounts).reduce((acc: number, curr: string) => acc + (parseFloat(curr) || 0), 0)
     : parseFloat(amount) || 0;
   
+  const assignedPercentage: number = splitType === 'percentage'
+    ? Object.values(manualPercentages).reduce((acc: number, curr: string) => acc + (parseFloat(curr) || 0), 0)
+    : 100;
+
   const remainingTotal = (parseFloat(amount) || 0) - assignedTotal;
+  const remainingPercentage = 100 - assignedPercentage;
 
   if (loading) return <div className="flex justify-center p-12"><LoadingSpinner /></div>;
   if (!divvy) return <div className="p-12 text-center text-gray-500">Grupo não encontrado.</div>;
@@ -550,7 +585,11 @@ const DivvyDetailContent: React.FC = () => {
              </div>
              <div>
                 <label className="block text-sm font-medium mb-1">Quem pagou?</label>
-                <select className="w-full rounded-lg border border-gray-300 px-3 py-2 dark:bg-dark-800" value={payerId} onChange={e => setPayerId(e.target.value)}>
+                <select 
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 dark:bg-dark-800" 
+                    value={payerId} 
+                    onChange={e => setPayerId(e.target.value)}
+                >
                    {members.map(m => (
                        <option key={m.user_id} value={m.user_id}>
                            {m.user_id === user?.id ? 'Eu' : getMemberName(m.user_id)}
@@ -578,6 +617,13 @@ const DivvyDetailContent: React.FC = () => {
                 >
                    Valor Exato
                 </button>
+                <button 
+                   type="button" 
+                   onClick={() => setSplitType('percentage')}
+                   className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all ${splitType === 'percentage' ? 'bg-white shadow text-brand-600' : 'text-gray-500 hover:text-gray-900'}`}
+                >
+                   Porcentagem
+                </button>
              </div>
 
              <div className="space-y-2 max-h-60 overflow-y-auto custom-scrollbar bg-gray-50/50 p-2 rounded-xl">
@@ -586,6 +632,9 @@ const DivvyDetailContent: React.FC = () => {
                      const splitAmount = splitType === 'equal' && isSelected && amount 
                         ? (parseFloat(amount) / selectedParticipants.size) 
                         : 0;
+                     
+                     const pctVal = parseFloat(manualPercentages[m.user_id] || '0');
+                     const calculatedFromPct = (parseFloat(amount || '0') * pctVal) / 100;
 
                      return (
                          <div key={m.user_id} className="flex items-center justify-between p-2 hover:bg-white rounded-lg transition-colors">
@@ -604,11 +653,13 @@ const DivvyDetailContent: React.FC = () => {
                                  </span>
                              </div>
 
-                             {splitType === 'equal' ? (
+                             {splitType === 'equal' && (
                                  <span className={`text-sm ${isSelected ? 'font-bold text-gray-900' : 'text-gray-400'}`}>
                                      {isSelected ? formatMoney(splitAmount) : '-'}
                                  </span>
-                             ) : (
+                             )}
+
+                             {splitType === 'exact' && (
                                  <div className="relative">
                                      <span className="absolute left-2 top-1.5 text-xs text-gray-400">R$</span>
                                      <input 
@@ -621,6 +672,25 @@ const DivvyDetailContent: React.FC = () => {
                                      />
                                  </div>
                              )}
+
+                             {splitType === 'percentage' && (
+                                 <div className="flex items-center gap-2">
+                                     <span className="text-xs text-gray-400 w-16 text-right">
+                                         {pctVal > 0 ? formatMoney(calculatedFromPct) : '-'}
+                                     </span>
+                                     <div className="relative">
+                                        <input 
+                                            type="number"
+                                            step="0.1"
+                                            placeholder="0"
+                                            value={manualPercentages[m.user_id] || ''}
+                                            onChange={(e) => handleManualPercentageChange(m.user_id, e.target.value)}
+                                            className="w-16 pl-2 pr-6 py-1 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-brand-500 text-right"
+                                        />
+                                        <span className="absolute right-2 top-1.5 text-xs text-gray-400">%</span>
+                                     </div>
+                                 </div>
+                             )}
                          </div>
                      );
                  })}
@@ -630,6 +700,14 @@ const DivvyDetailContent: React.FC = () => {
                  <div className="flex justify-end mt-2 text-xs font-medium">
                      <span className={Math.abs(remainingTotal) > 0.05 ? "text-red-500" : "text-green-600"}>
                         Restante: {formatMoney(remainingTotal)}
+                     </span>
+                 </div>
+             )}
+
+             {splitType === 'percentage' && (
+                 <div className="flex justify-end mt-2 text-xs font-medium">
+                     <span className={Math.abs(remainingPercentage) > 0.5 ? "text-red-500" : "text-green-600"}>
+                        Restante: {remainingPercentage.toFixed(1)}%
                      </span>
                  </div>
              )}
