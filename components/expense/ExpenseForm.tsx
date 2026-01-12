@@ -141,7 +141,7 @@ export default function ExpenseForm({ divvyId, members, onSuccess, onCancel, ini
                 return { participantuserid: m.userid, amountowed: v };
               }
               return null;
-          }).filter(Boolean) as any;
+          }).filter((i): i is { participantuserid: string; amountowed: number } => i !== null);
           
           if (Math.abs(sum - val) > 0.05) throw new Error(`A soma (R$ ${sum.toFixed(2)}) deve ser igual ao total (R$ ${val.toFixed(2)}).`);
       } else if (splitType === 'percentage') {
@@ -153,7 +153,7 @@ export default function ExpenseForm({ divvyId, members, onSuccess, onCancel, ini
                 return { participantuserid: m.userid, amountowed: (val * pct) / 100 };
               }
               return null;
-          }).filter(Boolean) as any;
+          }).filter((i): i is { participantuserid: string; amountowed: number } => i !== null);
           
           if (Math.abs(totalPct - 100) > 0.5) throw new Error("A soma das porcentagens deve ser 100%.");
       }

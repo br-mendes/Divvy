@@ -20,7 +20,7 @@ const categoryIcons: Record<string, string> = {
   other: '💰',
 };
 
-export default function ExpenseCard({ expense, payerName, onClick, formatMoney }: ExpenseCardProps) {
+const ExpenseCard: React.FC<ExpenseCardProps> = ({ expense, payerName, onClick, formatMoney }) => {
   return (
     <div 
       onClick={() => onClick(expense)} 
@@ -52,4 +52,6 @@ export default function ExpenseCard({ expense, payerName, onClick, formatMoney }
       </span>
     </div>
   );
-}
+};
+
+export default ExpenseCard;

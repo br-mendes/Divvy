@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/router';
 import Link from 'next/link';
@@ -7,7 +6,7 @@ import { useAuth } from '../../context/AuthContext';
 import { Button } from '../../components/ui/Button';
 import LoadingSpinner from '../../components/ui/LoadingSpinner';
 import toast from 'react-hot-toast';
-import { CheckCircle, AlertTriangle } from 'lucide-react';
+import { CheckCircle, AlertTriangle, ArrowRight, LogIn, UserPlus } from 'lucide-react';
 
 export default function JoinDivvy() {
   const router = useRouter();
@@ -28,39 +27,30 @@ export default function JoinDivvy() {
     try {
       setLoading(true);
       
-      // Busca direta na tabela, confiando nas regras RLS (SELECT USING true)
-      // Ajuste: userprofiles sem alias para evitar erro de relação não encontrada
-      const { data, error } = await supabase
-        .from('divvyinvites')
-        .select(`
-          *,
-          divvies ( name ),
-          userprofiles ( fullname, displayname )
-        `)
-        .eq('id', inviteId)
-        .single();
+      // Usa a RPC segura criada no banco para permitir leitura pública controlada
+      const { data, error } = await supabase.rpc('get_invite_details', {
+        invite_token: inviteId
+      });
 
-      if (error || !data) {
+      if (error) throw error;
+      
+      // RPC retorna um array, pegamos o primeiro item
+      const info = data && data[0];
+
+      if (!info) {
         throw new Error('Convite não encontrado ou inválido.');
       }
 
-      // Validações de frontend (também feitas na API, mas boas para UX)
-      if (data.status !== 'pending') {
-        throw new Error('Este convite já foi utilizado.');
+      // Validações de frontend
+      if (info.status !== 'pending') {
+        throw new Error('Este convite já foi utilizado ou cancelado.');
       }
 
-      const expires = new Date(data.expiresat);
-      if (expires < new Date()) {
+      if (info.is_expired) {
         throw new Error('Este convite expirou.');
       }
 
-      setInviteData({
-        id: data.id,
-        divvy_name: (data.divvies as any)?.name || 'Grupo sem nome',
-        divvy_id: data.divvyid,
-        inviter_name: (data.userprofiles as any)?.displayname || (data.userprofiles as any)?.fullname || 'Alguém',
-      });
-      
+      setInviteData(info);
       setLoading(false);
     } catch (err: any) {
       console.error(err);
@@ -127,23 +117,28 @@ export default function JoinDivvy() {
     );
   }
 
+  // Prepara a URL de redirecionamento para Login/Signup
+  const currentPath = `/join/${token}`;
+  const redirectParam = encodeURIComponent(currentPath);
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-dark-950 px-4 transition-colors">
-      <div className="max-w-md w-full bg-white dark:bg-dark-900 p-8 rounded-2xl shadow-xl border border-gray-100 dark:border-dark-800 animate-fade-in-up">
+      <div className="max-w-md w-full bg-white dark:bg-dark-900 p-8 rounded-3xl shadow-xl border border-gray-100 dark:border-dark-800 animate-fade-in-up">
         <div className="text-center mb-8">
-          <div className="w-20 h-20 bg-brand-50 dark:bg-brand-900/20 rounded-full flex items-center justify-center mx-auto mb-6 shadow-inner">
-             <span className="text-4xl">📩</span>
+          <div className="w-20 h-20 bg-gradient-to-br from-brand-100 to-brand-50 dark:from-brand-900/40 dark:to-brand-800/20 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-inner transform rotate-3">
+             <span className="text-4xl filter drop-shadow-md">📩</span>
           </div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Convite para Grupo</h1>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-3">Você foi convidado!</h1>
           <p className="text-gray-600 dark:text-gray-400 leading-relaxed">
-            <strong>{inviteData?.inviter_name}</strong> convidou você para participar do grupo <strong className="text-brand-600 dark:text-brand-400">{inviteData?.divvy_name}</strong> no Divvy.
+            <strong className="text-gray-900 dark:text-white">{inviteData?.inviter_name}</strong> quer que você participe do grupo <br/>
+            <span className="text-brand-600 dark:text-brand-400 font-black text-lg block mt-1">{inviteData?.divvy_name}</span>
           </p>
         </div>
 
         {user ? (
-          <div className="space-y-4">
-            <div className="bg-gray-50 dark:bg-dark-800 p-4 rounded-xl flex items-center gap-3 border border-gray-100 dark:border-dark-700">
-               <div className="w-10 h-10 rounded-full bg-brand-100 dark:bg-brand-900 flex items-center justify-center text-brand-700 dark:text-brand-300 font-bold">
+          <div className="space-y-4 animate-fade-in">
+            <div className="bg-gray-50 dark:bg-dark-800 p-4 rounded-xl flex items-center gap-3 border border-gray-200 dark:border-dark-700">
+               <div className="w-10 h-10 rounded-full bg-brand-100 dark:bg-brand-900 flex items-center justify-center text-brand-700 dark:text-brand-300 font-bold border border-brand-200 dark:border-brand-800">
                   {user.email?.charAt(0).toUpperCase()}
                </div>
                <div className="flex-1 min-w-0">
@@ -159,31 +154,37 @@ export default function JoinDivvy() {
               size="lg"
               onClick={handleAccept}
               isLoading={processing}
-              className="shadow-lg shadow-brand-500/20"
+              className="shadow-lg shadow-brand-500/20 h-12 text-base"
             >
-              Aceitar e Entrar
+              Aceitar Convite <ArrowRight size={18} className="ml-2" />
             </Button>
             
             <Link href="/dashboard" className="block">
-              <Button variant="ghost" fullWidth disabled={processing}>
-                Recusar / Voltar
+              <Button variant="ghost" fullWidth disabled={processing} className="text-gray-500">
+                Cancelar
               </Button>
             </Link>
           </div>
         ) : (
-          <div className="space-y-4">
-            <div className="p-4 bg-yellow-50 dark:bg-yellow-900/10 border border-yellow-100 dark:border-yellow-900/30 rounded-xl text-sm text-yellow-800 dark:text-yellow-200 mb-4">
-               Você precisa estar logado para aceitar este convite.
+          <div className="space-y-4 animate-fade-in">
+            <div className="p-4 bg-blue-50 dark:bg-blue-900/10 border border-blue-100 dark:border-blue-900/30 rounded-xl text-sm text-blue-800 dark:text-blue-200 mb-6 text-center">
+               Para entrar no grupo, você precisa acessar sua conta.
             </div>
             
-            <Link href={`/login?redirect=${encodeURIComponent(`/join/${token}`)}`}>
-              <Button variant="primary" fullWidth size="lg">
-                Fazer Login
+            <Link href={`/login?redirect=${redirectParam}`}>
+              <Button variant="primary" fullWidth size="lg" className="h-12 text-base shadow-lg shadow-brand-500/20">
+                <LogIn size={18} className="mr-2" /> Fazer Login
               </Button>
             </Link>
-            <Link href={`/signup?redirect=${encodeURIComponent(`/join/${token}`)}`}>
-              <Button variant="outline" fullWidth size="lg">
-                Criar Nova Conta
+            
+            <div className="relative my-4">
+                <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-gray-200 dark:border-dark-700"></div></div>
+                <div className="relative flex justify-center text-xs text-gray-400 uppercase"><span className="bg-white dark:bg-dark-900 px-2">Ou</span></div>
+            </div>
+
+            <Link href={`/signup?redirect=${redirectParam}`}>
+              <Button variant="outline" fullWidth size="lg" className="h-12 text-base">
+                <UserPlus size={18} className="mr-2" /> Criar Conta Grátis
               </Button>
             </Link>
           </div>

@@ -51,7 +51,7 @@ export const ExpenseCharts: React.FC<ExpenseChartsProps> = ({ expenses, members 
       acc[exp.paidbyuserid] = (acc[exp.paidbyuserid] || 0) + exp.amount;
       return acc;
     }, {} as Record<string, number>)
-  ).map(([userId, amount]) => {
+  ).map(([userId, amount]: [string, number]) => {
     const member = members.find(m => m.userid === userId);
     const name = member?.userprofiles?.displayname || member?.userprofiles?.fullname || 'Desconhecido';
     return {

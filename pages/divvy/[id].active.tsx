@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/router';
 import { supabase } from '../../lib/supabase';
@@ -64,22 +63,46 @@ const DivvyDetailContent: React.FC = () => {
       }
       setDivvy(divvyData);
 
+      // Robust Members Fetching
+      let processedMembers: DivvyMember[] = [];
       const { data: membersData, error: mErr } = await supabase
         .from('divvymembers')
         .select(`*, userprofiles (*)`)
         .eq('divvyid', divvyId);
 
-      if (mErr) throw mErr;
-      
-      const processedMembers: DivvyMember[] = (membersData || []).map((m: any) => ({
-        id: m.id,
-        divvyid: m.divvyid,
-        userid: m.userid,
-        email: m.email,
-        role: m.role,
-        joinedat: m.joinedat,
-        userprofiles: Array.isArray(m.userprofiles) ? m.userprofiles[0] : m.userprofiles
-      }));
+      if (!mErr && membersData) {
+        processedMembers = membersData.map((m: any) => ({
+            id: m.id,
+            divvyid: m.divvyid,
+            userid: m.userid,
+            email: m.email,
+            role: m.role,
+            joinedat: m.joinedat,
+            userprofiles: Array.isArray(m.userprofiles) ? m.userprofiles[0] : m.userprofiles
+        }));
+      } else {
+        // Fallback
+        console.warn("Detail relationship error, using fallback.", mErr?.message);
+        const { data: rawMembers, error: rawErr } = await supabase
+            .from('divvymembers')
+            .select('*')
+            .eq('divvyid', divvyId);
+        
+        if (rawErr) throw rawErr;
+
+        const userIds = Array.from(new Set((rawMembers || []).map((m: any) => m.userid)));
+        let profiles: any[] = [];
+        if (userIds.length > 0) {
+            const { data: pData } = await supabase.from('userprofiles').select('*').in('id', userIds);
+            profiles = pData || [];
+        }
+        
+        const profilesMap = new Map(profiles.map((p: any) => [p.id, p]));
+        processedMembers = (rawMembers || []).map((m: any) => ({
+            ...m,
+            userprofiles: profilesMap.get(m.userid) || null
+        }));
+      }
 
       setMembers(processedMembers);
 

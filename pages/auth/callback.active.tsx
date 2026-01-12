@@ -1,4 +1,3 @@
-
 import React, { useEffect } from 'react';
 import { useRouter } from 'next/router';
 import { supabase } from '../../lib/supabase';
@@ -18,6 +17,20 @@ export default function AuthCallback() {
         router.push('/login');
         return;
       }
+
+      // Função helper para redirecionar
+      const doRedirect = () => {
+        // Verifica se existe um parâmetro 'next' na URL (passado pelo OAuth redirectTo)
+        // O Supabase devolve os query params originais no retorno
+        const nextParam = new URLSearchParams(window.location.search).get('next') || 
+                          new URLSearchParams(window.location.hash.substring(1)).get('next'); // Fallback para hash fragment se necessário
+
+        if (nextParam && nextParam.startsWith('/')) {
+            router.push(decodeURIComponent(nextParam));
+        } else {
+            router.push('/dashboard');
+        }
+      };
 
       if (session) {
         // Garantir que o perfil existe
@@ -39,7 +52,7 @@ export default function AuthCallback() {
         }
 
         toast.success('Login realizado com sucesso!');
-        router.push('/dashboard');
+        doRedirect();
       } else {
         // Se não houver sessão imediatamente, esperamos uma mudança de estado
         const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
@@ -59,7 +72,7 @@ export default function AuthCallback() {
                 }
             });
             
-            router.push('/dashboard');
+            doRedirect();
           }
         });
 

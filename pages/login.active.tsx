@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { useRouter } from 'next/router';
 import { supabase } from '../lib/supabase';
@@ -22,6 +21,9 @@ export default function Login() {
   const [mfaCode, setMfaCode] = useState('');
   const [mfaFactorId, setMfaFactorId] = useState('');
 
+  // Captura o redirecionamento da URL (ex: /join/123)
+  const redirectPath = (router.query.redirect as string) || '/dashboard';
+
   const handleSuccessfulLogin = async (userId: string) => {
     // Fire and forget update of last_login_at
     supabase.from('userprofiles')
@@ -31,7 +33,7 @@ export default function Login() {
             if (error) console.error("Failed to update last_login", error);
         });
     
-    router.push('/dashboard');
+    router.push(redirectPath);
   };
 
   async function handleLogin(e: React.FormEvent) {
@@ -101,12 +103,17 @@ export default function Login() {
 
   async function handleGoogleLogin() {
     setGoogleLoading(true);
-    const redirectTo = `${getURL()}/auth/callback`;
+    
+    // Constrói a URL de callback incluindo o parâmetro 'next' para onde o usuário deve ir depois
+    const redirectUrl = new URL(`${getURL()}/auth/callback`);
+    if (router.query.redirect) {
+        redirectUrl.searchParams.set('next', router.query.redirect as string);
+    }
     
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        redirectTo,
+        redirectTo: redirectUrl.toString(),
         queryParams: {
           access_type: 'offline',
           prompt: 'consent',
@@ -214,7 +221,7 @@ export default function Login() {
         </Button>
 
         <p className="mt-6 text-center text-sm text-gray-600">
-          Ainda não tem conta? <Link href="/signup" className="text-brand-600 font-bold hover:underline">Cadastre-se grátis</Link>
+          Ainda não tem conta? <Link href={`/signup${router.query.redirect ? `?redirect=${router.query.redirect}` : ''}`} className="text-brand-600 font-bold hover:underline">Cadastre-se grátis</Link>
         </p>
       </div>
     </div>

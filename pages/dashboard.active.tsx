@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabase';
@@ -92,23 +91,60 @@ const DashboardContent: React.FC = () => {
       const finalGroups = Array.from(uniqueMap.values());
       const allGroupIds = finalGroups.map(g => g.id);
 
-      // 5. Buscar TODOS os membros de todos esses grupos de uma vez
-      const { data: allMembers, error: fetchMembersError } = await supabase
-        .from('divvymembers')
-        .select(`
-          divvyid, 
-          userid, 
-          email,
-          userprofiles (
-            id,
-            fullname,
-            displayname,
-            avatarurl
-          )
-        `)
-        .in('divvyid', allGroupIds);
+      // 5. Buscar TODOS os membros com Fallback de Robustez
+      let allMembers: any[] = [];
+      
+      if (allGroupIds.length > 0) {
+        // Tentativa A: Join direto (Ideal)
+        const { data: joinedMembers, error: fetchMembersError } = await supabase
+          .from('divvymembers')
+          .select(`
+            divvyid, 
+            userid, 
+            email,
+            userprofiles (
+              id,
+              fullname,
+              displayname,
+              avatarurl
+            )
+          `)
+          .in('divvyid', allGroupIds);
 
-      if (fetchMembersError) throw fetchMembersError;
+        if (!fetchMembersError) {
+          allMembers = joinedMembers || [];
+        } else {
+          // Tentativa B: Fallback manual se o relacionamento falhar
+          console.warn("Relacionamento direto falhou, usando fallback manual...", fetchMembersError.message);
+          
+          // Buscar membros raw
+          const { data: rawMembers, error: rawError } = await supabase
+              .from('divvymembers')
+              .select('*')
+              .in('divvyid', allGroupIds);
+              
+          if (rawError) throw rawError;
+          
+          // Buscar perfis separadamente
+          const userIds = Array.from(new Set((rawMembers || []).map((m: any) => m.userid)));
+          let profiles: any[] = [];
+          
+          if (userIds.length > 0) {
+            const { data: pData } = await supabase
+                .from('userprofiles')
+                .select('id, fullname, displayname, avatarurl')
+                .in('id', userIds);
+            profiles = pData || [];
+          }
+          
+          // Merge manual
+          const profilesMap = new Map(profiles.map((p: any) => [p.id, p]));
+          allMembers = (rawMembers || []).map((m: any) => ({
+              ...m,
+              userprofiles: profilesMap.get(m.userid) || null
+          }));
+        }
+      }
 
       // 6. Mapear membros para seus respectivos grupos
       const membersByGroup: Record<string, DivvyMember[]> = {};

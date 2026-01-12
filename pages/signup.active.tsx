@@ -45,7 +45,10 @@ export default function Signup() {
         data: {
           full_name: name,
           avatar_url: `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(name)}` // Avatar padrão inicial
-        }
+        },
+        // Se a confirmação de email estiver ligada, o redirecionamento acontece no link do email.
+        // Se desligada, precisamos redirecionar manualmente ou fazer login auto.
+        emailRedirectTo: `${getURL()}/auth/callback${router.query.redirect ? `?next=${router.query.redirect}` : ''}`
       }
     });
 
@@ -53,7 +56,7 @@ export default function Signup() {
       toast.error(error.message);
       setLoading(false);
     } else {
-      toast.success('Cadastro realizado! Verifique seu email.');
+      toast.success('Cadastro realizado! Verifique seu email ou faça login.');
       router.push('/login');
     }
   }
@@ -61,13 +64,16 @@ export default function Signup() {
   async function handleGoogleSignup() {
     setGoogleLoading(true);
     
-    const redirectTo = `${getURL()}/auth/callback`;
+    const redirectUrl = new URL(`${getURL()}/auth/callback`);
+    if (router.query.redirect) {
+        redirectUrl.searchParams.set('next', router.query.redirect as string);
+    }
 
     // O login com Google já captura automaticamente name, email e avatar dos metadados do Google
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        redirectTo,
+        redirectTo: redirectUrl.toString(),
         queryParams: {
           access_type: 'offline',
           prompt: 'consent',
@@ -163,7 +169,7 @@ export default function Signup() {
         </Button>
 
         <p className="mt-6 text-center text-sm text-gray-600">
-          Já tem conta? <Link href="/login" className="text-brand-600 font-bold hover:underline">Fazer login</Link>
+          Já tem conta? <Link href={`/login${router.query.redirect ? `?redirect=${router.query.redirect}` : ''}`} className="text-brand-600 font-bold hover:underline">Fazer login</Link>
         </p>
       </div>
     </div>
