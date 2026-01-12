@@ -27,62 +27,36 @@ const DashboardContent: React.FC = () => {
     setHasError(false);
 
     try {
-      // --- ESTRATÉGIA "SPLIT & MERGE" (INFALÍVEL PARA RLS) ---
-      // Em vez de pedir "todos os grupos que tenho acesso" numa query só (que falha no RLS),
-      // pedimos explicitamente:
-      // 1. O que eu criei
-      // 2. Onde estou marcado como membro
-      
-      // A. Buscar IDs onde sou Criador
-      const { data: createdDivvies, error: createdError } = await supabase
-        .from('divvies')
-        .select('*')
-        .eq('creator_id', user.id);
-      
-      if (createdError) throw createdError;
+      // CHAMADA RPC (Remote Procedure Call)
+      // Esta função executa no banco com permissões de sistema,
+      // contornando qualquer problema de RLS (Row Level Security).
+      const { data, error } = await supabase.rpc('get_dashboard_divvies');
 
-      // B. Buscar IDs onde sou Membro
-      const { data: memberships, error: memberError } = await supabase
-        .from('divvy_members')
-        .select('divvy_id')
-        .eq('user_id', user.id);
+      if (error) throw error;
 
-      if (memberError) throw memberError;
-
-      const memberDivvyIds = memberships?.map((m: any) => m.divvy_id) || [];
-      
-      // Filtrar IDs que já peguei na lista de criados para não buscar 2x
-      const createdIds = new Set((createdDivvies || []).map(d => d.id));
-      const idsToFetch = memberDivvyIds.filter(id => !createdIds.has(id));
-
-      let joinedDivvies: Divvy[] = [];
-
-      // C. Buscar detalhes dos grupos onde sou apenas membro
-      if (idsToFetch.length > 0) {
-        const { data: fetchedJoined, error: joinFetchError } = await supabase
-          .from('divvies')
-          .select('*')
-          .in('id', idsToFetch);
-        
-        if (joinFetchError) console.warn("Erro ao buscar detalhes de grupos:", joinFetchError);
-        if (fetchedJoined) joinedDivvies = fetchedJoined;
+      if (data) {
+        // Garantir que member_count seja número (Postgres retorna bigint como string as vezes)
+        const formattedData: Divvy[] = data.map((d: any) => ({
+            ...d,
+            member_count: Number(d.member_count || 1)
+        }));
+        setDivvies(formattedData);
+      } else {
+        setDivvies([]);
       }
 
-      // D. Unificar Listas
-      const allDivvies = [...(createdDivvies || []), ...joinedDivvies];
-      
-      // Ordenar por data de criação (mais recente primeiro)
-      allDivvies.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-
-      // Remover duplicatas por segurança (Map garante unicidade por ID)
-      const uniqueDivvies = Array.from(new Map(allDivvies.map(item => [item.id, item])).values());
-
-      setDivvies(uniqueDivvies);
-
     } catch (err: any) {
-      console.error("Critical Dashboard Sync Error:", err);
+      console.error("Dashboard RPC Error:", err);
       setHasError(true);
-      if (!silent) toast.error('Não foi possível sincronizar seus grupos.');
+      // Evita spam de erro se for apenas atualização em background
+      if (!silent) {
+        // Se o erro for "function not found", o usuário esqueceu de rodar o SQL
+        if (err.message?.includes('function') && err.message?.includes('not found')) {
+            toast.error('Erro de Configuração: Execute o script SQL fornecido.');
+        } else {
+            toast.error('Não foi possível carregar os grupos.');
+        }
+      }
     } finally {
       setLoading(false);
     }
@@ -177,12 +151,14 @@ const DashboardContent: React.FC = () => {
               <p className="text-gray-400 text-sm animate-pulse font-medium">Buscando seus grupos...</p>
             </div>
           ) : hasError && divvies.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-20 text-center">
+            <div className="flex flex-col items-center justify-center py-20 text-center animate-fade-in-up">
                 <div className="w-16 h-16 bg-red-50 dark:bg-red-900/20 rounded-full flex items-center justify-center mb-4">
                     <WifiOff className="text-red-500" size={32} />
                 </div>
                 <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-2">Erro de Conexão</h3>
-                <p className="text-gray-500 max-w-sm mb-6">Não foi possível carregar seus grupos. Verifique sua internet ou tente novamente.</p>
+                <p className="text-gray-500 max-w-sm mb-6">
+                    Não foi possível carregar seus grupos. Verifique se o script SQL foi executado no Supabase.
+                </p>
                 <Button onClick={() => fetchDivvies()}>Tentar Novamente</Button>
             </div>
           ) : filteredDivvies.length > 0 ? (
