@@ -13,8 +13,8 @@ import InviteModal from '../../components/invite/InviteModal';
 import LoadingSpinner from '../../components/ui/LoadingSpinner';
 import EmptyState from '../../components/ui/EmptyState';
 import { 
-  Plus, UserPlus, Receipt, PieChart, Users, CreditCard, Lock, LockOpen, 
-  ArrowRight, Wallet, CheckCircle, Info, Archive, Clock, AlertCircle
+  Plus, UserPlus, Receipt, PieChart, Users, Lock, LockOpen, 
+  ArrowRight, Wallet, CheckCircle, Info, Archive, Clock, AlertCircle, Check
 } from 'lucide-react';
 import { ProtectedRoute } from '../../components/ProtectedRoute';
 import toast from 'react-hot-toast';
@@ -38,15 +38,32 @@ const DivvyDetailContent: React.FC = () => {
   const [isViewModalOpen, setIsViewModalOpen] = useState(false);
   const [viewingExpense, setViewingExpense] = useState<Expense | null>(null);
 
+  // --- Estado do Formulário de Despesa ---
   const [amount, setAmount] = useState('');
   const [category, setCategory] = useState('food');
   const [desc, setDesc] = useState('');
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+  const [payerId, setPayerId] = useState(''); // Quem pagou
+  const [splitType, setSplitType] = useState<'equal' | 'exact'>('equal');
+  const [selectedParticipants, setSelectedParticipants] = useState<Set<string>>(new Set());
+  const [manualAmounts, setManualAmounts] = useState<Record<string, string>>({});
+  
   const [submitLoading, setSubmitLoading] = useState(false);
 
   useEffect(() => {
     if (divvyId && user) fetchDivvyData();
   }, [divvyId, user]);
+
+  // Define valores padrão quando o modal abre ou os membros carregam
+  useEffect(() => {
+    if (members.length > 0 && user) {
+        // Padrão: Pago por mim, todos participam
+        if (!payerId) setPayerId(user.id);
+        if (selectedParticipants.size === 0) {
+            setSelectedParticipants(new Set(members.map(m => m.user_id)));
+        }
+    }
+  }, [members, user, isExpenseModalOpen]);
 
   const fetchDivvyData = async () => {
     try {
@@ -95,14 +112,12 @@ const DivvyDetailContent: React.FC = () => {
       if (creditors[j].b < 0.01) j++;
     }
 
-    // Regra Global: Sugestão de arquivamento apenas se saldo zero E sem pendências
     const hasPendingSettlements = settlements.some(s => s.status === 'pending');
     const isGroupBalanced = expenses.length > 0 && plan.length === 0 && !hasPendingSettlements;
 
     return { plan, isGroupBalanced };
   }, [expenses, allSplits, members, settlements]);
 
-  // Regra 2: Bloqueio de despesas anteriores ao último fechamento
   const isBlocked = (exp: Expense) => {
     if (!divvy?.last_settled_at) return false;
     const settledTime = new Date(divvy.last_settled_at).getTime();
@@ -118,7 +133,6 @@ const DivvyDetailContent: React.FC = () => {
       const { error } = await supabase.from('settlements').update({ status }).eq('id', s.id);
       if (error) throw error;
       
-      // Notifica o pagador
       await supabase.from('notifications').insert({
         user_id: s.payer_id, 
         divvy_id: divvyId, 
@@ -127,7 +141,6 @@ const DivvyDetailContent: React.FC = () => {
         message: `${getMemberName(s.receiver_id)} ${status === 'confirmed' ? 'confirmou' : 'recusou'} o recebimento de ${formatMoney(s.amount)}.`
       });
 
-      // Se for a última confirmação que zera o grupo, marca o timestamp de bloqueio
       const updatedSettlements = settlements.map(item => item.id === s.id ? {...item, status} : item);
       const tempBalances = calculateBalancesWithSettlements(updatedSettlements);
       
@@ -141,7 +154,6 @@ const DivvyDetailContent: React.FC = () => {
     } catch (e: any) { toast.error(e.message); }
   };
 
-  // Helper para simular balanço antes do state update
   const calculateBalancesWithSettlements = (currentSettlements: Settlement[]) => {
       const balances: Record<string, number> = {};
       members.forEach(m => balances[m.user_id] = 0);
@@ -213,24 +225,120 @@ const DivvyDetailContent: React.FC = () => {
 
   const formatMoney = (v: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v);
 
+  // --- Lógica de Split do Formulário ---
+  const handleToggleParticipant = (userId: string) => {
+      const newSet = new Set(selectedParticipants);
+      if (newSet.has(userId)) newSet.delete(userId);
+      else newSet.add(userId);
+      setSelectedParticipants(newSet);
+  };
+
+  const handleManualAmountChange = (userId: string, value: string) => {
+      setManualAmounts(prev => ({ ...prev, [userId]: value }));
+  };
+
+  const resetForm = () => {
+      setAmount('');
+      setDesc('');
+      setCategory('food');
+      setDate(new Date().toISOString().split('T')[0]);
+      if(user) setPayerId(user.id);
+      setSelectedParticipants(new Set(members.map(m => m.user_id)));
+      setManualAmounts({});
+      setSplitType('equal');
+  };
+
   const handleSaveExpense = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user || !divvy) return;
+    
+    const val = parseFloat(amount);
+    if (isNaN(val) || val <= 0) {
+        toast.error("Insira um valor válido.");
+        return;
+    }
+
+    if (!desc.trim()) {
+        toast.error("Adicione uma descrição.");
+        return;
+    }
+
+    if (selectedParticipants.size === 0) {
+        toast.error("Selecione pelo menos uma pessoa para dividir.");
+        return;
+    }
+
+    // Validação da Divisão
+    let splitsPayload: { participant_user_id: string, amount_owed: number }[] = [];
+    
+    if (splitType === 'equal') {
+        const splitVal = val / selectedParticipants.size;
+        splitsPayload = Array.from(selectedParticipants).map(uid => ({
+            participant_user_id: uid,
+            amount_owed: splitVal
+        }));
+    } else {
+        // Exact
+        let sum = 0;
+        const potentialSplits = members.map(m => {
+            const raw = manualAmounts[m.user_id];
+            const v = parseFloat(raw || '0');
+            if (!isNaN(v) && v > 0) {
+                sum += v;
+                return { participant_user_id: m.user_id, amount_owed: v };
+            }
+            return null;
+        });
+
+        splitsPayload = potentialSplits.filter((item): item is { participant_user_id: string, amount_owed: number } => item !== null);
+
+        if (Math.abs(sum - val) > 0.05) {
+            toast.error(`A soma das divisões (R$ ${sum.toFixed(2)}) deve ser igual ao total (R$ ${val.toFixed(2)}).`);
+            return;
+        }
+    }
+
     setSubmitLoading(true);
     try {
-      const val = parseFloat(amount);
+      // 1. Criar Despesa
       const { data: expense, error } = await supabase.from('expenses').insert({
-        divvy_id: divvyId, paid_by_user_id: user.id, amount: val, category, description: desc, date: date
+        divvy_id: divvyId, 
+        paid_by_user_id: payerId, 
+        amount: val, 
+        category, 
+        description: desc, 
+        date: date
       }).select().single();
+
       if (error) throw error;
-      const splitVal = val / members.length;
-      await supabase.from('expense_splits').insert(members.map(m => ({ expense_id: expense.id, participant_user_id: m.user_id, amount_owed: splitVal })));
+
+      // 2. Criar Splits
+      const splits = splitsPayload.map(s => ({
+          expense_id: expense.id,
+          participant_user_id: s.participant_user_id,
+          amount_owed: s.amount_owed
+      }));
+      
+      const { error: splitError } = await supabase.from('expense_splits').insert(splits);
+      if (splitError) throw splitError;
+
       toast.success('Despesa adicionada!');
       setIsExpenseModalOpen(false);
+      resetForm();
       fetchDivvyData();
-    } catch (e: any) { toast.error(e.message); }
+    } catch (e: any) { 
+        console.error(e);
+        toast.error(e.message); 
+    }
     finally { setSubmitLoading(false); }
   };
+
+  // Cálculos para exibição no modal
+  const assignedTotal = splitType === 'exact' 
+    ? Object.values(manualAmounts).reduce((acc: number, curr: string) => acc + (parseFloat(curr) || 0), 0)
+    : parseFloat(amount) || 0;
+  
+  const remainingTotal = (parseFloat(amount) || 0) - assignedTotal;
 
   if (loading) return <div className="flex justify-center p-12"><LoadingSpinner /></div>;
   if (!divvy) return <div className="p-12 text-center text-gray-500">Grupo não encontrado.</div>;
@@ -239,7 +347,6 @@ const DivvyDetailContent: React.FC = () => {
     <div className="space-y-6">
       <DivvyHeader divvy={divvy} onUpdate={fetchDivvyData} />
 
-      {/* Regra 2.1: Banner de Sugestão de Arquivamento */}
       {calculateBalances.isGroupBalanced && !divvy.is_archived && (
         <div className="bg-brand-50 dark:bg-brand-900/20 border border-brand-200 dark:border-brand-800 p-5 rounded-2xl flex flex-col md:flex-row items-center justify-between gap-4 animate-fade-in-down shadow-md">
           <div className="flex items-center gap-4">
@@ -262,12 +369,11 @@ const DivvyDetailContent: React.FC = () => {
 
       <div className="flex justify-end gap-3 px-1">
         <Button variant="outline" onClick={() => setIsInviteModalOpen(true)}><UserPlus size={18} className="mr-2" /> Convidar</Button>
-        <Button onClick={() => { setAmount(''); setIsExpenseModalOpen(true); }} disabled={divvy.is_archived}><Plus size={18} className="mr-2" /> Nova Despesa</Button>
+        <Button onClick={() => { resetForm(); setIsExpenseModalOpen(true); }} disabled={divvy.is_archived}><Plus size={18} className="mr-2" /> Nova Despesa</Button>
       </div>
 
-      {/* Tabs */}
       <div className="border-b border-gray-200 dark:border-dark-700">
-        <nav className="flex space-x-8">
+        <nav className="flex space-x-8 overflow-x-auto">
           {[
             { id: 'expenses', label: 'Despesas', icon: Receipt },
             { id: 'balances', label: 'Balanços', icon: Wallet },
@@ -277,7 +383,7 @@ const DivvyDetailContent: React.FC = () => {
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id as any)}
-              className={`pb-4 px-1 border-b-2 font-medium text-sm flex items-center gap-2 transition-colors ${
+              className={`pb-4 px-1 border-b-2 font-medium text-sm flex items-center gap-2 transition-colors whitespace-nowrap ${
                 activeTab === tab.id ? 'border-brand-500 text-brand-600 dark:text-brand-400' : 'border-transparent text-gray-500'
               }`}
             >
@@ -301,7 +407,7 @@ const DivvyDetailContent: React.FC = () => {
                         <p className="font-bold text-gray-900 dark:text-white">{exp.description || exp.category}</p>
                         {isBlocked(exp) && <Lock size={12} className="text-gray-400" title="Despesa Bloqueada" />}
                     </div>
-                    <p className="text-xs text-gray-500">{new Date(exp.date).toLocaleDateString()} • {getMemberName(exp.paid_by_user_id)}</p>
+                    <p className="text-xs text-gray-500">{new Date(exp.date).toLocaleDateString()} • Pago por {getMemberName(exp.paid_by_user_id)}</p>
                   </div>
                 </div>
                 <span className="font-bold text-gray-900 dark:text-white">{formatMoney(exp.amount)}</span>
@@ -312,7 +418,6 @@ const DivvyDetailContent: React.FC = () => {
 
         {activeTab === 'balances' && (
           <div className="space-y-6">
-            {/* Solicitações de Confirmação Pendentes */}
             {settlements.filter(s => s.status === 'pending' && s.receiver_id === user?.id).map(s => (
               <div key={s.id} className="bg-yellow-50 dark:bg-yellow-900/10 p-5 rounded-2xl border border-yellow-200 dark:border-yellow-900/30 flex flex-col md:flex-row justify-between items-center gap-4 border-l-4 border-l-yellow-500">
                 <div className="flex items-center gap-3">
@@ -365,8 +470,9 @@ const DivvyDetailContent: React.FC = () => {
             </div>
           </div>
         )}
-        {/* Outras abas omitidas para brevidade, mas mantidas no arquivo original */}
+        
         {activeTab === 'charts' && <div className="bg-white dark:bg-dark-800 p-6 rounded-2xl border border-gray-100"><ExpenseCharts expenses={expenses} /></div>}
+        
         {activeTab === 'members' && (
            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
              {members.map(member => (
@@ -385,7 +491,6 @@ const DivvyDetailContent: React.FC = () => {
         )}
       </div>
 
-      {/* Modal Detalhes com Regra de Bloqueio */}
       <Modal isOpen={isViewModalOpen} onClose={() => setIsViewModalOpen(false)} title="Detalhes da Despesa">
         {viewingExpense && (
           <div className="space-y-6">
@@ -419,14 +524,120 @@ const DivvyDetailContent: React.FC = () => {
         )}
       </Modal>
 
-      {/* Outros Modais mantidos... */}
-      <Modal isOpen={isExpenseModalOpen} onClose={() => setIsExpenseModalOpen(false)} title="Nova Despesa">
-        <form onSubmit={handleSaveExpense} className="space-y-4">
-          <Input label="Valor (R$)" type="number" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} required />
-          <Input label="Descrição" value={desc} onChange={e => setDesc(e.target.value)} placeholder="Ex: Almoço no shopping" />
+      <Modal isOpen={isExpenseModalOpen} onClose={() => setIsExpenseModalOpen(false)} title="Nova Despesa" size="lg">
+        <form onSubmit={handleSaveExpense} className="space-y-5">
+          {/* Header Inputs */}
+          <div className="grid grid-cols-2 gap-4">
+             <div className="col-span-2">
+                 <Input label="Descrição" value={desc} onChange={e => setDesc(e.target.value)} placeholder="Ex: Almoço no shopping" autoFocus />
+             </div>
+             <div>
+                <Input label="Valor (R$)" type="number" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} required placeholder="0.00" />
+             </div>
+             <div>
+                <Input label="Data" type="date" value={date} onChange={e => setDate(e.target.value)} />
+             </div>
+             <div>
+                <label className="block text-sm font-medium mb-1">Categoria</label>
+                <select className="w-full rounded-lg border border-gray-300 px-3 py-2 dark:bg-dark-800" value={category} onChange={e => setCategory(e.target.value)}>
+                   <option value="food">🍽️ Alimentação</option>
+                   <option value="transport">🚗 Transporte</option>
+                   <option value="activity">🎬 Atividade</option>
+                   <option value="utilities">💡 Contas</option>
+                   <option value="shopping">🛍️ Compras</option>
+                   <option value="other">💰 Outros</option>
+                </select>
+             </div>
+             <div>
+                <label className="block text-sm font-medium mb-1">Quem pagou?</label>
+                <select className="w-full rounded-lg border border-gray-300 px-3 py-2 dark:bg-dark-800" value={payerId} onChange={e => setPayerId(e.target.value)}>
+                   {members.map(m => (
+                       <option key={m.user_id} value={m.user_id}>
+                           {m.user_id === user?.id ? 'Eu' : getMemberName(m.user_id)}
+                       </option>
+                   ))}
+                </select>
+             </div>
+          </div>
+
+          <div className="border-t border-gray-100 pt-4">
+             <label className="block text-sm font-bold mb-3 text-gray-700 dark:text-gray-300">Como dividir?</label>
+             
+             <div className="flex gap-2 mb-4 bg-gray-50 p-1 rounded-lg w-fit">
+                <button 
+                   type="button" 
+                   onClick={() => setSplitType('equal')}
+                   className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all ${splitType === 'equal' ? 'bg-white shadow text-brand-600' : 'text-gray-500 hover:text-gray-900'}`}
+                >
+                   Igualmente
+                </button>
+                <button 
+                   type="button" 
+                   onClick={() => setSplitType('exact')}
+                   className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all ${splitType === 'exact' ? 'bg-white shadow text-brand-600' : 'text-gray-500 hover:text-gray-900'}`}
+                >
+                   Valor Exato
+                </button>
+             </div>
+
+             <div className="space-y-2 max-h-60 overflow-y-auto custom-scrollbar bg-gray-50/50 p-2 rounded-xl">
+                 {members.map(m => {
+                     const isSelected = selectedParticipants.has(m.user_id);
+                     const splitAmount = splitType === 'equal' && isSelected && amount 
+                        ? (parseFloat(amount) / selectedParticipants.size) 
+                        : 0;
+
+                     return (
+                         <div key={m.user_id} className="flex items-center justify-between p-2 hover:bg-white rounded-lg transition-colors">
+                             <div className="flex items-center gap-3">
+                                 {splitType === 'equal' && (
+                                     <input 
+                                       type="checkbox" 
+                                       checked={isSelected} 
+                                       onChange={() => handleToggleParticipant(m.user_id)}
+                                       className="w-5 h-5 rounded text-brand-600 focus:ring-brand-500 border-gray-300"
+                                     />
+                                 )}
+                                 <span className="text-sm font-medium text-gray-700 dark:text-gray-300 flex items-center gap-2">
+                                     {m.user_id === user?.id ? 'Eu' : getMemberName(m.user_id)}
+                                     {m.user_id === payerId && <span className="text-[10px] bg-green-100 text-green-700 px-1.5 py-0.5 rounded">Pagador</span>}
+                                 </span>
+                             </div>
+
+                             {splitType === 'equal' ? (
+                                 <span className={`text-sm ${isSelected ? 'font-bold text-gray-900' : 'text-gray-400'}`}>
+                                     {isSelected ? formatMoney(splitAmount) : '-'}
+                                 </span>
+                             ) : (
+                                 <div className="relative">
+                                     <span className="absolute left-2 top-1.5 text-xs text-gray-400">R$</span>
+                                     <input 
+                                        type="number"
+                                        step="0.01"
+                                        placeholder="0.00"
+                                        value={manualAmounts[m.user_id] || ''}
+                                        onChange={(e) => handleManualAmountChange(m.user_id, e.target.value)}
+                                        className="w-24 pl-7 pr-2 py-1 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-brand-500 text-right"
+                                     />
+                                 </div>
+                             )}
+                         </div>
+                     );
+                 })}
+             </div>
+
+             {splitType === 'exact' && (
+                 <div className="flex justify-end mt-2 text-xs font-medium">
+                     <span className={Math.abs(remainingTotal) > 0.05 ? "text-red-500" : "text-green-600"}>
+                        Restante: {formatMoney(remainingTotal)}
+                     </span>
+                 </div>
+             )}
+          </div>
+
           <div className="flex justify-end gap-3 pt-4">
             <Button type="button" variant="outline" onClick={() => setIsExpenseModalOpen(false)}>Cancelar</Button>
-            <Button type="submit" isLoading={submitLoading}>Salvar</Button>
+            <Button type="submit" isLoading={submitLoading}>Salvar Despesa</Button>
           </div>
         </form>
       </Modal>
