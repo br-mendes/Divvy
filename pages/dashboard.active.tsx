@@ -27,8 +27,8 @@ const DashboardContent: React.FC = () => {
     setErrorType(null);
 
     try {
-      // 1. Tenta via RPC (Rápido e Seguro)
-      const { data: rpcData, error: rpcError } = await supabase.rpc('get_dashboard_divvies');
+      // 1. Tenta via RPC V2 (Nova versão para evitar cache da antiga)
+      const { data: rpcData, error: rpcError } = await supabase.rpc('get_dashboard_data_v2');
 
       if (!rpcError && rpcData) {
         const formattedData: Divvy[] = rpcData.map((d: any) => ({
@@ -40,12 +40,12 @@ const DashboardContent: React.FC = () => {
         return;
       }
 
-      // Se RPC falhar, loga warning
       if (rpcError) {
-         console.warn("RPC fetch failed, falling back:", rpcError.message);
+         console.warn("RPC V2 failed, falling back to manual fetch:", rpcError.message);
       }
 
-      // 2. Fallback Manual (Se RPC não existir)
+      // 2. Fallback Manual Seguro (Tenta buscar apenas o básico se tudo falhar)
+      // Busca apenas grupos criados pelo usuário (geralmente não bloqueia em RLS simples)
       const { data: created, error: createdError } = await supabase
         .from('divvies')
         .select('*')
@@ -53,37 +53,36 @@ const DashboardContent: React.FC = () => {
       
       if (createdError) throw createdError;
 
-      const { data: memberships, error: memberError } = await supabase
-        .from('divvy_members')
-        .select('divvy_id')
-        .eq('user_id', user.id);
-
-      if (memberError) throw memberError;
-
-      const joinedIds = memberships?.map((m: any) => m.divvy_id).filter(id => !created?.find(c => c.id === id)) || [];
-      
+      // Tenta buscar grupos onde é membro
       let joinedDivvies: Divvy[] = [];
-      if (joinedIds.length > 0) {
-         const { data: joined } = await supabase.from('divvies').select('*').in('id', joinedIds);
-         if (joined) joinedDivvies = joined;
+      try {
+        const { data: memberships } = await supabase
+            .from('divvy_members')
+            .select('divvy_id')
+            .eq('user_id', user.id);
+            
+        const joinedIds = memberships?.map((m: any) => m.divvy_id).filter(id => !created?.find(c => c.id === id)) || [];
+        
+        if (joinedIds.length > 0) {
+            const { data: joined } = await supabase.from('divvies').select('*').in('id', joinedIds);
+            if (joined) joinedDivvies = joined;
+        }
+      } catch (e) {
+        console.warn("Falha ao buscar grupos participados (provável erro RLS), exibindo apenas criados.");
       }
 
       const allDivvies = [...(created || []), ...joinedDivvies];
+      // Ordenação e unicidade
       allDivvies.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-      
       const uniqueDivvies = Array.from(new Map(allDivvies.map(item => [item.id, item])).values());
+      
       setDivvies(uniqueDivvies);
 
     } catch (err: any) {
-      console.error("Dashboard Sync Error:", err);
-      // Detectar se é erro de RLS/Policy
-      if (err.message?.includes('policy') || err.message?.includes('recursion') || err.code === '42501') {
-          setErrorType('database');
-      } else {
-          setErrorType('network');
-      }
-      
-      if (!silent) toast.error('Falha na sincronização.');
+      console.error("Dashboard Fatal Error:", err);
+      // Se falhou até o fallback básico, é problema de banco
+      setErrorType('database');
+      if (!silent) toast.error('Erro de configuração no banco de dados.');
     } finally {
       setLoading(false);
     }
@@ -179,15 +178,13 @@ const DashboardContent: React.FC = () => {
           ) : errorType ? (
             <div className="flex flex-col items-center justify-center py-20 text-center animate-fade-in-up bg-white dark:bg-dark-900 rounded-3xl border border-red-100 dark:border-red-900/20 p-8">
                 <div className="w-16 h-16 bg-red-50 dark:bg-red-900/20 rounded-full flex items-center justify-center mb-4">
-                    {errorType === 'database' ? <Database className="text-red-500" size={32} /> : <AlertTriangle className="text-red-500" size={32} />}
+                    <Database className="text-red-500" size={32} />
                 </div>
                 <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-2">
-                    {errorType === 'database' ? 'Configuração Pendente' : 'Erro de Conexão'}
+                    Configuração do Banco Necessária
                 </h3>
                 <p className="text-gray-500 max-w-sm mb-6">
-                    {errorType === 'database' 
-                        ? 'O banco de dados precisa ser configurado. Execute o script SQL fornecido no Supabase.' 
-                        : 'Não foi possível carregar seus grupos. Verifique sua conexão.'}
+                    Copie e execute o script SQL fornecido no painel do Supabase para corrigir as permissões.
                 </p>
                 <Button onClick={() => fetchDivvies()}>Tentar Novamente</Button>
             </div>
