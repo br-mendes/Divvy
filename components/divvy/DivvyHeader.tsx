@@ -36,6 +36,9 @@ export default function DivvyHeader({ divvy, onUpdate }: DivvyHeaderProps) {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
 
+  // Proteção máxima contra objeto nulo ou indefinido
+  if (!divvy || !divvy.id) return null;
+
   const isCreator = user?.id === divvy.creator_id;
 
   const handleDelete = async () => {
@@ -103,7 +106,7 @@ export default function DivvyHeader({ divvy, onUpdate }: DivvyHeaderProps) {
       <div className={`border-b -mx-4 md:-mx-8 -mt-4 md:-mt-8 mb-8 transition-colors duration-200 
           ${divvy.is_archived 
             ? 'bg-gray-100 dark:bg-gray-800 border-gray-300 dark:border-gray-600' 
-            : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700'
+            : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-dark-700'
           }`}
       >
         <div className="max-w-5xl mx-auto px-4 py-6 md:px-8">

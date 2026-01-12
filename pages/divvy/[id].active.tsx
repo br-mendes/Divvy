@@ -57,7 +57,12 @@ const DivvyDetailContent: React.FC = () => {
 
   const fetchDivvyData = async () => {
     try {
-      const { data: divvyData } = await supabase.from('divvies').select('*').eq('id', divvyId).single();
+      const { data: divvyData, error: dErr } = await supabase.from('divvies').select('*').eq('id', divvyId).single();
+      if (dErr || !divvyData) {
+         setLoading(false);
+         return;
+      }
+
       const { data: memberData } = await supabase.from('divvy_members').select('*, profiles(*)').eq('divvy_id', divvyId);
       const { data: expenseData } = await supabase.from('expenses').select('*').eq('divvy_id', divvyId).order('date', { ascending: false });
       const { data: settlementData } = await supabase.from('settlements').select('*').eq('divvy_id', divvyId).order('created_at', { ascending: false });
@@ -72,7 +77,7 @@ const DivvyDetailContent: React.FC = () => {
         setAllSplits(splitData || []);
       }
     } catch (error) {
-      console.error(error);
+      console.error("Fetch Error:", error);
     } finally {
       setLoading(false);
     }
@@ -118,7 +123,6 @@ const DivvyDetailContent: React.FC = () => {
 
   const isExpenseLocked = (exp: Expense) => {
     if (!calculateBalances.isGroupBalanced || !calculateBalances.lastConfirmedDate) return false;
-    // Se o grupo está equilibrado, todas as despesas anteriores ao último acerto são bloqueadas
     return new Date(exp.created_at) < calculateBalances.lastConfirmedDate;
   };
 
@@ -146,7 +150,7 @@ const DivvyDetailContent: React.FC = () => {
     try {
       await supabase.from('settlements').update({ 
           status, 
-          created_at: new Date().toISOString() // Atualizamos para marcar o novo checkpoint de bloqueio
+          created_at: new Date().toISOString() 
       }).eq('id', s.id);
       
       await supabase.from('notifications').insert({
@@ -193,7 +197,6 @@ const DivvyDetailContent: React.FC = () => {
 
       if (error) throw error;
 
-      // Divisão igualitária automática (MVP)
       const splitVal = val / members.length;
       const splits = members.map(m => ({
         expense_id: expense.id,
@@ -209,12 +212,14 @@ const DivvyDetailContent: React.FC = () => {
     finally { setSubmitLoading(false); }
   };
 
+  if (loading) return <div className="flex justify-center p-12"><LoadingSpinner /></div>;
+  if (!divvy) return <div className="p-12 text-center text-gray-500">Grupo não encontrado ou você não tem permissão para acessá-lo.</div>;
+
   return (
     <div className="space-y-6">
-      <DivvyHeader divvy={divvy!} onUpdate={fetchDivvyData} />
+      <DivvyHeader divvy={divvy} onUpdate={fetchDivvyData} />
 
-      {/* Banner de Arquivamento Sugerido */}
-      {calculateBalances.isGroupBalanced && !divvy?.is_archived && (
+      {calculateBalances.isGroupBalanced && !divvy.is_archived && (
         <div className="bg-brand-50 dark:bg-brand-900/20 border border-brand-200 dark:border-brand-800 p-5 rounded-2xl flex flex-col md:flex-row items-center justify-between gap-4 animate-fade-in-down shadow-sm">
           <div className="flex items-center gap-4">
             <div className="w-12 h-12 rounded-full bg-brand-500 text-white flex items-center justify-center shadow-lg">
@@ -233,10 +238,9 @@ const DivvyDetailContent: React.FC = () => {
 
       <div className="flex justify-end gap-3 px-1">
         <Button variant="outline" onClick={() => setIsInviteModalOpen(true)}><UserPlus size={18} className="mr-2" /> Convidar</Button>
-        <Button onClick={() => { setEditingExpenseId(null); setAmount(''); setIsExpenseModalOpen(true); }} disabled={divvy?.is_archived}><Plus size={18} className="mr-2" /> Nova Despesa</Button>
+        <Button onClick={() => { setEditingExpenseId(null); setAmount(''); setIsExpenseModalOpen(true); }} disabled={divvy.is_archived}><Plus size={18} className="mr-2" /> Nova Despesa</Button>
       </div>
 
-      {/* Navegação por Abas */}
       <div className="border-b border-gray-200 dark:border-dark-700">
         <nav className="flex space-x-8">
           {[
@@ -261,7 +265,6 @@ const DivvyDetailContent: React.FC = () => {
       </div>
 
       <div className="min-h-[400px]">
-        {/* Lista de Despesas */}
         {activeTab === 'expenses' && (
           <div className="space-y-4">
             {expenses.length === 0 ? <EmptyState /> : expenses.map(exp => (
@@ -282,10 +285,8 @@ const DivvyDetailContent: React.FC = () => {
           </div>
         )}
 
-        {/* Balanços e Liquidações */}
         {activeTab === 'balances' && (
           <div className="space-y-6">
-            {/* Pagamentos Aguardando Confirmação do Usuário Atual */}
             {settlements.filter(s => s.status === 'pending' && s.receiver_id === user?.id).map(s => (
               <div key={s.id} className="bg-yellow-50 dark:bg-yellow-900/10 p-5 rounded-2xl border border-yellow-200 dark:border-yellow-900/30 flex flex-col md:flex-row justify-between items-center gap-4">
                 <div className="flex items-center gap-3">
@@ -338,7 +339,6 @@ const DivvyDetailContent: React.FC = () => {
           </div>
         )}
 
-        {/* Outras Abas */}
         {activeTab === 'charts' && (
           <div className="bg-white dark:bg-dark-800 p-6 rounded-2xl border border-gray-100">
              <ExpenseCharts expenses={expenses} />
@@ -365,7 +365,6 @@ const DivvyDetailContent: React.FC = () => {
         )}
       </div>
 
-      {/* Modal Visualizar Despesa */}
       <Modal isOpen={isViewModalOpen} onClose={() => setIsViewModalOpen(false)} title="Detalhes da Despesa">
         {viewingExpense && (
           <div className="space-y-6">
@@ -384,14 +383,13 @@ const DivvyDetailContent: React.FC = () => {
             )}
 
             <div className="flex gap-3 pt-4">
-              <Button fullWidth variant="outline" disabled={isExpenseLocked(viewingExpense) || divvy?.is_archived}>Editar</Button>
-              <Button fullWidth variant="outline" className="text-red-600" disabled={isExpenseLocked(viewingExpense) || divvy?.is_archived}>Excluir</Button>
+              <Button fullWidth variant="outline" disabled={isExpenseLocked(viewingExpense) || divvy.is_archived}>Editar</Button>
+              <Button fullWidth variant="outline" className="text-red-600" disabled={isExpenseLocked(viewingExpense) || divvy.is_archived}>Excluir</Button>
             </div>
           </div>
         )}
       </Modal>
 
-      {/* Modal Adicionar Despesa */}
       <Modal isOpen={isExpenseModalOpen} onClose={() => setIsExpenseModalOpen(false)} title="Nova Despesa">
         <form onSubmit={handleSaveExpense} className="space-y-4">
           <Input label="Valor (R$)" type="number" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} required />
@@ -415,7 +413,7 @@ const DivvyDetailContent: React.FC = () => {
         </form>
       </Modal>
 
-      <InviteModal divvyId={divvyId} divvyName={divvy?.name!} isOpen={isInviteModalOpen} onClose={() => setIsInviteModalOpen(false)} />
+      <InviteModal divvyId={divvyId} divvyName={divvy.name} isOpen={isInviteModalOpen} onClose={() => setIsInviteModalOpen(false)} />
     </div>
   );
 };
