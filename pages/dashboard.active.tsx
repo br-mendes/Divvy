@@ -26,89 +26,92 @@ const DashboardContent: React.FC = () => {
     else setIsRefreshing(true);
 
     try {
-      // ESTRATÉGIA ANTI-BLOQUEIO (MANUAL JOIN)
-      // Evita usar select('divvy:divvies(*)') que dispara recursão de RLS no Supabase
-      
-      // 1. Grupos que eu criei (Direto)
-      const { data: createdData } = await supabase
+      // 1. Buscar grupos onde sou o criador
+      const { data: createdGroups, error: createdError } = await supabase
         .from('divvies')
         .select('*')
         .eq('creator_id', user.id);
       
-      const myCreatedGroups = createdData || [];
+      if (createdError) throw createdError;
 
-      // 2. IDs dos grupos onde sou membro
-      const { data: membershipData } = await supabase
+      // 2. Buscar IDs dos grupos onde sou apenas membro (participante)
+      const { data: membershipRows, error: memberError } = await supabase
         .from('divvy_members')
         .select('divvy_id')
         .eq('user_id', user.id);
       
-      // Extrair IDs válidos
-      const joinedDivvyIds = (membershipData || [])
-         .map((m: any) => m.divvy_id)
-         .filter((id: string) => id); // Remove nulos
+      if (memberError) throw memberError;
+
+      const joinedIds = (membershipRows || []).map(m => m.divvy_id);
       
-      // 3. Buscar detalhes dos grupos onde sou membro (se houver algum)
-      let myJoinedGroups: Divvy[] = [];
-      if (joinedDivvyIds.length > 0) {
-          // Filtra IDs que já pegamos na lista de criados para economizar banda (opcional, mas bom)
-          const idsToFetch = joinedDivvyIds.filter((id: string) => !myCreatedGroups.some(c => c.id === id));
-          
-          if (idsToFetch.length > 0) {
-             const { data: joinedData } = await supabase
-               .from('divvies')
-               .select('*')
-               .in('id', idsToFetch);
-             
-             if (joinedData) myJoinedGroups = joinedData;
-          }
+      // 3. Buscar os detalhes desses outros grupos
+      let joinedGroups: Divvy[] = [];
+      if (joinedIds.length > 0) {
+        const { data: joinedData } = await supabase
+          .from('divvies')
+          .select('*')
+          .in('id', joinedIds);
+        
+        if (joinedData) joinedGroups = joinedData;
       }
 
-      // Unificar listas
-      const allGroups = [...myCreatedGroups, ...myJoinedGroups];
-
-      // 4. Buscar MEMBROS e PERFIS para cada grupo
-      const allIds = allGroups.map(g => g.id);
-      const membersMap: Record<string, DivvyMember[]> = {};
-      
-      if (allIds.length > 0) {
-          const { data: allMembers } = await supabase
-             .from('divvy_members')
-             .select('divvy_id, user_id, email, role, joined_at, profiles(id, full_name, nickname, avatar_url)')
-             .in('divvy_id', allIds);
-          
-          if (allMembers) {
-             allMembers.forEach((m: any) => {
-                if (!membersMap[m.divvy_id]) {
-                    membersMap[m.divvy_id] = [];
-                }
-                membersMap[m.divvy_id].push(m);
-             });
-          }
-      }
-
-      // Remover duplicatas por segurança (Map garante unicidade por ID) e adicionar contagem e lista de membros
-      const uniqueMap = new Map();
-      allGroups.forEach(g => {
-        if (g && g.id) {
-             const groupMembers = membersMap[g.id] || [];
-             uniqueMap.set(g.id, { 
-                 ...g, 
-                 members: groupMembers, // Adiciona os membros reais ao objeto
-                 member_count: groupMembers.length 
-             });
-        }
+      // 4. Combinar e remover duplicatas
+      const combined = [...(createdGroups || []), ...joinedGroups];
+      const uniqueMap = new Map<string, Divvy>();
+      combined.forEach(g => {
+        if (g && g.id) uniqueMap.set(g.id, g);
       });
-      
-      const uniqueDivvies = Array.from(uniqueMap.values());
 
-      // Ordenar: Mais recentes primeiro
-      uniqueDivvies.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+      const finalGroups = Array.from(uniqueMap.values());
+      const allGroupIds = finalGroups.map(g => g.id);
 
-      setDivvies(uniqueDivvies);
+      // 5. Buscar TODOS os membros de todos esses grupos de uma vez
+      // Importante: profiles(id, avatar_url) precisa estar com permissão de leitura pública no RLS
+      const { data: allMembers, error: fetchMembersError } = await supabase
+        .from('divvy_members')
+        .select(`
+          divvy_id, 
+          user_id, 
+          email,
+          profiles:user_id (
+            id,
+            full_name,
+            nickname,
+            avatar_url
+          )
+        `)
+        .in('divvy_id', allGroupIds);
 
+      // 6. Mapear membros para seus respectivos grupos
+      const membersByGroup: Record<string, DivvyMember[]> = {};
+      if (allMembers) {
+        allMembers.forEach((m: any) => {
+          if (!membersByGroup[m.divvy_id]) {
+            membersByGroup[m.divvy_id] = [];
+          }
+          membersByGroup[m.divvy_id].push(m);
+        });
+      }
+
+      // 7. Enriquecer os objetos dos grupos com a lista de membros e a contagem real
+      const enrichedDivvies = finalGroups.map(g => {
+        const groupMembers = membersByGroup[g.id] || [];
+        
+        // Se a contagem de membros for 0 no banco por erro de RLS, 
+        // mas o usuário está vendo o grupo, garantimos que pelo menos ele seja contado (count = 1)
+        return {
+          ...g,
+          members: groupMembers,
+          member_count: Math.max(groupMembers.length, 1) 
+        };
+      });
+
+      // Ordenar por data
+      enrichedDivvies.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+
+      setDivvies(enrichedDivvies);
     } catch (err) {
-      console.error("Erro ao carregar dashboard:", err);
+      console.error("Dashboard Error:", err);
     } finally {
       setLoading(false);
       setIsRefreshing(false);
@@ -118,8 +121,10 @@ const DashboardContent: React.FC = () => {
   useEffect(() => {
     fetchDivvies();
     
-    const channel = supabase.channel('dashboard_updates')
+    // Inscrição para atualizações em tempo real
+    const channel = supabase.channel('dashboard_realtime')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'divvies' }, () => fetchDivvies(true))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'divvy_members' }, () => fetchDivvies(true))
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
@@ -195,12 +200,12 @@ const DashboardContent: React.FC = () => {
           </div>
         )}
 
-        {/* List & States */}
+        {/* List */}
         <div className="min-h-[400px]">
           {loading && divvies.length === 0 ? (
             <div className="py-32 flex flex-col items-center gap-4">
               <LoadingSpinner />
-              <p className="text-gray-400 text-sm animate-pulse font-medium">Carregando seus grupos...</p>
+              <p className="text-gray-400 text-sm animate-pulse font-medium">Sincronizando grupos...</p>
             </div>
           ) : filteredDivvies.length > 0 ? (
             <div className="animate-fade-in-up">

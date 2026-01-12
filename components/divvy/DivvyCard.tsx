@@ -21,11 +21,13 @@ const DivvyCard: React.FC<DivvyCardProps> = ({ divvy }) => {
   const date = new Date(divvy.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' });
   const config = typeConfig[divvy.type] || typeConfig.general;
   
-  // Logic for member preview
+  // Lógica para visualização de membros
   const members = divvy.members || [];
-  const memberCount = divvy.member_count || members.length || 0;
+  // Fallback: se member_count for 0 mas o card existe, o usuário logado é pelo menos 1 membro
+  const memberCount = Math.max(divvy.member_count || members.length, 1);
+  
   const previewMembers = members.slice(0, 3);
-  const remainingCount = memberCount > 3 ? memberCount - 3 : 0;
+  const remainingCount = memberCount > previewMembers.length ? memberCount - previewMembers.length : 0;
 
   return (
     <Link href={`/divvy/${divvy.id}`} className="block h-full group">
@@ -72,12 +74,12 @@ const DivvyCard: React.FC<DivvyCardProps> = ({ divvy }) => {
         <div className="pt-5 border-t border-gray-100 dark:border-dark-800 flex items-center justify-between mt-auto">
           <div className="flex items-center gap-3">
             <div className="flex -space-x-2">
-               {/* Real Avatars */}
+               {/* Avatares reais dos membros */}
                {previewMembers.length > 0 ? (
                  previewMembers.map((member) => (
                     <div 
                       key={member.user_id} 
-                      className="w-7 h-7 rounded-full border-2 border-white dark:border-dark-900 bg-gray-100 dark:bg-dark-800 flex items-center justify-center overflow-hidden"
+                      className="w-8 h-8 rounded-full border-2 border-white dark:border-dark-900 bg-gray-100 dark:bg-dark-800 flex items-center justify-center overflow-hidden"
                       title={member.profiles?.full_name || member.email}
                     >
                       {member.profiles?.avatar_url ? (
@@ -87,21 +89,23 @@ const DivvyCard: React.FC<DivvyCardProps> = ({ divvy }) => {
                           className="w-full h-full object-cover"
                         />
                       ) : (
-                        <span className="text-[10px] font-bold text-gray-500 dark:text-gray-400 select-none">
+                        <span className="text-[10px] font-bold text-gray-500 dark:text-gray-400">
                           {(member.profiles?.nickname || member.profiles?.full_name || member.email || '?').charAt(0).toUpperCase()}
                         </span>
                       )}
                     </div>
                  ))
                ) : (
-                 // Fallback if members not loaded yet
-                 <div className="w-7 h-7 rounded-full bg-gray-200 dark:bg-dark-700 border-2 border-white dark:border-dark-900"></div>
+                 // Fallback visual caso os membros ainda não tenham carregado
+                 <div className="w-8 h-8 rounded-full bg-gray-200 dark:bg-dark-700 border-2 border-white dark:border-dark-900 flex items-center justify-center">
+                    <Users size={12} className="text-gray-400" />
+                 </div>
                )}
                
-               {/* +N counter */}
+               {/* Contador de membros restantes */}
                {remainingCount > 0 && (
-                 <div className="w-7 h-7 rounded-full border-2 border-white dark:border-dark-900 bg-gray-100 dark:bg-dark-800 flex items-center justify-center">
-                    <span className="text-[10px] font-bold text-gray-500 dark:text-gray-400">+{remainingCount}</span>
+                 <div className="w-8 h-8 rounded-full border-2 border-white dark:border-dark-900 bg-brand-50 dark:bg-brand-900/30 flex items-center justify-center">
+                    <span className="text-[10px] font-bold text-brand-600 dark:text-brand-400">+{remainingCount}</span>
                  </div>
                )}
             </div>
