@@ -1,4 +1,3 @@
-
 import React, { Component, ErrorInfo, ReactNode } from 'react';
 import { AlertTriangle, RefreshCw, Home } from 'lucide-react';
 
@@ -11,7 +10,7 @@ interface State {
   error: Error | null;
 }
 
-class ErrorBoundary extends React.Component<Props, State> {
+class ErrorBoundary extends Component<Props, State> {
   public state: State = {
     hasError: false,
     error: null,
@@ -46,28 +45,23 @@ class ErrorBoundary extends React.Component<Props, State> {
               Ops! Algo deu errado.
             </h1>
             
-            <p className="text-gray-600 dark:text-gray-400 mb-6 text-sm">
-              Pedimos desculpas pelo inconveniente. Ocorreu um erro inesperado na aplicação.
+            <p className="text-gray-600 dark:text-gray-400 mb-8 text-sm">
+              Ocorreu um erro inesperado na aplicação. Tente recarregar a página.
             </p>
 
-            <div className="bg-gray-100 dark:bg-gray-800 p-3 rounded-lg text-left mb-6 overflow-hidden">
-                <p className="text-xs font-mono text-gray-600 dark:text-gray-400 break-all">
-                    {this.state.error?.message || 'Unknown Error'}
-                </p>
-            </div>
-
-            <div className="flex gap-3">
-              <button
-                onClick={this.handleGoHome}
-                className="flex-1 flex items-center justify-center gap-2 px-4 py-2 border border-gray-300 dark:border-gray-700 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors text-sm font-medium"
-              >
-                <Home size={16} /> Início
-              </button>
-              <button
+            <div className="space-y-3">
+              <button 
                 onClick={this.handleReload}
-                className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white rounded-lg transition-colors text-sm font-medium"
+                className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-brand-600 text-white rounded-lg hover:bg-brand-700 transition-colors font-medium"
               >
-                <RefreshCw size={16} /> Recarregar
+                <RefreshCw size={18} /> Recarregar Página
+              </button>
+              
+              <button 
+                onClick={this.handleGoHome}
+                className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors font-medium"
+              >
+                <Home size={18} /> Voltar ao Início
               </button>
             </div>
           </div>

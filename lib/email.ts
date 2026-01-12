@@ -18,8 +18,9 @@ async function sendViaApiRoute(payload: { to: string | string[], subject: string
 
     return data;
   } catch (error) {
-    console.warn('Failed to send real email via API. This might be due to missing API keys in .env local.', error);
-    return { id: 'mock-id-fallback-' + Date.now(), mocked: true };
+    console.error('Email sending failed:', error);
+    // Não retornamos mock aqui para garantir que o usuário saiba que o email falhou
+    throw error;
   }
 }
 

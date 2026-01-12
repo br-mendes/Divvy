@@ -131,7 +131,7 @@ export default function ExpenseForm({ divvyId, members, onSuccess, onCancel, ini
       if (splitType === 'equal') {
           if (selectedParticipants.size === 0) throw new Error("Selecione pelo menos um participante.");
           const splitVal = val / selectedParticipants.size;
-          splitsPayload = Array.from(selectedParticipants).map(uid => ({ participantuserid: uid, amountowed: splitVal }));
+          splitsPayload = Array.from(selectedParticipants).map((uid: string) => ({ participantuserid: uid, amountowed: splitVal }));
       } else if (splitType === 'exact') {
           let sum = 0;
           splitsPayload = members.map(m => {
