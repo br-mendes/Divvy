@@ -82,7 +82,6 @@ const DivvyDetailContent: React.FC = () => {
     try {
       setAccessDenied(false);
       
-      // Tentamos o RPC principal que consolida os dados
       const { data, error } = await supabase.rpc('get_divvy_details_complete', {
          p_divvy_id: divvyId
       });
@@ -90,7 +89,6 @@ const DivvyDetailContent: React.FC = () => {
       if (error) throw error;
 
       if (!data || !data.divvy) {
-         // Fallback manual se o RPC não retornar dados (ex: problema de RLS no RPC ou ID inválido)
          const { data: divvyDirect } = await supabase.from('divvies').select('*').eq('id', divvyId).single();
          if (!divvyDirect) {
             setAccessDenied(true);
@@ -98,7 +96,6 @@ const DivvyDetailContent: React.FC = () => {
             return;
          }
          
-         // Se conseguimos o grupo, buscamos o restante manualmente para garantir visibilidade
          const [membersRes, expensesRes, settlementsRes] = await Promise.all([
             supabase.from('divvy_members').select('*, profiles(*)').eq('divvy_id', divvyId),
             supabase.from('expenses').select('*').eq('divvy_id', divvyId).order('date', { ascending: false }),
@@ -110,14 +107,12 @@ const DivvyDetailContent: React.FC = () => {
          setExpenses(expensesRes.data || []);
          setSettlements(settlementsRes.data || []);
 
-         // Buscar splits das despesas encontradas
          if (expensesRes.data && expensesRes.data.length > 0) {
             const expIds = expensesRes.data.map(e => e.id);
             const { data: splitData } = await supabase.from('expense_splits').select('*').in('expense_id', expIds);
             setAllSplits(splitData || []);
          }
       } else {
-         // Sucesso via RPC
          setDivvy(data.divvy);
          setMembers(data.members || []);
          setExpenses(data.expenses || []);
@@ -456,7 +451,8 @@ const DivvyDetailContent: React.FC = () => {
       };
 
       if (editingExpenseId) {
-        await supabase.from('expenses').update(expenseData).eq('id', editingExpenseId);
+        const { error } = await supabase.from('expenses').update(expenseData).eq('id', editingExpenseId);
+        if (error) throw error;
       } else {
         const { data, error: insertError } = await supabase.from('expenses').insert(expenseData).select().single();
         if (insertError) throw insertError;
@@ -527,9 +523,15 @@ const DivvyDetailContent: React.FC = () => {
 
   const handleDeleteExpense = async (expenseId: string) => {
       if (!confirm('Excluir esta despesa permanentemente?')) return;
-      await supabase.from('expenses').delete().eq('id', expenseId);
-      setIsViewModalOpen(false);
-      fetchDivvyData();
+      try {
+        const { error } = await supabase.from('expenses').delete().eq('id', expenseId);
+        if (error) throw error;
+        toast.success("Despesa excluída");
+        setIsViewModalOpen(false);
+        fetchDivvyData();
+      } catch (e: any) {
+        toast.error("Erro ao excluir: " + e.message);
+      }
   };
 
   const handleOpenPaymentInfo = async (memberId: string) => {
