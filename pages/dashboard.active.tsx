@@ -2,7 +2,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabase';
-import { Divvy } from '../types';
+import { Divvy, DivvyMember } from '../types';
 import { Button } from '../components/ui/Button';
 import DivvyList from '../components/divvy/DivvyList';
 import DivvyForm from '../components/divvy/DivvyForm';
@@ -67,30 +67,35 @@ const DashboardContent: React.FC = () => {
       // Unificar listas
       const allGroups = [...myCreatedGroups, ...myJoinedGroups];
 
-      // 4. Buscar contagem de membros para cada grupo
+      // 4. Buscar MEMBROS e PERFIS para cada grupo
       const allIds = allGroups.map(g => g.id);
-      const countsMap: Record<string, number> = {};
+      const membersMap: Record<string, DivvyMember[]> = {};
       
       if (allIds.length > 0) {
           const { data: allMembers } = await supabase
              .from('divvy_members')
-             .select('divvy_id')
+             .select('divvy_id, user_id, email, role, joined_at, profiles(id, full_name, nickname, avatar_url)')
              .in('divvy_id', allIds);
           
           if (allMembers) {
              allMembers.forEach((m: any) => {
-                countsMap[m.divvy_id] = (countsMap[m.divvy_id] || 0) + 1;
+                if (!membersMap[m.divvy_id]) {
+                    membersMap[m.divvy_id] = [];
+                }
+                membersMap[m.divvy_id].push(m);
              });
           }
       }
 
-      // Remover duplicatas por segurança (Map garante unicidade por ID) e adicionar contagem
+      // Remover duplicatas por segurança (Map garante unicidade por ID) e adicionar contagem e lista de membros
       const uniqueMap = new Map();
       allGroups.forEach(g => {
         if (g && g.id) {
+             const groupMembers = membersMap[g.id] || [];
              uniqueMap.set(g.id, { 
                  ...g, 
-                 member_count: countsMap[g.id] || 1 
+                 members: groupMembers, // Adiciona os membros reais ao objeto
+                 member_count: groupMembers.length 
              });
         }
       });
@@ -104,7 +109,6 @@ const DashboardContent: React.FC = () => {
 
     } catch (err) {
       console.error("Erro ao carregar dashboard:", err);
-      // Sem toast de erro aqui para não travar a experiência se for um erro parcial
     } finally {
       setLoading(false);
       setIsRefreshing(false);

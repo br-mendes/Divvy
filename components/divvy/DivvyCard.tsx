@@ -20,6 +20,12 @@ interface DivvyCardProps {
 const DivvyCard: React.FC<DivvyCardProps> = ({ divvy }) => {
   const date = new Date(divvy.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' });
   const config = typeConfig[divvy.type] || typeConfig.general;
+  
+  // Logic for member preview
+  const members = divvy.members || [];
+  const memberCount = divvy.member_count || members.length || 0;
+  const previewMembers = members.slice(0, 3);
+  const remainingCount = memberCount > 3 ? memberCount - 3 : 0;
 
   return (
     <Link href={`/divvy/${divvy.id}`} className="block h-full group">
@@ -64,15 +70,44 @@ const DivvyCard: React.FC<DivvyCardProps> = ({ divvy }) => {
 
         {/* Footer */}
         <div className="pt-5 border-t border-gray-100 dark:border-dark-800 flex items-center justify-between mt-auto">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-3">
             <div className="flex -space-x-2">
-               {/* Mock avatars visual based on count */}
-               {[...Array(Math.min(3, divvy.member_count || 1))].map((_, i) => (
-                  <div key={i} className="w-6 h-6 rounded-full bg-gray-200 dark:bg-dark-700 border-2 border-white dark:border-dark-900"></div>
-               ))}
+               {/* Real Avatars */}
+               {previewMembers.length > 0 ? (
+                 previewMembers.map((member) => (
+                    <div 
+                      key={member.user_id} 
+                      className="w-7 h-7 rounded-full border-2 border-white dark:border-dark-900 bg-gray-100 dark:bg-dark-800 flex items-center justify-center overflow-hidden"
+                      title={member.profiles?.full_name || member.email}
+                    >
+                      {member.profiles?.avatar_url ? (
+                        <img 
+                          src={member.profiles.avatar_url} 
+                          alt="Avatar" 
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <span className="text-[10px] font-bold text-gray-500 dark:text-gray-400 select-none">
+                          {(member.profiles?.nickname || member.profiles?.full_name || member.email || '?').charAt(0).toUpperCase()}
+                        </span>
+                      )}
+                    </div>
+                 ))
+               ) : (
+                 // Fallback if members not loaded yet
+                 <div className="w-7 h-7 rounded-full bg-gray-200 dark:bg-dark-700 border-2 border-white dark:border-dark-900"></div>
+               )}
+               
+               {/* +N counter */}
+               {remainingCount > 0 && (
+                 <div className="w-7 h-7 rounded-full border-2 border-white dark:border-dark-900 bg-gray-100 dark:bg-dark-800 flex items-center justify-center">
+                    <span className="text-[10px] font-bold text-gray-500 dark:text-gray-400">+{remainingCount}</span>
+                 </div>
+               )}
             </div>
-            <span className="text-xs font-bold text-gray-500 dark:text-gray-400 flex items-center gap-1">
-               {divvy.member_count || 1} {divvy.member_count === 1 ? 'Membro' : 'Membros'}
+            
+            <span className="text-xs font-bold text-gray-500 dark:text-gray-400">
+               {memberCount} {memberCount === 1 ? 'Membro' : 'Membros'}
             </span>
           </div>
           
