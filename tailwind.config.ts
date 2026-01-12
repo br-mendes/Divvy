@@ -23,14 +23,15 @@ const config: Config = {
           800: '#5b21b6',
           900: '#4c1d95',
         },
+        // Usando Slate padrão do Tailwind para Dark Mode (Cinza Azulado Profundo) em vez de Preto OLED
         dark: {
-          950: '#0a0a0c',
-          900: '#121214',
-          800: '#1a1a1e',
-          700: '#2a2a30',
-          600: '#3f3f46',
-          500: '#71717a',
-          400: '#a1a1aa',
+          950: '#020617', // Slate 950
+          900: '#0f172a', // Slate 900
+          800: '#1e293b', // Slate 800
+          700: '#334155', // Slate 700
+          600: '#475569', // Slate 600
+          500: '#64748b', // Slate 500
+          400: '#94a3b8', // Slate 400
         }
       }
     },
