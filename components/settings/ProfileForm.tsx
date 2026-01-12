@@ -61,13 +61,15 @@ export default function ProfileForm() {
         .from('avatars')
         .getPublicUrl(fileName);
 
+      // Use upsert here as well to be safe
       const { error: updateError } = await supabase
         .from('userprofiles')
-        .update({ 
+        .upsert({ 
+            id: user.id,
+            email: user.email,
             avatarurl: publicUrl,
             updatedat: new Date().toISOString()
-        })
-        .eq('id', user.id);
+        }, { onConflict: 'id' });
 
       if (updateError) throw updateError;
       
@@ -100,15 +102,17 @@ export default function ProfileForm() {
     if (!user) return;
     setLoading(true);
     try {
+      // Usar upsert para garantir que o perfil seja criado caso não exista
       const { error } = await supabase
         .from('userprofiles')
-        .update({
+        .upsert({
+          id: user.id,
+          email: user.email,
           fullname: name,
           displayname: name,
           phone: phone,
           updatedat: new Date().toISOString()
-        })
-        .eq('id', user.id);
+        }, { onConflict: 'id' });
 
       if (error) throw error;
       toast.success('Perfil atualizado!');

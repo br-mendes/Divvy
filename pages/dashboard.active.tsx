@@ -10,7 +10,8 @@ import LoadingSpinner from '../components/ui/LoadingSpinner';
 import EmptyState from '../components/ui/EmptyState';
 import ActivityFeed from '../components/dashboard/ActivityFeed';
 import { ProtectedRoute } from '../components/ProtectedRoute';
-import { Archive, LayoutGrid, Plus, Sparkles, RefreshCcw, Megaphone, X, Search } from 'lucide-react';
+import { Archive, LayoutGrid, Plus, Sparkles, RefreshCcw, Megaphone, X, Search, AlertTriangle } from 'lucide-react';
+import toast from 'react-hot-toast';
 
 const DashboardContent: React.FC = () => {
   const { user } = useAuth();
@@ -20,6 +21,7 @@ const DashboardContent: React.FC = () => {
   const [viewMode, setViewMode] = useState<'active' | 'archived'>('active');
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [error, setError] = useState<string | null>(null);
   
   // Broadcast State
   const [broadcast, setBroadcast] = useState<BroadcastMessage | null>(null);
@@ -48,6 +50,7 @@ const DashboardContent: React.FC = () => {
     
     if (!silent) setLoading(true);
     else setIsRefreshing(true);
+    setError(null);
 
     try {
       // 1. Buscar grupos onde sou o criador
@@ -105,6 +108,8 @@ const DashboardContent: React.FC = () => {
         `)
         .in('divvyid', allGroupIds);
 
+      if (fetchMembersError) throw fetchMembersError;
+
       // 6. Mapear membros para seus respectivos grupos
       const membersByGroup: Record<string, DivvyMember[]> = {};
       if (allMembers) {
@@ -130,8 +135,12 @@ const DashboardContent: React.FC = () => {
       enrichedDivvies.sort((a, b) => new Date(b.createdat).getTime() - new Date(a.createdat).getTime());
 
       setDivvies(enrichedDivvies);
-    } catch (err) {
+    } catch (err: any) {
       console.error("Dashboard Error:", err);
+      setError(err.message || 'Erro ao carregar dados.');
+      if (err.message?.includes('infinite recursion')) {
+         toast.error("Erro de configuração do banco de dados (Recursão de Política). Contate o administrador.");
+      }
     } finally {
       setLoading(false);
       setIsRefreshing(false);
@@ -159,6 +168,21 @@ const DashboardContent: React.FC = () => {
   });
 
   const displayName = user?.user_metadata?.full_name?.split(' ')[0] || user?.email?.split('@')[0] || 'Usuário';
+
+  if (error) {
+      return (
+          <div className="min-h-screen flex flex-col items-center justify-center p-4 bg-gray-50 dark:bg-dark-950">
+              <div className="text-center max-w-md">
+                  <div className="mx-auto w-16 h-16 bg-red-100 dark:bg-red-900/20 text-red-600 dark:text-red-400 rounded-full flex items-center justify-center mb-4">
+                      <AlertTriangle size={32} />
+                  </div>
+                  <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-2">Erro ao carregar dashboard</h2>
+                  <p className="text-gray-500 dark:text-gray-400 mb-6">{error}</p>
+                  <Button onClick={() => fetchDivvies()} variant="outline">Tentar Novamente</Button>
+              </div>
+          </div>
+      );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-dark-950 transition-colors duration-300 pb-20">

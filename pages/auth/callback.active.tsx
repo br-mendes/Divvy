@@ -1,3 +1,4 @@
+
 import React, { useEffect } from 'react';
 import { useRouter } from 'next/router';
 import { supabase } from '../../lib/supabase';
@@ -19,6 +20,24 @@ export default function AuthCallback() {
       }
 
       if (session) {
+        // Garantir que o perfil existe
+        try {
+            const { data: profile } = await supabase.from('userprofiles').select('id').eq('id', session.user.id).maybeSingle();
+            
+            if (!profile) {
+                await supabase.from('userprofiles').insert({
+                    id: session.user.id,
+                    email: session.user.email,
+                    fullname: session.user.user_metadata?.full_name || '',
+                    displayname: session.user.user_metadata?.full_name || session.user.email?.split('@')[0] || 'Usuário',
+                    createdat: new Date().toISOString(),
+                    updatedat: new Date().toISOString()
+                });
+            }
+        } catch (e) {
+            console.error("Auto profile creation error", e);
+        }
+
         toast.success('Login realizado com sucesso!');
         router.push('/dashboard');
       } else {
@@ -26,6 +45,20 @@ export default function AuthCallback() {
         const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
           if (session) {
             subscription.unsubscribe();
+            // Tenta criar o perfil também no listener
+            supabase.from('userprofiles').select('id').eq('id', session.user.id).maybeSingle().then(({data: p}) => {
+                if (!p) {
+                    supabase.from('userprofiles').insert({
+                        id: session.user.id,
+                        email: session.user.email,
+                        fullname: session.user.user_metadata?.full_name || '',
+                        displayname: session.user.user_metadata?.full_name || session.user.email?.split('@')[0] || 'Usuário',
+                        createdat: new Date().toISOString(),
+                        updatedat: new Date().toISOString()
+                    });
+                }
+            });
+            
             router.push('/dashboard');
           }
         });

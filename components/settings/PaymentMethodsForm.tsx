@@ -68,6 +68,26 @@ export default function PaymentMethodsForm() {
     setSaving(true);
 
     try {
+      // 1. Ensure profile exists (Fix for FK constraint violation)
+      // Check if profile exists
+      const { data: profile } = await supabase.from('userprofiles').select('id').eq('id', user.id).maybeSingle();
+      
+      // If not, create it
+      if (!profile) {
+         const { error: createProfileError } = await supabase.from('userprofiles').insert({
+             id: user.id,
+             email: user.email,
+             fullname: user.user_metadata?.full_name || '',
+             displayname: user.user_metadata?.full_name || user.email?.split('@')[0],
+             updatedat: new Date().toISOString()
+         });
+         
+         if (createProfileError) {
+             console.error("Error creating profile lazily", createProfileError);
+             throw new Error('Erro de consistência de usuário. Por favor, atualize seu perfil antes de adicionar pagamentos.');
+         }
+      }
+
       const payload: any = {
         user_id: user.id,
         type,
