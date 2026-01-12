@@ -26,40 +26,59 @@ const DashboardContent: React.FC = () => {
     else setIsRefreshing(true);
 
     try {
-      // 1. Buscar grupos onde sou o CRIADOR
+      // ESTRATÉGIA ANTI-BLOQUEIO (MANUAL JOIN)
+      // Evita usar select('divvy:divvies(*)') que dispara recursão de RLS no Supabase
+      
+      // 1. Grupos que eu criei (Direto)
       const { data: createdData } = await supabase
         .from('divvies')
         .select('*')
         .eq('creator_id', user.id);
-
-      // 2. Buscar grupos onde sou MEMBRO (via tabela de junção)
-      // Nota: O modificador !inner garante que só traga registros onde o join funciona
-      const { data: memberData } = await supabase
-        .from('divvy_members')
-        .select('divvy:divvies(*)')
-        .eq('user_id', user.id);
-
-      // Processar dados brutos
+      
       const myCreatedGroups = createdData || [];
-      
-      const myJoinedGroups = (memberData || [])
-        .map((item: any) => item.divvy)
-        .filter((g: any) => g !== null && g.id); // Remove nulos gerados por RLS ou joins falhos
 
-      // Unir listas e remover duplicatas (caso eu seja criador E membro ao mesmo tempo)
-      const allGroupsMap = new Map();
+      // 2. IDs dos grupos onde sou membro
+      const { data: membershipData } = await supabase
+        .from('divvy_members')
+        .select('divvy_id')
+        .eq('user_id', user.id);
       
-      [...myCreatedGroups, ...myJoinedGroups].forEach(group => {
-        if (!allGroupsMap.has(group.id)) {
-           // Garante que member_count tenha um valor numérico para o display
-           allGroupsMap.set(group.id, { 
-             ...group, 
-             member_count: group.member_count || 1 
-           });
+      // Extrair IDs válidos
+      const joinedDivvyIds = (membershipData || [])
+         .map((m: any) => m.divvy_id)
+         .filter((id: string) => id); // Remove nulos
+      
+      // 3. Buscar detalhes dos grupos onde sou membro (se houver algum)
+      let myJoinedGroups: Divvy[] = [];
+      if (joinedDivvyIds.length > 0) {
+          // Filtra IDs que já pegamos na lista de criados para economizar banda (opcional, mas bom)
+          const idsToFetch = joinedDivvyIds.filter((id: string) => !myCreatedGroups.some(c => c.id === id));
+          
+          if (idsToFetch.length > 0) {
+             const { data: joinedData } = await supabase
+               .from('divvies')
+               .select('*')
+               .in('id', idsToFetch);
+             
+             if (joinedData) myJoinedGroups = joinedData;
+          }
+      }
+
+      // Unificar listas
+      const allGroups = [...myCreatedGroups, ...myJoinedGroups];
+
+      // Remover duplicatas por segurança (Map garante unicidade por ID)
+      const uniqueMap = new Map();
+      allGroups.forEach(g => {
+        if (g && g.id) {
+             uniqueMap.set(g.id, { 
+                 ...g, 
+                 member_count: g.member_count || 1 // Fallback visual
+             });
         }
       });
-
-      const uniqueDivvies = Array.from(allGroupsMap.values());
+      
+      const uniqueDivvies = Array.from(uniqueMap.values());
 
       // Ordenar: Mais recentes primeiro
       uniqueDivvies.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
@@ -67,9 +86,8 @@ const DashboardContent: React.FC = () => {
       setDivvies(uniqueDivvies);
 
     } catch (err) {
-      console.error("Erro silencioso ao carregar dashboard:", err);
-      // Não exibimos toast de erro aqui para não frustrar o usuário em falhas parciais.
-      // Se a lista estiver vazia, o EmptyState será mostrado.
+      console.error("Erro ao carregar dashboard:", err);
+      // Sem toast de erro aqui para não travar a experiência se for um erro parcial
     } finally {
       setLoading(false);
       setIsRefreshing(false);
