@@ -116,6 +116,17 @@ export interface SupportTicket {
   createdat: string;
 }
 
+export interface Notification {
+  id: string;
+  user_id: string;
+  divvy_id?: string;
+  type: 'expense' | 'settlement' | 'invite' | 'other';
+  title: string;
+  message: string;
+  is_read: boolean;
+  created_at: string;
+}
+
 export interface Bank {
   id: string;
   code: string;
@@ -148,15 +159,4 @@ export interface PaymentMethod {
   banks?: Bank;
   created_at?: string;
   updated_at?: string;
-}
-
-export interface Notification {
-  id: string;
-  user_id: string;
-  divvy_id?: string;
-  type: 'expense' | 'settlement' | 'invite' | 'other';
-  title: string;
-  message: string;
-  is_read: boolean;
-  created_at: string;
 }

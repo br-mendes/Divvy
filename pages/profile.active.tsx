@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
@@ -858,7 +857,7 @@ function ProfileContent() {
                     
                     {!isPix && (
                         <p className="text-sm text-gray-600 mt-1">
-                           <span className="font-semibold text-gray-800">{method.bank_name || method.banks?.name}</span>
+                           <span className="font-semibold text-gray-800">{(method as any).bank_name || method.banks?.name}</span>
                            <br />
                            Ag {method.agency} • CC {method.account_number}
                         </p>

@@ -52,16 +52,16 @@ const DivvyDetailContent: React.FC = () => {
 
       // Fetch Members
       const { data: memberData } = await supabase
-        .from('divvy_members')
+        .from('divvymembers')
         .select('*')
-        .eq('divvy_id', id);
+        .eq('divvyid', id);
       setMembers(memberData || []);
 
       // Fetch Expenses
       const { data: expenseData } = await supabase
         .from('expenses')
         .select('*')
-        .eq('divvy_id', id)
+        .eq('divvyid', id)
         .order('date', { ascending: false });
       setExpenses(expenseData || []);
 
@@ -82,8 +82,8 @@ const DivvyDetailContent: React.FC = () => {
       const { data: expense, error: expError } = await supabase
         .from('expenses')
         .insert({
-          divvy_id: divvy.id,
-          paid_by_user_id: user.id,
+          divvyid: divvy.id,
+          paidbyuserid: user.id,
           amount: parseFloat(amount),
           category,
           description: desc,
@@ -98,12 +98,12 @@ const DivvyDetailContent: React.FC = () => {
       if (expense && members.length > 0) {
         const splitAmount = parseFloat(amount) / members.length;
         const splits = members.map(m => ({
-          expense_id: expense.id,
-          participant_user_id: m.user_id,
-          amount_owed: splitAmount
+          expenseid: expense.id,
+          participantuserid: m.userid,
+          amountowed: splitAmount
         }));
 
-        await supabase.from('expense_splits').insert(splits);
+        await supabase.from('expensesplits').insert(splits);
       }
 
       setIsExpenseModalOpen(false);
@@ -200,7 +200,7 @@ const DivvyDetailContent: React.FC = () => {
                   </div>
                   <div className="text-right">
                     <p className="font-bold text-gray-900">R$ {exp.amount.toFixed(2)}</p>
-                    <p className="text-xs text-gray-400">Paid by {members.find(m => m.user_id === exp.paid_by_user_id)?.email.split('@')[0] || 'Unknown'}</p>
+                    <p className="text-xs text-gray-400">Paid by {members.find(m => m.userid === exp.paidbyuserid)?.email.split('@')[0] || 'Unknown'}</p>
                   </div>
                 </div>
               ))

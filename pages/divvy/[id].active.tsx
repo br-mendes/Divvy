@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import { useRouter } from 'next/router';
 import { supabase } from '../../lib/supabase';
@@ -51,7 +50,7 @@ const DivvyDetailContent: React.FC = () => {
   const [manualPercentages, setManualPercentages] = useState<Record<string, string>>({});
   const [submitLoading, setSubmitLoading] = useState(false);
 
-  // Fetch Logic aligned with Documentation Schema
+  // Fetch Logic
   const fetchDivvyData = useCallback(async () => {
     if (!divvyId || !user) return;
     
@@ -65,8 +64,7 @@ const DivvyDetailContent: React.FC = () => {
       }
       setDivvy(divvyData);
 
-      // 2. Membros e Perfis (divvymembers JOIN userprofiles)
-      // Nota: RLS deve permitir leitura de userprofiles para membros
+      // 2. Membros e Perfis
       const { data: membersData, error: mErr } = await supabase
         .from('divvymembers')
         .select(`
@@ -77,7 +75,6 @@ const DivvyDetailContent: React.FC = () => {
 
       if (mErr) throw mErr;
       
-      // Ajuste para garantir tipagem
       const processedMembers: DivvyMember[] = (membersData || []).map((m: any) => ({
         id: m.id,
         divvyid: m.divvyid,
@@ -90,7 +87,7 @@ const DivvyDetailContent: React.FC = () => {
 
       setMembers(processedMembers);
 
-      // 3. Despesas e Transações (Transactions em vez de Settlements)
+      // 3. Despesas e Transações
       const [expensesRes, transactionsRes] = await Promise.all([
         supabase.from('expenses').select('*').eq('divvyid', divvyId).order('date', { ascending: false }),
         supabase.from('transactions').select('*').eq('divvyid', divvyId).order('createdat', { ascending: false })
@@ -115,7 +112,6 @@ const DivvyDetailContent: React.FC = () => {
     fetchDivvyData();
   }, [fetchDivvyData]);
 
-  // Sincroniza formulário
   useEffect(() => {
     if (isExpenseModalOpen && members.length > 0 && user) {
         if (!payerId) {
@@ -138,7 +134,6 @@ const DivvyDetailContent: React.FC = () => {
 
   const formatMoney = (v: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v);
 
-  // Lógica de Balanço
   const calculateBalances = useMemo(() => {
     const balances: Record<string, number> = {};
     members.forEach(m => balances[m.userid] = 0);
@@ -155,8 +150,8 @@ const DivvyDetailContent: React.FC = () => {
     
     // Processa transações (pagamentos feitos reduzem dívida)
     transactions.filter(t => t.status === 'confirmed').forEach(t => {
-      if (balances[t.fromuserid] !== undefined) balances[t.fromuserid] += t.amount; // Devedor pagou, saldo sobe
-      if (balances[t.touserid] !== undefined) balances[t.touserid] -= t.amount;     // Credor recebeu, crédito desce
+      if (balances[t.fromuserid] !== undefined) balances[t.fromuserid] += t.amount;
+      if (balances[t.touserid] !== undefined) balances[t.touserid] -= t.amount;
     });
 
     const plan: { from: string; to: string; amount: number }[] = [];
@@ -181,14 +176,14 @@ const DivvyDetailContent: React.FC = () => {
     return exp.locked;
   };
 
-  // Regra de Negócio: Fluxo de Pagamento
+  // --- FLUXO DE PAGAMENTO ---
   const handleUpdateTransaction = async (t: Transaction, action: 'confirm' | 'reject') => {
     const newStatus = action === 'confirm' ? 'confirmed' : 'rejected';
     
     if (!confirm(`Deseja ${action === 'confirm' ? 'confirmar' : 'rejeitar'} este pagamento?`)) return;
     
     try {
-      // 1. Atualizar transação
+      // 1. Atualizar a transação atual
       const updatePayload: any = { 
           status: newStatus,
           updatedat: new Date().toISOString()
@@ -201,24 +196,50 @@ const DivvyDetailContent: React.FC = () => {
       const { error } = await supabase.from('transactions').update(updatePayload).eq('id', t.id);
       if (error) throw error;
 
-      // 2. Verificar regra de fechamento global (se confirmar)
+      // 2. Se confirmado, verificar regra global de bloqueio
       if (newStatus === 'confirmed') {
-          // Chamada para verificar se todas as transações estão confirmadas e bloquear despesas
-          // Idealmente isso seria um Trigger ou RPC, mas fazendo no cliente conforme documentação sugerida para fluxo API
-          const { error: confirmError } = await fetch('/api/payments/confirm', {
-              method: 'POST',
-              body: JSON.stringify({ transactionId: t.id }),
-              headers: { 'Content-Type': 'application/json' }
-          }).then(res => res.json());
-          
-          if (confirmError) console.warn("Erro ao processar fechamento global via API", confirmError);
-      } else {
-          // Rejeição via API para notificação
-          await fetch('/api/payments/reject', {
-              method: 'POST',
-              body: JSON.stringify({ transactionId: t.id }),
-              headers: { 'Content-Type': 'application/json' }
+          // Busca todas as transações para ver se estão confirmadas ou rejeitadas
+          const { data: allTxs } = await supabase
+            .from('transactions')
+            .select('status, paidat')
+            .eq('divvyid', divvyId);
+
+          const allConfirmed = allTxs?.every(tx => {
+              // A transação atual ainda pode aparecer como pendente na leitura se o write não propagou imediatamente
+              // Mas assumimos que ela está confirmada.
+              if (tx.id === t.id) return true; 
+              return tx.status === 'confirmed' || tx.status === 'rejected';
           });
+
+          // Se todas estiverem resolvidas, bloqueamos despesas até a data do último pagamento
+          if (allConfirmed && allTxs) {
+              // Pega a data mais recente de pagamento (incluindo a atual)
+              const dates = allTxs
+                .filter(tx => tx.status === 'confirmed' || (tx.id === t.id)) // Se a atual é confirmed
+                .map(tx => tx.id === t.id ? new Date() : new Date(tx.paidat || 0));
+              
+              if (dates.length > 0) {
+                  const maxDate = new Date(Math.max(...dates.map(d => d.getTime())));
+                  
+                  // Atualiza o grupo
+                  await supabase.from('divvies').update({
+                      lastglobalconfirmationat: maxDate.toISOString(),
+                      archivesuggested: true,
+                      archivesuggestedat: new Date().toISOString()
+                  }).eq('id', divvyId);
+
+                  // Bloqueia despesas anteriores ou iguais a data
+                  await supabase.from('expenses')
+                    .update({
+                        locked: true,
+                        lockedreason: 'Bloqueada automaticamente - todas as dívidas confirmadas',
+                        lockedat: new Date().toISOString()
+                    })
+                    .eq('divvyid', divvyId)
+                    .lte('date', maxDate.toISOString())
+                    .eq('locked', false);
+              }
+          }
       }
 
       fetchDivvyData();
@@ -229,17 +250,12 @@ const DivvyDetailContent: React.FC = () => {
   const handleMarkAsSent = async (to: string, amount: number) => {
     if (!confirm(`Confirmar que você enviou ${formatMoney(amount)} para ${getMemberName(to)}?`)) return;
     try {
-      // Criar transação já como 'paymentsent' (regra de negócio: fluxo inicia quando devedor marca pago)
-      // Ou 'pending' se for apenas uma intenção? A doc diz: pending -> paymentsent (apenas devedor).
-      // Vamos criar como 'pending' primeiro se não existir, ou direto como 'paymentsent' se for criação manual do pagamento.
-      // O endpoint /api/payments/mark-sent sugere atualização. Vamos assumir criação direta aqui para simplificar UX.
-      
       const { error } = await supabase.from('transactions').insert({
         divvyid: divvyId, 
         fromuserid: user?.id, 
         touserid: to, 
         amount, 
-        status: 'paymentsent', // Já nasce como enviado pelo devedor
+        status: 'paymentsent', // Já nasce como enviado
         createdat: new Date().toISOString(),
         updatedat: new Date().toISOString()
       });
@@ -334,6 +350,15 @@ const DivvyDetailContent: React.FC = () => {
       } catch(e) { toast.error("Erro ao arquivar"); }
   };
 
+  const handleDismissArchive = async () => {
+    if (!divvy) return;
+    try {
+        await supabase.from('divvies').update({ archivesuggested: false }).eq('id', divvy.id);
+        toast.success("Sugestão ocultada.");
+        fetchDivvyData();
+    } catch(e) { toast.error("Erro ao ocultar"); }
+  };
+
   if (loading) return <div className="flex justify-center p-20"><LoadingSpinner /></div>;
   if (!divvy) return <EmptyState message="Grupo não acessível" />;
 
@@ -350,7 +375,7 @@ const DivvyDetailContent: React.FC = () => {
 
       {/* Sugestão de Arquivamento (Regra de Negócio) */}
       {(divvy.archivesuggested && !divvy.isarchived) && (
-        <div className="bg-blue-50 border border-blue-200 p-4 rounded-xl flex justify-between items-center animate-fade-in-down">
+        <div className="bg-blue-50 border border-blue-200 p-4 rounded-xl flex flex-col md:flex-row justify-between items-center animate-fade-in-down gap-4">
             <div className="flex items-center gap-3">
                 <Archive className="text-blue-600" />
                 <div>
@@ -358,7 +383,10 @@ const DivvyDetailContent: React.FC = () => {
                     <p className="text-sm text-blue-700">Deseja arquivar este grupo?</p>
                 </div>
             </div>
-            <Button size="sm" onClick={handleArchiveGroup}>Arquivar Agora</Button>
+            <div className="flex gap-2">
+                <Button size="sm" variant="outline" className="border-blue-200 text-blue-700 hover:bg-blue-100" onClick={handleDismissArchive}>Não agora</Button>
+                <Button size="sm" onClick={handleArchiveGroup}>Arquivar Agora</Button>
+            </div>
         </div>
       )}
 
@@ -395,7 +423,7 @@ const DivvyDetailContent: React.FC = () => {
                   <div>
                     <p className="font-bold flex items-center gap-2">
                         {exp.description || exp.category} 
-                        {isLocked(exp) && <Lock size={14} className="text-red-500" title="Bloqueado" />}
+                        {isLocked(exp) && <span title="Bloqueado"><Lock size={14} className="text-red-500" /></span>}
                     </p>
                     <p className="text-xs text-gray-500">{new Date(exp.date).toLocaleDateString()} • {getMemberName(exp.paidbyuserid)}</p>
                   </div>
@@ -523,6 +551,7 @@ const DivvyDetailContent: React.FC = () => {
                 <select className="w-full rounded-lg border border-gray-300 px-3 py-2 dark:bg-dark-800" value={category} onChange={e => setCategory(e.target.value)}>
                    <option value="food">🍽️ Alimentação</option>
                    <option value="transport">🚗 Transporte</option>
+                   <option value="accommodation">🏨 Hospedagem</option>
                    <option value="activity">🎬 Atividade</option>
                    <option value="utilities">💡 Contas</option>
                    <option value="shopping">🛍️ Compras</option>
