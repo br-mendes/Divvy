@@ -40,7 +40,7 @@ export default function InviteModal({
     }
   }, [isOpen]);
 
-  // Generate QR Code when invite link is available
+  // Generate QR Code locally for display when invite link is available
   useEffect(() => {
     if (inviteLink) {
         QRCode.toDataURL(inviteLink)
@@ -55,18 +55,27 @@ export default function InviteModal({
     try {
       if (!user) throw new Error('Usuário não autenticado');
 
-      // Chamada para a API Route Segura
       const response = await fetch('/api/invite/send', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           divvyId,
-          invitedByUserId: user.id,
+          // invitedByUserId removido pois agora é pego da sessão segura no backend
           email
         })
       });
 
-      const data = await response.json();
+      // Verificação de segurança: O retorno é JSON?
+      const contentType = response.headers.get("content-type");
+      let data;
+      if (contentType && contentType.indexOf("application/json") !== -1) {
+        data = await response.json();
+      } else {
+        // Se não for JSON (ex: erro 500 do Next.js HTML), lança erro legível
+        const text = await response.text();
+        console.error("Resposta não-JSON do servidor:", text);
+        throw new Error(`Erro de comunicação com o servidor (${response.status}). Tente novamente.`);
+      }
 
       if (!response.ok) {
         throw new Error(data.error || 'Erro ao enviar convite');
@@ -119,6 +128,9 @@ export default function InviteModal({
             placeholder="usuario@email.com"
             required
           />
+          <p className="text-xs text-gray-500 dark:text-gray-400">
+            Enviaremos um email com o link de acesso. Se já houver um convite pendente, ele será reenviado.
+          </p>
           <div className="flex gap-3 mt-4">
             <Button
               type="button"
