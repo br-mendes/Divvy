@@ -183,27 +183,42 @@ const DivvyDetailContent: React.FC = () => {
   const handleUnlockExpense = async (exp: Expense) => {
       if (!isCreator) return;
       if (!confirm("Desbloquear despesa manualmente?")) return;
+      const toastId = toast.loading("Desbloqueando...");
       try {
-          await supabase.from('expenses').update({ locked: false, lockedreason: null, lockedat: null }).eq('id', exp.id);
-          toast.success("Despesa desbloqueada.");
+          const res = await fetch(`/api/expenses/${exp.id}/unlock`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' }
+          });
+          
+          if (!res.ok) {
+              const data = await res.json();
+              throw new Error(data.error || 'Erro ao desbloquear');
+          }
+          
+          toast.success("Despesa desbloqueada.", { id: toastId });
           setIsViewModalOpen(false);
-      } catch(e: any) { toast.error(e.message); }
+          fetchDivvyData();
+      } catch(e: any) { 
+          toast.error(e.message, { id: toastId }); 
+      }
   };
 
   const handleDeleteExpense = async () => {
       if (!viewingExpense) return;
       if (!confirm("Tem certeza que deseja excluir esta despesa? Isso afetará os saldos.")) return;
+      const toastId = toast.loading("Excluindo...");
       try {
           const res = await fetch(`/api/expenses/${viewingExpense.id}`, { method: 'DELETE' });
           if (!res.ok) {
               const data = await res.json();
               throw new Error(data.error || 'Erro ao excluir');
           }
-          toast.success("Despesa excluída.");
+          toast.success("Despesa excluída.", { id: toastId });
           setIsViewModalOpen(false);
           setViewingExpense(null);
+          fetchDivvyData();
       } catch(e: any) {
-          toast.error(e.message);
+          toast.error(e.message, { id: toastId });
       }
   };
 

@@ -33,15 +33,23 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
     let mounted = true;
     const fetchLiveProfile = async () => {
         if (!user) return;
-        setLiveProfile({ avatar_url: user.user_metadata?.avatar_url, full_name: user.user_metadata?.full_name });
-        const { data } = await supabase.from('profiles').select('avatar_url, full_name, nickname').eq('id', user.id).single();
+        // Set initial from metadata to avoid flicker
+        setLiveProfile({ avatarurl: user.user_metadata?.avatar_url, fullname: user.user_metadata?.full_name });
+        
+        // Fetch fresh data from userprofiles table
+        const { data } = await supabase
+            .from('userprofiles')
+            .select('avatarurl, fullname, displayname')
+            .eq('id', user.id)
+            .single();
+            
         if (mounted && data) setLiveProfile(data);
     };
     fetchLiveProfile();
     return () => { mounted = false; };
   }, [user]);
 
-  const displayName = liveProfile?.nickname || liveProfile?.full_name || user?.email?.split('@')[0] || 'Usuário';
+  const displayName = liveProfile?.displayname || liveProfile?.fullname || user?.email?.split('@')[0] || 'Usuário';
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-dark-950 transition-colors duration-300 flex flex-col md:flex-row overflow-hidden">

@@ -22,6 +22,18 @@ export default function Login() {
   const [mfaCode, setMfaCode] = useState('');
   const [mfaFactorId, setMfaFactorId] = useState('');
 
+  const handleSuccessfulLogin = async (userId: string) => {
+    // Fire and forget update of last_login_at
+    supabase.from('userprofiles')
+        .update({ last_login_at: new Date().toISOString() })
+        .eq('id', userId)
+        .then(({ error }) => {
+            if (error) console.error("Failed to update last_login", error);
+        });
+    
+    router.push('/dashboard');
+  };
+
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
@@ -36,28 +48,26 @@ export default function Login() {
 
       if (data.user) {
          // 2. Verificar se o nível de segurança exige 2FA (AAL2)
-         // O Supabase retorna os fatores registrados na sessão ou no usuário
          const { data: mfaData, error: mfaError } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
          
          if (mfaError) throw mfaError;
 
          // Se o próximo nível for aal2, significa que o usuário tem 2FA configurado mas logou apenas com senha (aal1)
          if (mfaData.nextLevel === 'aal2' && mfaData.currentLevel === 'aal1') {
-            // Buscar o ID do fator TOTP para desafiar
             const { data: factors } = await supabase.auth.mfa.listFactors();
-            const totpFactor = factors.totp[0]; // Pega o primeiro fator TOTP
+            const totpFactor = factors.totp[0];
 
             if (totpFactor) {
                setMfaFactorId(totpFactor.id);
                setShowMfaInput(true);
                setLoading(false);
                toast('Autenticação de dois fatores necessária.', { icon: '🛡️' });
-               return; // Interrompe redirecionamento, aguarda código
+               return; 
             }
          }
 
-         // Se não tiver 2FA ou já estiver validado, segue para o dashboard
-         router.push('/dashboard');
+         // Login completo
+         await handleSuccessfulLogin(data.user.id);
       }
 
     } catch (error: any) {
@@ -80,7 +90,9 @@ export default function Login() {
       if (error) throw error;
 
       toast.success("Login verificado!");
-      router.push('/dashboard');
+      if (data.user) {
+          await handleSuccessfulLogin(data.user.id);
+      }
     } catch (error: any) {
       toast.error("Código incorreto. Tente novamente.");
       setLoading(false);

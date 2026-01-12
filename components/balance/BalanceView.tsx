@@ -5,7 +5,7 @@ import { supabase } from '../../lib/supabase';
 import { DivvyMember, Expense, ExpenseSplit, Transaction, PaymentMethod } from '../../types';
 import { Button } from '../ui/Button';
 import { Modal } from '../ui/Modal';
-import { ArrowRight, Wallet, AlertTriangle, CheckCircle, Clock, XCircle, History, ChevronDown, ChevronUp, Copy, Phone, QrCode, Banknote } from 'lucide-react';
+import { ArrowRight, Wallet, AlertTriangle, CheckCircle, Clock, XCircle, History, ChevronDown, ChevronUp, Copy, Phone, QrCode, Banknote, ArrowUpRight, ArrowDownLeft } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { POPULAR_BANKS } from '../../lib/constants';
 
@@ -272,23 +272,29 @@ export default function BalanceView({
             {historyTransactions.length === 0 ? (
               <p className="text-sm text-gray-400 italic px-4">Nenhum pagamento registrado.</p>
             ) : (
-              historyTransactions.map(t => (
-                <div key={t.id} className="flex justify-between items-center p-3 text-sm border-b border-gray-100 dark:border-dark-800 last:border-0">
+              historyTransactions.map(t => {
+                const isReceived = t.touserid === user?.id;
+                const isSent = t.fromuserid === user?.id;
+                
+                return (
+                <div key={t.id} className="flex justify-between items-center p-3 text-sm border-b border-gray-100 dark:border-dark-800 last:border-0 hover:bg-gray-50 dark:hover:bg-dark-800/50 rounded-lg transition-colors">
                   <div className="flex items-center gap-3">
-                    {t.status === 'confirmed' ? (
-                      <CheckCircle size={16} className="text-green-500" />
-                    ) : t.status === 'rejected' ? (
-                      <XCircle size={16} className="text-red-500" />
-                    ) : (
-                      <Clock size={16} className="text-yellow-500" />
-                    )}
+                    <div className={`p-2 rounded-full ${
+                        t.status === 'confirmed' ? 'bg-green-100 dark:bg-green-900/20 text-green-600' :
+                        t.status === 'rejected' ? 'bg-red-100 dark:bg-red-900/20 text-red-600' :
+                        'bg-yellow-100 dark:bg-yellow-900/20 text-yellow-600'
+                    }`}>
+                       {isReceived ? <ArrowDownLeft size={16} /> : isSent ? <ArrowUpRight size={16} /> : <History size={16} />}
+                    </div>
                     <div>
-                      <p className="text-gray-900 dark:text-white">
-                        <span className="font-semibold">{getMemberName(t.fromuserid)}</span>
-                        {' → '}
-                        <span className="font-semibold">{getMemberName(t.touserid)}</span>
+                      <p className="text-gray-900 dark:text-white font-medium">
+                        {isSent ? `Você pagou para ${getMemberName(t.touserid)}` : 
+                         isReceived ? `Você recebeu de ${getMemberName(t.fromuserid)}` :
+                         `${getMemberName(t.fromuserid)} pagou para ${getMemberName(t.touserid)}`}
                       </p>
-                      <p className="text-xs text-gray-500">{new Date(t.updatedat).toLocaleDateString()} {new Date(t.updatedat).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</p>
+                      <p className="text-xs text-gray-500">
+                        {new Date(t.updatedat).toLocaleDateString()} {new Date(t.updatedat).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                      </p>
                     </div>
                   </div>
                   <div className="text-right">
@@ -304,7 +310,7 @@ export default function BalanceView({
                     </p>
                   </div>
                 </div>
-              ))
+              )})
             )}
           </div>
         )}

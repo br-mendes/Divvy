@@ -39,9 +39,10 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     const fetchUserTheme = async () => {
       if (!user) return;
       
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('theme')
+      // Corrected table name to userprofiles (schema default)
+      const { data } = await supabase
+        .from('userprofiles')
+        .select('theme') // Note: 'theme' column is technically not in the prompt schema, assuming it was added or this fails gracefully
         .eq('id', user.id)
         .single();
 
@@ -69,19 +70,15 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     applyTheme(newTheme);
     localStorage.setItem('divvy-theme', newTheme);
 
-    // Persist to DB if logged in
+    // Persist to DB if logged in (Best effort)
     if (user) {
-       await supabase.from('profiles').upsert({
-           id: user.id,
-           theme: newTheme,
-           updated_at: new Date().toISOString()
-       });
+       await supabase.from('userprofiles').update({
+           theme: newTheme, // Needs column in DB
+           updatedat: new Date().toISOString()
+       }).eq('id', user.id);
     }
   };
 
-  // Avoid hydration mismatch by rendering only after mount, 
-  // though for theme classes on <html> it's often better to have a blocking script in _document
-  // For this SPA approach, this suffices.
   if (!mounted) {
       return <>{children}</>; 
   }

@@ -1,6 +1,7 @@
 
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { createServerSupabaseClient } from '../../../lib/supabaseServer';
+import { authorizeUser } from '../../../lib/serverAuth';
 import { sendExpenseNotificationEmail } from '../../../lib/email';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -8,7 +9,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const supabase = createServerSupabaseClient();
   const { 
     divvyId, 
     paidByUserId, 
@@ -25,12 +25,28 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   try {
-    // 1. Inserir Despesa
+    // 1. Authenticate Request
+    const user = await authorizeUser(req, res);
+    const supabase = createServerSupabaseClient();
+
+    // 2. Validate Membership: User must be a member of the group
+    const { data: membership } = await supabase
+        .from('divvymembers')
+        .select('id')
+        .eq('divvyid', divvyId)
+        .eq('userid', user.id)
+        .single();
+
+    if (!membership) {
+        return res.status(403).json({ error: 'Você não é membro deste grupo.' });
+    }
+
+    // 3. Insert Expense
     const { data: expense, error: expenseError } = await supabase
       .from('expenses')
       .insert({
         divvyid: divvyId,
-        paidbyuserid: paidByUserId,
+        paidbyuserid: paidByUserId, // Allowing setting another member as payer is a feature
         amount,
         category,
         description,
@@ -43,7 +59,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     if (expenseError) throw expenseError;
 
-    // 2. Inserir Splits
+    // 4. Insert Splits
     const splitsPayload = splits.map((s: any) => ({
       expenseid: expense.id,
       participantuserid: s.participantuserid,
@@ -60,7 +76,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       throw splitError;
     }
 
-    // 3. Notificações (Assíncrono)
+    // 5. Notifications (Assíncrono)
     // Buscar nomes para o email
     const { data: divvy } = await supabase.from('divvies').select('name').eq('id', divvyId).single();
     const { data: payer } = await supabase.from('userprofiles').select('displayname, fullname').eq('id', paidByUserId).single();
@@ -93,10 +109,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         .in('id', participantsToNotify);
     
     if (usersToEmail) {
-        for (const user of usersToEmail) {
-            if (user.email) {
+        for (const u of usersToEmail) {
+            if (u.email) {
                 await sendExpenseNotificationEmail(
-                    user.email, 
+                    u.email, 
                     divvy?.name || 'Grupo', 
                     amount.toFixed(2), 
                     description, 
@@ -109,6 +125,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(201).json({ expense });
 
   } catch (error: any) {
+    if (error.message === 'Unauthorized') return res.status(401).json({ error: 'Não autorizado' });
     console.error('Create Expense Error:', error);
     return res.status(500).json({ error: error.message });
   }

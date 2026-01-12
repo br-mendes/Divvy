@@ -15,10 +15,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   try {
-    // 1. Buscar convite
+    // 1. Buscar convite e dados do grupo/criador
     const { data: invite, error: inviteError } = await supabase
       .from('divvyinvites')
-      .select('*')
+      .select('*, divvies(name, creatorid)')
       .eq('id', inviteToken)
       .single();
 
@@ -35,12 +35,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(400).json({ error: 'Este convite expirou.' });
     }
 
-    // Opcional: Validar se o email bate com o convidado (Case insensitive)
-    if (invite.invitedemail.toLowerCase() !== userEmail.toLowerCase()) {
-       // Permite aceitar se for diferente? A spec diz para validar.
-       // return res.status(403).json({ error: 'Este convite foi enviado para outro endereço de email.' });
-    }
-
     // 3. Verificar se já é membro
     const { data: existingMember } = await supabase
       .from('divvymembers')
@@ -53,7 +47,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(400).json({ error: 'Você já faz parte deste grupo.' });
     }
 
-    // 4. Adicionar Membro e Atualizar Convite (Transação implícita via chamadas sequenciais)
+    // 4. Adicionar Membro
     const { error: memberError } = await supabase.from('divvymembers').insert({
       divvyid: invite.divvyid,
       userid: userId,
@@ -64,6 +58,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     if (memberError) throw memberError;
 
+    // 5. Atualizar status do convite
     const { error: updateError } = await supabase
       .from('divvyinvites')
       .update({ 
@@ -74,13 +69,34 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     if (updateError) throw updateError;
 
-    // 5. Retornar dados do grupo para redirecionamento
-    const { data: divvy } = await supabase.from('divvies').select('id, name').eq('id', invite.divvyid).single();
+    // 6. Notificar o Criador do Grupo
+    // Buscar nome do novo usuário para a mensagem
+    const { data: newUserProfile } = await supabase
+        .from('userprofiles')
+        .select('fullname, displayname')
+        .eq('id', userId)
+        .single();
+    
+    const newUserName = newUserProfile?.displayname || newUserProfile?.fullname || userEmail;
+    const divvyName = (invite.divvies as any)?.name || 'Grupo';
+    const creatorId = (invite.divvies as any)?.creatorid;
+
+    if (creatorId && creatorId !== userId) {
+        await supabase.from('notifications').insert({
+            user_id: creatorId,
+            divvy_id: invite.divvyid,
+            type: 'invite', // ou 'other'
+            title: 'Novo Membro',
+            message: `${newUserName} aceitou o convite e entrou no grupo ${divvyName}.`,
+            created_at: new Date().toISOString(),
+            is_read: false
+        });
+    }
 
     return res.status(200).json({ 
         success: true, 
         divvyId: invite.divvyid,
-        divvyName: divvy?.name
+        divvyName: divvyName
     });
 
   } catch (error: any) {
