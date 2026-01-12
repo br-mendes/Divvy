@@ -18,7 +18,6 @@ const DashboardContent: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [viewMode, setViewMode] = useState<'active' | 'archived'>('active');
-  
   const isFetching = useRef(false);
 
   const fetchDivvies = useCallback(async (silent = false) => {
@@ -28,8 +27,7 @@ const DashboardContent: React.FC = () => {
     if (!silent) setLoading(true);
 
     try {
-      // Busca direta na tabela divvies. O RLS (se configurado com o SQL enviado)
-      // filtrará automaticamente os grupos que o usuário participa ou criou.
+      // Busca direta. O RLS do banco de dados (configurado via SQL) cuidará do filtro.
       const { data, error } = await supabase
         .from('divvies')
         .select('*')
@@ -40,7 +38,7 @@ const DashboardContent: React.FC = () => {
     } catch (err: any) {
       console.error("Dashboard Sync Error:", err);
       if (!silent) {
-        toast.error('Erro ao sincronizar seus grupos.');
+        toast.error('Erro ao carregar grupos. Verifique sua conexão.');
       }
     } finally {
       setLoading(false);
@@ -66,25 +64,25 @@ const DashboardContent: React.FC = () => {
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
           <div className="animate-fade-in-up">
             <h1 className="text-3xl md:text-4xl font-bold text-gray-900 dark:text-white flex items-center gap-3">
-              Olá, {displayName} <Sparkles className="text-brand-500 animate-pulse" size={28} />
+              Olá, {displayName} <Sparkles className="text-brand-500" size={28} />
             </h1>
             <p className="text-gray-500 dark:text-gray-400 mt-1">
-              Gerencie suas despesas e saldos compartilhados.
+              Gerencie suas despesas compartilhadas em um só lugar.
             </p>
           </div>
           
-          <div className="flex gap-2 w-full md:w-auto animate-fade-in-up">
+          <div className="flex gap-2 w-full md:w-auto">
             <button 
               onClick={() => fetchDivvies()}
-              className="p-2.5 text-gray-400 hover:text-brand-600 dark:hover:text-brand-400 bg-white dark:bg-dark-900 border border-gray-200 dark:border-dark-800 rounded-xl transition-all"
-              title="Atualizar"
+              className="p-2.5 text-gray-400 hover:text-brand-600 bg-white dark:bg-dark-900 border border-gray-200 dark:border-dark-800 rounded-xl transition-all shadow-sm"
+              title="Sincronizar"
             >
               <RefreshCcw size={20} />
             </button>
             <Button 
                 onClick={() => setShowForm(!showForm)} 
                 variant={showForm ? 'outline' : 'primary'}
-                className="flex-1 md:flex-none h-12 rounded-xl font-bold"
+                className="flex-1 md:flex-none h-12 rounded-xl font-bold px-8"
             >
                 {showForm ? 'Cancelar' : <><Plus size={18} className="mr-2" /> Novo Grupo</>}
             </Button>
@@ -92,7 +90,7 @@ const DashboardContent: React.FC = () => {
         </div>
 
         {/* Filters */}
-        <div className="flex bg-white dark:bg-dark-900 p-1 rounded-xl border border-gray-200 dark:border-dark-800 w-fit">
+        <div className="flex bg-white dark:bg-dark-900 p-1 rounded-xl border border-gray-200 dark:border-dark-800 w-fit shadow-sm">
           <button
             onClick={() => { setViewMode('active'); setShowForm(false); }}
             className={`flex items-center gap-2 px-6 py-2.5 rounded-lg text-sm font-bold transition-all ${
@@ -117,7 +115,7 @@ const DashboardContent: React.FC = () => {
 
         {/* Form Container */}
         {showForm && (
-          <div className="p-6 bg-white dark:bg-dark-900 border border-gray-200 dark:border-dark-800 rounded-2xl shadow-sm animate-fade-in-up">
+          <div className="p-6 bg-white dark:bg-dark-900 border border-gray-200 dark:border-dark-800 rounded-2xl shadow-lg animate-fade-in-up">
             <DivvyForm onSuccess={() => { setShowForm(false); fetchDivvies(); }} />
           </div>
         )}
@@ -127,7 +125,7 @@ const DashboardContent: React.FC = () => {
           {loading ? (
             <div className="py-32 flex flex-col items-center gap-4">
               <LoadingSpinner />
-              <p className="text-gray-400 text-sm animate-pulse font-medium">Sincronizando grupos...</p>
+              <p className="text-gray-400 text-sm animate-pulse font-medium">Carregando seus dados...</p>
             </div>
           ) : filteredDivvies.length > 0 ? (
             <div className="animate-fade-in-up">
@@ -136,11 +134,11 @@ const DashboardContent: React.FC = () => {
           ) : (
             <div className="pt-12">
               <EmptyState 
-                message={viewMode === 'active' ? "Tudo limpo por aqui!" : "Sem arquivados"} 
+                message={viewMode === 'active' ? "Nenhum grupo ativo" : "Sem grupos arquivados"} 
                 description={
                   viewMode === 'active' 
-                  ? "Crie seu primeiro grupo para começar a dividir gastos com seus amigos." 
-                  : "Não há grupos arquivados para exibir."
+                  ? "Crie um grupo para começar a dividir gastos com amigos ou colegas." 
+                  : "Seus grupos arquivados para histórico aparecerão aqui."
                 }
               />
             </div>

@@ -33,27 +33,16 @@ export default function DivvyForm({ onSuccess, initialData }: DivvyFormProps) {
       setName(initialData.name);
       setDescription(initialData.description || '');
       setType(initialData.type);
-      
-      const formatIsoDate = (isoStr?: string) => {
-         if (!isoStr) return '';
-         return String(isoStr).split('T')[0];
-      };
-
-      setStartDate(formatIsoDate(initialData.start_date));
-      setEndDate(formatIsoDate(initialData.end_date));
+      setStartDate(initialData.start_date ? initialData.start_date.split('T')[0] : '');
+      setEndDate(initialData.end_date ? initialData.end_date.split('T')[0] : '');
     }
   }, [initialData]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    
-    if (!name.trim()) {
-      toast.error('O nome do grupo é obrigatório');
-      return;
-    }
+    if (!name.trim()) return;
 
     setLoading(true);
-
     try {
       if (!user) throw new Error("Usuário não autenticado");
 
@@ -66,53 +55,37 @@ export default function DivvyForm({ onSuccess, initialData }: DivvyFormProps) {
       };
 
       if (initialData) {
-        // UPDATE Existing Divvy
-        const { error } = await supabase
-          .from('divvies')
-          .update({
-            ...payload,
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', initialData.id);
-
+        const { error } = await supabase.from('divvies').update(payload).eq('id', initialData.id);
         if (error) throw error;
-        toast.success('Divvy atualizado com sucesso!');
+        toast.success('Grupo atualizado!');
       } else {
-        // CREATE New Divvy
-        const { data, error } = await supabase.from('divvies').insert({
+        // 1. Criar o grupo
+        const { data: newDivvy, error: divvyError } = await supabase.from('divvies').insert({
           ...payload,
           creator_id: user.id,
           is_archived: false
         }).select().single();
 
-        if (error) throw error;
+        if (divvyError) throw divvyError;
 
-        // --- NOTIFICATION TRIGGER: Created Divvy ---
-        if (data) {
-           await supabase.from('notifications').insert({
-             user_id: user.id,
-             divvy_id: (data as any).id,
-             title: 'Grupo Criado!',
-             message: `Você criou o grupo "${name}". Convide seus amigos para começar a dividir.`,
-             type: 'system'
-           });
+        // 2. CRÍTICO: Adicionar o criador como membro
+        // Sem isso, o RLS bloqueia a visualização do próprio grupo criado
+        if (newDivvy) {
+          const { error: memberError } = await supabase.from('divvy_members').insert({
+            divvy_id: newDivvy.id,
+            user_id: user.id,
+            email: user.email,
+            role: 'admin'
+          });
+          if (memberError) console.error("Erro ao adicionar criador como membro:", memberError);
         }
 
-        toast.success('Divvy criado com sucesso!');
-      }
-
-      if (!initialData) {
-        setName('');
-        setDescription('');
-        setType('trip');
-        setStartDate('');
-        setEndDate('');
+        toast.success('Grupo criado com sucesso!');
       }
       
       onSuccess();
     } catch (err: any) {
-      console.error(err);
-      toast.error(err.message || 'Erro ao salvar Divvy');
+      toast.error(err.message || 'Erro ao salvar grupo');
     } finally {
       setLoading(false);
     }
@@ -120,71 +93,38 @@ export default function DivvyForm({ onSuccess, initialData }: DivvyFormProps) {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
-      <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-        {initialData ? 'Editar Divvy' : 'Criar novo Divvy'}
+      <h3 className="text-lg font-bold text-gray-900 dark:text-white">
+        {initialData ? 'Editar Grupo' : 'Informações do Novo Grupo'}
       </h3>
       <Input
-        id="divvy-name"
-        label="Nome"
+        label="Nome do Grupo"
         value={name}
-        onChange={(e: React.ChangeEvent<HTMLInputElement>) => setName(e.target.value)}
-        placeholder="Ex: Viagem Rio 2026"
+        onChange={(e) => setName(e.target.value)}
+        placeholder="Ex: Aluguel Mensal"
         required
       />
 
       <div>
-        <label className="block text-sm font-medium text-gray-900 dark:text-gray-300 mb-2">
-          Tipo
-        </label>
+        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Tipo</label>
         <select
           value={type}
           onChange={(e) => setType(e.target.value)}
-          className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-600 bg-white dark:bg-gray-800"
+          className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
         >
           {divvyTypes.map((t) => (
-            <option key={t.value} value={t.value}>
-              {t.label}
-            </option>
+            <option key={t.value} value={t.value}>{t.label}</option>
           ))}
         </select>
       </div>
 
       <div className="grid grid-cols-2 gap-4">
-        <Input
-          type="date"
-          label="Data Inicial (Opcional)"
-          value={startDate}
-          onChange={(e: React.ChangeEvent<HTMLInputElement>) => setStartDate(e.target.value)}
-        />
-        <Input
-          type="date"
-          label="Data Final (Opcional)"
-          value={endDate}
-          onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEndDate(e.target.value)}
-        />
+        <Input type="date" label="Data Início" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+        <Input type="date" label="Data Fim" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
       </div>
 
-      <div>
-        <label className="block text-sm font-medium text-gray-900 dark:text-gray-300 mb-2">
-          Descrição (opcional)
-        </label>
-        <textarea
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-          placeholder="Descreva o propósito desta despesa compartilhada"
-          className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-600 resize-none bg-white dark:bg-gray-800 placeholder-gray-400 dark:placeholder-gray-500"
-          rows={3}
-        />
-      </div>
-
-      <div className="flex gap-4">
-        <Button
-          type="submit"
-          variant="primary"
-          disabled={!name.trim()}
-          isLoading={loading}
-        >
-          {initialData ? 'Salvar Alterações' : 'Criar Divvy'}
+      <div className="flex justify-end gap-3 pt-2">
+        <Button type="submit" isLoading={loading} fullWidth>
+          {initialData ? 'Salvar Alterações' : 'Criar Grupo'}
         </Button>
       </div>
     </form>

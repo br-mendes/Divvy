@@ -11,9 +11,6 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        primary: '#8b5cf6',
-        'primary-hover': '#7c3aed',
-        'primary-active': '#6d28d9',
         brand: {
           50: '#f5f3ff',
           100: '#ede9fe',
@@ -25,7 +22,6 @@ const config: Config = {
           700: '#6d28d9',
           800: '#5b21b6',
           900: '#4c1d95',
-          950: '#2e1065',
         },
         dark: {
           950: '#0a0a0c',
@@ -35,20 +31,6 @@ const config: Config = {
           600: '#3f3f46',
           500: '#71717a',
           400: '#a1a1aa',
-        }
-      },
-      animation: {
-        'fade-in-up': 'fadeInUp 0.5s ease-out forwards',
-        'glow-pulse': 'glow 2s ease-in-out infinite',
-      },
-      keyframes: {
-        fadeInUp: {
-          '0%': { opacity: '0', transform: 'translateY(10px)' },
-          '100%': { opacity: '1', transform: 'translateY(0)' },
-        },
-        glow: {
-          '0%, 100%': { opacity: '1' },
-          '50%': { opacity: '0.6' },
         }
       }
     },
