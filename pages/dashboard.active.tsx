@@ -2,14 +2,14 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabase';
-import { Divvy, DivvyMember } from '../types';
+import { Divvy, DivvyMember, BroadcastMessage } from '../types';
 import { Button } from '../components/ui/Button';
 import DivvyList from '../components/divvy/DivvyList';
 import DivvyForm from '../components/divvy/DivvyForm';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
 import EmptyState from '../components/ui/EmptyState';
 import { ProtectedRoute } from '../components/ProtectedRoute';
-import { Archive, LayoutGrid, Plus, Sparkles, RefreshCcw } from 'lucide-react';
+import { Archive, LayoutGrid, Plus, Sparkles, RefreshCcw, Megaphone, X } from 'lucide-react';
 
 const DashboardContent: React.FC = () => {
   const { user } = useAuth();
@@ -18,6 +18,31 @@ const DashboardContent: React.FC = () => {
   const [showForm, setShowForm] = useState(false);
   const [viewMode, setViewMode] = useState<'active' | 'archived'>('active');
   const [isRefreshing, setIsRefreshing] = useState(false);
+  
+  // Broadcast State
+  const [broadcast, setBroadcast] = useState<BroadcastMessage | null>(null);
+  const [showBroadcast, setShowBroadcast] = useState(true);
+
+  const fetchBroadcasts = useCallback(async () => {
+    try {
+      // Buscar a mensagem global mais recente (target = 'all')
+      // Em uma implementação mais complexa, filtraríamos por 'active'/'inactive' baseado no login do usuário
+      const { data, error } = await supabase
+        .from('broadcastmessages')
+        .select('*')
+        .eq('target', 'all')
+        .order('createdat', { ascending: false })
+        .limit(1)
+        .single();
+
+      if (!error && data) {
+        // Verificar se já foi fechada nesta sessão (opcional, aqui usando estado simples)
+        setBroadcast(data);
+      }
+    } catch (err) {
+      console.error("Erro ao buscar broadcasts", err);
+    }
+  }, []);
 
   const fetchDivvies = useCallback(async (silent = false) => {
     if (!user) return;
@@ -35,7 +60,6 @@ const DashboardContent: React.FC = () => {
       if (createdError) throw createdError;
 
       // 2. Buscar IDs dos grupos onde sou apenas membro (participante)
-      // Using table 'divvymembers' as per schema
       const { data: membershipRows, error: memberError } = await supabase
         .from('divvymembers')
         .select('divvyid')
@@ -67,7 +91,6 @@ const DashboardContent: React.FC = () => {
       const allGroupIds = finalGroups.map(g => g.id);
 
       // 5. Buscar TODOS os membros de todos esses grupos de uma vez
-      // Using table 'divvymembers' and 'userprofiles'
       const { data: allMembers, error: fetchMembersError } = await supabase
         .from('divvymembers')
         .select(`
@@ -94,12 +117,9 @@ const DashboardContent: React.FC = () => {
         });
       }
 
-      // 7. Enriquecer os objetos dos grupos com a lista de membros e a contagem real
+      // 7. Enriquecer os objetos dos grupos
       const enrichedDivvies = finalGroups.map(g => {
         const groupMembers = membersByGroup[g.id] || [];
-        
-        // Se a contagem de membros for 0 no banco por erro de RLS, 
-        // mas o usuário está vendo o grupo, garantimos que pelo menos ele seja contado (count = 1)
         return {
           ...g,
           members: groupMembers,
@@ -121,6 +141,7 @@ const DashboardContent: React.FC = () => {
 
   useEffect(() => {
     fetchDivvies();
+    fetchBroadcasts();
     
     // Inscrição para atualizações em tempo real
     const channel = supabase.channel('dashboard_realtime')
@@ -129,7 +150,7 @@ const DashboardContent: React.FC = () => {
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
-  }, [fetchDivvies]);
+  }, [fetchDivvies, fetchBroadcasts]);
 
   const filteredDivvies = divvies.filter(d => 
     viewMode === 'active' ? !d.isarchived : d.isarchived
@@ -141,6 +162,30 @@ const DashboardContent: React.FC = () => {
     <div className="min-h-screen bg-gray-50 dark:bg-dark-950 transition-colors duration-300 pb-20">
       <div className="max-w-6xl mx-auto px-4 py-8 md:py-12 space-y-8">
         
+        {/* Broadcast Message Banner */}
+        {broadcast && showBroadcast && (
+          <div className="animate-fade-in-down bg-gradient-to-r from-purple-600 to-brand-600 rounded-xl p-4 md:p-6 shadow-lg text-white relative overflow-hidden">
+            <div className="absolute top-0 right-0 p-2 opacity-10">
+               <Megaphone size={100} transform="rotate(-15)" />
+            </div>
+            <div className="relative z-10 flex gap-4 items-start pr-8">
+               <div className="bg-white/20 p-2 rounded-lg">
+                  <Megaphone size={24} />
+               </div>
+               <div>
+                  <h3 className="font-bold text-lg mb-1">{broadcast.title}</h3>
+                  <p className="text-white/90 text-sm leading-relaxed">{broadcast.body}</p>
+               </div>
+            </div>
+            <button 
+              onClick={() => setShowBroadcast(false)} 
+              className="absolute top-2 right-2 p-1.5 hover:bg-white/20 rounded-full transition-colors"
+            >
+              <X size={16} />
+            </button>
+          </div>
+        )}
+
         {/* Header */}
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
           <div className="animate-fade-in-up">

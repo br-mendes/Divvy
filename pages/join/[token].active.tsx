@@ -26,30 +26,22 @@ export default function JoinDivvy() {
   const fetchInviteDetails = async () => {
     try {
       setLoading(true);
-      
-      // Usa RPC 'get_invite_info' para contornar limitações de RLS para leitura pública
-      const { data, error } = await supabase.rpc('get_invite_info', {
-        p_token: token
-      });
+      // Ainda usamos RPC ou leitura direta para 'view', se RLS permitir leitura pública de convites pendentes
+      const { data, error } = await supabase.from('divvyinvites').select('*, divvies(name), userprofiles:invitedbyuserid(fullname)').eq('id', token).single();
 
-      if (error) throw error;
-      
-      // supabase.rpc retorna array de linhas
-      const info = data && data[0];
-
-      if (!info) {
+      if (error || !data) {
         throw new Error('Convite não encontrado ou inválido.');
       }
 
-      if (info.is_expired) {
-        throw new Error('Este convite expirou.');
+      if (data.status !== 'pending') {
+        throw new Error('Este convite já foi utilizado.');
       }
 
-      if (info.status !== 'pending') {
-        throw new Error('Este convite já foi aceito ou recusado.');
-      }
-
-      setInviteData(info);
+      setInviteData({
+        divvy_name: (data.divvies as any)?.name,
+        divvy_id: data.divvyid,
+        inviter_name: (data.userprofiles as any)?.fullname || 'Alguém',
+      });
       setLoading(false);
     } catch (err: any) {
       console.error(err);
@@ -63,42 +55,25 @@ export default function JoinDivvy() {
     setProcessing(true);
 
     try {
-      // Usa RPC 'accept_divvy_invite' para processar a lógica no banco
-      const { data: success, error } = await supabase.rpc('accept_divvy_invite', {
-        p_token: token,
-        p_user_id: user.id,
-        p_user_email: user.email!
+      const response = await fetch('/api/invite/accept', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          inviteToken: token,
+          userId: user.id,
+          userEmail: user.email
+        })
       });
 
-      if (error) throw error;
+      const data = await response.json();
 
-      if (success) {
-        
-        // --- NOTIFICATION TRIGGER: Joined ---
-        await supabase.from('notifications').insert({
-             user_id: user.id,
-             divvy_id: inviteData.divvy_id,
-             title: 'Você entrou no grupo!',
-             message: `Você aceitou o convite para participar de "${inviteData.divvy_name}".`,
-             type: 'invite'
-        });
-
-        // Notify Inviter (Optional/Nice to have - handled by client for now)
-        if (inviteData.invited_by_user_id !== user.id) {
-           await supabase.from('notifications').insert({
-               user_id: inviteData.invited_by_user_id,
-               divvy_id: inviteData.divvy_id,
-               title: 'Novo membro!',
-               message: `${user.user_metadata.full_name || user.email} aceitou seu convite para entrar em "${inviteData.divvy_name}".`,
-               type: 'invite'
-           });
-        }
-
-        toast.success(`Você entrou em ${inviteData.divvy_name}!`);
-        router.push(`/divvy/${inviteData.divvy_id}`);
-      } else {
-        throw new Error("Não foi possível aceitar o convite. Ele pode ter expirado ou ser inválido.");
+      if (!response.ok) {
+        throw new Error(data.error || 'Erro ao aceitar convite');
       }
+
+      toast.success(`Você entrou em ${inviteData.divvy_name}!`);
+      router.push(`/divvy/${data.divvyId}`);
+      
     } catch (err: any) {
       console.error(err);
       toast.error(err.message || 'Erro ao aceitar convite.');
@@ -109,7 +84,7 @@ export default function JoinDivvy() {
 
   if (loading || authLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-dark-950">
         <LoadingSpinner />
       </div>
     );
@@ -117,11 +92,11 @@ export default function JoinDivvy() {
 
   if (error) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
-        <div className="max-w-md w-full bg-white p-8 rounded-lg shadow-md text-center">
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-dark-950 px-4">
+        <div className="max-w-md w-full bg-white dark:bg-dark-900 p-8 rounded-lg shadow-md text-center border border-gray-200 dark:border-dark-800">
           <div className="text-4xl mb-4">😕</div>
-          <h2 className="text-xl font-bold text-gray-900 mb-2">Ops! Algo deu errado.</h2>
-          <p className="text-gray-600 mb-6">{error}</p>
+          <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-2">Ops! Algo deu errado.</h2>
+          <p className="text-gray-600 dark:text-gray-400 mb-6">{error}</p>
           <Link href="/">
             <Button variant="primary">Ir para Início</Button>
           </Link>
@@ -131,17 +106,17 @@ export default function JoinDivvy() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
-      <div className="max-w-md w-full bg-white p-8 rounded-lg shadow-md text-center">
+    <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-dark-950 px-4">
+      <div className="max-w-md w-full bg-white dark:bg-dark-900 p-8 rounded-lg shadow-md text-center border border-gray-200 dark:border-dark-800">
         <div className="text-5xl mb-6">📩</div>
-        <h1 className="text-2xl font-bold text-gray-900 mb-2">Convite para Divvy</h1>
-        <p className="text-gray-600 mb-6">
-          Você foi convidado por <strong>{inviteData?.inviter_name}</strong> para participar do grupo de despesas <strong>{inviteData?.divvy_name}</strong>.
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Convite para Divvy</h1>
+        <p className="text-gray-600 dark:text-gray-400 mb-6">
+          Você foi convidado por <strong>{inviteData?.inviter_name}</strong> para participar do grupo <strong>{inviteData?.divvy_name}</strong>.
         </p>
 
         {user ? (
           <div className="space-y-4">
-            <p className="text-sm text-gray-500">
+            <p className="text-sm text-gray-500 dark:text-gray-400">
               Entrar como <strong>{user.email}</strong>
             </p>
             <Button 
