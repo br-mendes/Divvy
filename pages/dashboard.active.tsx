@@ -8,7 +8,6 @@ import DivvyList from '../components/divvy/DivvyList';
 import DivvyForm from '../components/divvy/DivvyForm';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
 import EmptyState from '../components/ui/EmptyState';
-import toast from 'react-hot-toast';
 import { ProtectedRoute } from '../components/ProtectedRoute';
 import { Archive, LayoutGrid, Plus, Sparkles, RefreshCcw } from 'lucide-react';
 
@@ -27,56 +26,50 @@ const DashboardContent: React.FC = () => {
     else setIsRefreshing(true);
 
     try {
-      // Estratégia Robusta: Consultas paralelas simples (sem RPC)
-      // 1. Grupos que eu criei
-      const fetchCreated = supabase
+      // 1. Buscar grupos onde sou o CRIADOR
+      const { data: createdData } = await supabase
         .from('divvies')
         .select('*')
         .eq('creator_id', user.id);
 
-      // 2. Grupos que eu participo
-      const fetchMemberships = supabase
+      // 2. Buscar grupos onde sou MEMBRO (via tabela de junção)
+      // Nota: O modificador !inner garante que só traga registros onde o join funciona
+      const { data: memberData } = await supabase
         .from('divvy_members')
         .select('divvy:divvies(*)')
         .eq('user_id', user.id);
 
-      const [createdRes, memberRes] = await Promise.all([fetchCreated, fetchMemberships]);
-
-      // Processamento defensivo: Se uma falhar, tentamos mostrar a outra
-      const createdGroups = createdRes.data || [];
+      // Processar dados brutos
+      const myCreatedGroups = createdData || [];
       
-      // Extrair grupos da resposta de membros, filtrando nulos
-      const joinedGroups = (memberRes.data || [])
+      const myJoinedGroups = (memberData || [])
         .map((item: any) => item.divvy)
-        .filter((g: any) => g && g.id); // Remove nulos caso o join falhe
+        .filter((g: any) => g !== null && g.id); // Remove nulos gerados por RLS ou joins falhos
 
-      // Combinar e remover duplicatas
-      const allGroups = [...createdGroups, ...joinedGroups];
-      const uniqueMap = new Map();
-      allGroups.forEach(g => {
-        if (!uniqueMap.has(g.id)) {
-            // Adiciona contagem padrão de membros para evitar query extra complexa
-            uniqueMap.set(g.id, { ...g, member_count: g.member_count || 1 });
+      // Unir listas e remover duplicatas (caso eu seja criador E membro ao mesmo tempo)
+      const allGroupsMap = new Map();
+      
+      [...myCreatedGroups, ...myJoinedGroups].forEach(group => {
+        if (!allGroupsMap.has(group.id)) {
+           // Garante que member_count tenha um valor numérico para o display
+           allGroupsMap.set(group.id, { 
+             ...group, 
+             member_count: group.member_count || 1 
+           });
         }
       });
-      
-      const uniqueDivvies = Array.from(uniqueMap.values());
 
-      // Ordenar por data de criação (mais recente primeiro)
+      const uniqueDivvies = Array.from(allGroupsMap.values());
+
+      // Ordenar: Mais recentes primeiro
       uniqueDivvies.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
       setDivvies(uniqueDivvies);
 
-      // Log discreto apenas se houver erro real em ambas as pontas
-      if (createdRes.error && memberRes.error) {
-         console.warn("Falha ao carregar grupos:", createdRes.error);
-         if (!silent) toast.error("Não foi possível carregar todos os grupos.");
-      }
-
-    } catch (err: any) {
-      console.error("Erro na busca:", err);
-      // Não bloqueamos a UI com tela de erro, apenas avisamos
-      if (!silent) toast.error('Erro de conexão. Tente novamente.');
+    } catch (err) {
+      console.error("Erro silencioso ao carregar dashboard:", err);
+      // Não exibimos toast de erro aqui para não frustrar o usuário em falhas parciais.
+      // Se a lista estiver vazia, o EmptyState será mostrado.
     } finally {
       setLoading(false);
       setIsRefreshing(false);
@@ -177,10 +170,10 @@ const DashboardContent: React.FC = () => {
           ) : (
             <div className="pt-12">
               <EmptyState 
-                message={viewMode === 'active' ? "Nenhum grupo encontrado" : "Arquivo vazio"} 
+                message={viewMode === 'active' ? "Nenhum grupo ativo" : "Nenhum grupo arquivado"} 
                 description={
                   viewMode === 'active' 
-                  ? "Seus grupos aparecerão aqui. Crie um novo para começar." 
+                  ? "Crie um novo grupo para começar a dividir despesas." 
                   : "Seus grupos arquivados aparecerão aqui."
                 }
               />
