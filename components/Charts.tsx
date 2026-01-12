@@ -41,7 +41,7 @@ export const ExpenseCharts: React.FC<ExpenseChartsProps> = ({ expenses }) => {
   const COLORS = ['#059669', '#0891b2', '#7c3aed', '#db2777', '#ea580c', '#facc15', '#64748b'];
 
   if (expenses.length === 0) {
-    return <p className="text-gray-500 text-center py-8">Sem dados para exibir.</p>;
+    return <p className="text-gray-500 dark:text-gray-400 text-center py-8">Sem dados para exibir.</p>;
   }
 
   // Ordenar do maior para o menor
@@ -70,38 +70,43 @@ export const ExpenseCharts: React.FC<ExpenseChartsProps> = ({ expenses }) => {
                 `${formatMoney(value)} (${props.payload.percentage.toFixed(1)}%)`, 
                 name
               ]} 
-              contentStyle={{ backgroundColor: '#fff', borderRadius: '8px', border: '1px solid #e5e7eb', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
+              contentStyle={{ 
+                backgroundColor: 'var(--tw-color-white, #fff)', 
+                borderRadius: '8px', 
+                border: '1px solid #e5e7eb', 
+                boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' 
+              }}
             />
           </PieChart>
         </ResponsiveContainer>
       </div>
       <div className="w-full md:w-1/2">
-         <h3 className="text-lg font-semibold text-gray-900 mb-4">Resumo de Gastos</h3>
-         <div className="bg-gray-50 rounded-lg p-4 mb-4 border border-gray-100">
-            <p className="text-sm text-gray-500">Total Gasto</p>
-            <p className="text-3xl font-bold text-brand-600">{formatMoney(totalSpent)}</p>
+         <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Resumo de Gastos</h3>
+         <div className="bg-gray-50 dark:bg-dark-900/50 rounded-xl p-4 mb-6 border border-gray-100 dark:border-dark-700">
+            <p className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">Total Gasto</p>
+            <p className="text-3xl font-black text-brand-600 dark:text-brand-400">{formatMoney(totalSpent)}</p>
          </div>
-         <div className="space-y-3">
+         <div className="space-y-4">
             {categoryData.map((item, idx) => (
-               <div key={item.name} className="flex flex-col pb-2 border-b border-gray-50 last:border-0">
-                 <div className="flex justify-between text-sm items-center mb-1">
-                    <span className="text-gray-700 flex items-center gap-2 font-medium">
-                       <span className="w-3 h-3 rounded-full" style={{ backgroundColor: COLORS[idx % COLORS.length] }}></span>
+               <div key={item.name} className="flex flex-col pb-2 border-b border-gray-50 dark:border-dark-800 last:border-0">
+                 <div className="flex justify-between text-sm items-center mb-1.5">
+                    <span className="text-gray-700 dark:text-gray-300 flex items-center gap-2 font-semibold">
+                       <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: COLORS[idx % COLORS.length] }}></span>
                        {item.name}
                     </span>
-                    <span className="font-bold text-gray-900">{formatMoney(item.value)}</span>
+                    <span className="font-bold text-gray-900 dark:text-white">{formatMoney(item.value)}</span>
                  </div>
-                 <div className="flex justify-between items-center text-xs text-gray-400 pl-5">
-                    <div className="w-full bg-gray-100 rounded-full h-1.5 mr-3 max-w-[100px]">
+                 <div className="flex justify-between items-center text-[10px] text-gray-400 dark:text-gray-500 pl-4.5">
+                    <div className="w-full bg-gray-100 dark:bg-dark-700 rounded-full h-1.5 mr-3 max-w-[120px]">
                         <div 
-                            className="h-1.5 rounded-full" 
+                            className="h-1.5 rounded-full transition-all duration-500" 
                             style={{ 
                                 width: `${item.percentage}%`, 
                                 backgroundColor: COLORS[idx % COLORS.length] 
                             }}
                         ></div>
                     </div>
-                    <span>{item.percentage.toFixed(1)}%</span>
+                    <span className="font-mono">{item.percentage.toFixed(1)}%</span>
                  </div>
                </div>
             ))}
