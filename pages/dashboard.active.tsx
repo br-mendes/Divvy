@@ -8,8 +8,9 @@ import DivvyList from '../components/divvy/DivvyList';
 import DivvyForm from '../components/divvy/DivvyForm';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
 import EmptyState from '../components/ui/EmptyState';
+import ActivityFeed from '../components/dashboard/ActivityFeed';
 import { ProtectedRoute } from '../components/ProtectedRoute';
-import { Archive, LayoutGrid, Plus, Sparkles, RefreshCcw, Megaphone, X } from 'lucide-react';
+import { Archive, LayoutGrid, Plus, Sparkles, RefreshCcw, Megaphone, X, Search } from 'lucide-react';
 
 const DashboardContent: React.FC = () => {
   const { user } = useAuth();
@@ -18,6 +19,7 @@ const DashboardContent: React.FC = () => {
   const [showForm, setShowForm] = useState(false);
   const [viewMode, setViewMode] = useState<'active' | 'archived'>('active');
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
   
   // Broadcast State
   const [broadcast, setBroadcast] = useState<BroadcastMessage | null>(null);
@@ -25,8 +27,6 @@ const DashboardContent: React.FC = () => {
 
   const fetchBroadcasts = useCallback(async () => {
     try {
-      // Buscar a mensagem global mais recente (target = 'all')
-      // Em uma implementação mais complexa, filtraríamos por 'active'/'inactive' baseado no login do usuário
       const { data, error } = await supabase
         .from('broadcastmessages')
         .select('*')
@@ -36,7 +36,6 @@ const DashboardContent: React.FC = () => {
         .single();
 
       if (!error && data) {
-        // Verificar se já foi fechada nesta sessão (opcional, aqui usando estado simples)
         setBroadcast(data);
       }
     } catch (err) {
@@ -152,9 +151,12 @@ const DashboardContent: React.FC = () => {
     return () => { supabase.removeChannel(channel); };
   }, [fetchDivvies, fetchBroadcasts]);
 
-  const filteredDivvies = divvies.filter(d => 
-    viewMode === 'active' ? !d.isarchived : d.isarchived
-  );
+  const filteredDivvies = divvies.filter(d => {
+    const matchesMode = viewMode === 'active' ? !d.isarchived : d.isarchived;
+    const matchesSearch = d.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+                          (d.description && d.description.toLowerCase().includes(searchQuery.toLowerCase()));
+    return matchesMode && matchesSearch;
+  });
 
   const displayName = user?.user_metadata?.full_name?.split(' ')[0] || user?.email?.split('@')[0] || 'Usuário';
 
@@ -215,60 +217,88 @@ const DashboardContent: React.FC = () => {
           </div>
         </div>
 
-        {/* Filters */}
-        <div className="flex bg-white dark:bg-dark-900 p-1.5 rounded-2xl border border-gray-200 dark:border-dark-800 w-fit shadow-sm">
-          <button
-            onClick={() => { setViewMode('active'); setShowForm(false); }}
-            className={`flex items-center gap-2 px-6 py-2.5 rounded-xl text-sm font-bold transition-all duration-300 ${
-              viewMode === 'active'
-                ? 'bg-brand-600 text-white shadow-md scale-[1.02]'
-                : 'text-gray-500 hover:text-gray-900 dark:hover:text-gray-200 hover:bg-gray-50 dark:hover:bg-dark-800'
-            }`}
-          >
-            <LayoutGrid size={16} /> Ativos
-          </button>
-          <button
-            onClick={() => { setViewMode('archived'); setShowForm(false); }}
-            className={`flex items-center gap-2 px-6 py-2.5 rounded-xl text-sm font-bold transition-all duration-300 ${
-              viewMode === 'archived'
-                ? 'bg-brand-600 text-white shadow-md scale-[1.02]'
-                : 'text-gray-500 hover:text-gray-900 dark:hover:text-gray-200 hover:bg-gray-50 dark:hover:bg-dark-800'
-            }`}
-          >
-            <Archive size={16} /> Arquivados
-          </button>
-        </div>
+        {/* Layout Grid: Groups and Sidebar (Activity Feed) */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            
+            {/* Main Content: Groups */}
+            <div className="lg:col-span-2 space-y-6">
+                
+                {/* Filters & Search */}
+                <div className="flex flex-col sm:flex-row gap-4 justify-between">
+                    <div className="flex bg-white dark:bg-dark-900 p-1.5 rounded-2xl border border-gray-200 dark:border-dark-800 w-fit shadow-sm">
+                        <button
+                            onClick={() => { setViewMode('active'); setShowForm(false); }}
+                            className={`flex items-center gap-2 px-6 py-2.5 rounded-xl text-sm font-bold transition-all duration-300 ${
+                            viewMode === 'active'
+                                ? 'bg-brand-600 text-white shadow-md scale-[1.02]'
+                                : 'text-gray-500 hover:text-gray-900 dark:hover:text-gray-200 hover:bg-gray-50 dark:hover:bg-dark-800'
+                            }`}
+                        >
+                            <LayoutGrid size={16} /> Ativos
+                        </button>
+                        <button
+                            onClick={() => { setViewMode('archived'); setShowForm(false); }}
+                            className={`flex items-center gap-2 px-6 py-2.5 rounded-xl text-sm font-bold transition-all duration-300 ${
+                            viewMode === 'archived'
+                                ? 'bg-brand-600 text-white shadow-md scale-[1.02]'
+                                : 'text-gray-500 hover:text-gray-900 dark:hover:text-gray-200 hover:bg-gray-50 dark:hover:bg-dark-800'
+                            }`}
+                        >
+                            <Archive size={16} /> Arquivados
+                        </button>
+                    </div>
 
-        {/* Form */}
-        {showForm && (
-          <div className="p-6 md:p-8 bg-white dark:bg-dark-900 border border-gray-200 dark:border-dark-800 rounded-3xl shadow-xl animate-fade-in-up ring-4 ring-gray-50 dark:ring-dark-800/50">
-            <DivvyForm onSuccess={() => { setShowForm(false); fetchDivvies(); }} />
-          </div>
-        )}
+                    <div className="relative flex-1 sm:max-w-xs">
+                        <Search size={18} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+                        <input 
+                            type="text" 
+                            placeholder="Buscar grupos..." 
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            className="w-full pl-10 pr-4 py-3 rounded-2xl border border-gray-200 dark:border-dark-800 bg-white dark:bg-dark-900 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-brand-500 outline-none transition-shadow shadow-sm"
+                        />
+                    </div>
+                </div>
 
-        {/* List */}
-        <div className="min-h-[400px]">
-          {loading && divvies.length === 0 ? (
-            <div className="py-32 flex flex-col items-center gap-4">
-              <LoadingSpinner />
-              <p className="text-gray-400 text-sm animate-pulse font-medium">Sincronizando grupos...</p>
+                {/* Form */}
+                {showForm && (
+                    <div className="p-6 md:p-8 bg-white dark:bg-dark-900 border border-gray-200 dark:border-dark-800 rounded-3xl shadow-xl animate-fade-in-up ring-4 ring-gray-50 dark:ring-dark-800/50">
+                        <DivvyForm onSuccess={() => { setShowForm(false); fetchDivvies(); }} />
+                    </div>
+                )}
+
+                {/* List */}
+                <div className="min-h-[300px]">
+                    {loading && divvies.length === 0 ? (
+                        <div className="py-32 flex flex-col items-center gap-4">
+                        <LoadingSpinner />
+                        <p className="text-gray-400 text-sm animate-pulse font-medium">Sincronizando grupos...</p>
+                        </div>
+                    ) : filteredDivvies.length > 0 ? (
+                        <div className="animate-fade-in-up">
+                        <DivvyList divvies={filteredDivvies} onRefresh={fetchDivvies} />
+                        </div>
+                    ) : (
+                        <div className="pt-12">
+                        <EmptyState 
+                            message={searchQuery ? "Nenhum grupo encontrado" : (viewMode === 'active' ? "Nenhum grupo ativo" : "Nenhum grupo arquivado")} 
+                            description={
+                                searchQuery 
+                                ? `Não encontramos grupos com o termo "${searchQuery}".`
+                                : (viewMode === 'active' 
+                                    ? "Crie um novo grupo para começar a dividir despesas." 
+                                    : "Seus grupos arquivados aparecerão aqui.")
+                            }
+                        />
+                        </div>
+                    )}
+                </div>
             </div>
-          ) : filteredDivvies.length > 0 ? (
-            <div className="animate-fade-in-up">
-              <DivvyList divvies={filteredDivvies} onRefresh={fetchDivvies} />
+
+            {/* Sidebar: Activity Feed */}
+            <div className="lg:col-span-1 space-y-6">
+                <ActivityFeed />
             </div>
-          ) : (
-            <div className="pt-12">
-              <EmptyState 
-                message={viewMode === 'active' ? "Nenhum grupo ativo" : "Nenhum grupo arquivado"} 
-                description={
-                  viewMode === 'active' 
-                  ? "Crie um novo grupo para começar a dividir despesas." 
-                  : "Seus grupos arquivados aparecerão aqui."
-                }
-              />
-            </div>
-          )}
         </div>
       </div>
     </div>

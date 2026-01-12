@@ -69,12 +69,28 @@ export default function DivvyHeader({ divvy, onUpdate }: DivvyHeaderProps) {
 
      setActionLoading(true);
      try {
-       const { error } = await supabase
-        .from('divvies')
-        .update({ isarchived: newStatus })
-        .eq('id', divvy.id);
+       // Se for para arquivar, use a API Route para garantir que 'endedat' e 'archivesuggested' sejam atualizados corretamente
+       if (newStatus) {
+         const res = await fetch('/api/groups/archive', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ divvyId: divvy.id, userId: user?.id })
+         });
+         
+         if (!res.ok) {
+             const errData = await res.json();
+             throw new Error(errData.error || 'Erro ao arquivar grupo');
+         }
+       } else {
+         // Para desarquivar, pode ser direto ou via API. Vamos manter direto para simplificar, mas limpando 'endedat'
+         const { error } = await supabase
+            .from('divvies')
+            .update({ isarchived: false, endedat: null })
+            .eq('id', divvy.id);
+         
+         if (error) throw error;
+       }
        
-       if (error) throw error;
        toast.success(`Grupo ${newStatus ? 'arquivado' : 'ativado'} com sucesso!`);
        if (onUpdate) onUpdate();
      } catch (err: any) {

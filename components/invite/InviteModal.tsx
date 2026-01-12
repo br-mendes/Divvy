@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
@@ -7,6 +7,7 @@ import { Modal } from '../ui/Modal';
 import SuccessCheck from '../ui/SuccessCheck';
 import toast from 'react-hot-toast';
 import { Copy, Share2 } from 'lucide-react';
+import QRCode from 'qrcode';
 
 interface InviteModalProps {
   divvyId: string;
@@ -25,7 +26,28 @@ export default function InviteModal({
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
   const [inviteLink, setInviteLink] = useState('');
+  const [qrCodeUrl, setQrCodeUrl] = useState('');
   const [copiedToClipboard, setCopiedToClipboard] = useState(false);
+
+  // Reset state when modal opens/closes
+  useEffect(() => {
+    if (!isOpen) {
+        setTimeout(() => {
+            setInviteLink('');
+            setQrCodeUrl('');
+            setEmail('');
+        }, 300);
+    }
+  }, [isOpen]);
+
+  // Generate QR Code when invite link is available
+  useEffect(() => {
+    if (inviteLink) {
+        QRCode.toDataURL(inviteLink)
+            .then(url => setQrCodeUrl(url))
+            .catch(err => console.error("Error generating QR", err));
+    }
+  }, [inviteLink]);
 
   async function handleSendInvite(e: React.FormEvent) {
     e.preventDefault();
@@ -68,8 +90,6 @@ export default function InviteModal({
   }
 
   function handleClose() {
-    setInviteLink('');
-    setEmail('');
     onClose();
   }
 
@@ -118,7 +138,14 @@ export default function InviteModal({
           <div className="flex flex-col items-center justify-center">
             <SuccessCheck />
             <p className="text-lg font-bold text-gray-900 dark:text-white mt-2">Convite enviado!</p>
-            <p className="text-sm text-gray-500 text-center">Um email foi enviado para {email}. Você também pode compartilhar o link abaixo.</p>
+            <p className="text-sm text-gray-500 text-center mb-4">Um email foi enviado para {email}.</p>
+            
+            {qrCodeUrl && (
+                <div className="p-3 bg-white rounded-xl border border-gray-200 shadow-sm mb-4">
+                    <img src={qrCodeUrl} alt="QR Code do Convite" className="w-40 h-40" />
+                </div>
+            )}
+            <p className="text-xs text-gray-400">Escaneie para entrar no grupo</p>
           </div>
 
           <div className="bg-gray-50 dark:bg-dark-900 p-4 rounded-xl border border-gray-100 dark:border-dark-700">

@@ -63,18 +63,27 @@ export default function AdminPage() {
     e.preventDefault();
     setSending(true);
     try {
-      const { error } = await supabase.from('broadcastmessages').insert({
-        title,
-        body,
-        target
+      const res = await fetch('/api/admin/broadcast', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title,
+          body,
+          target
+        }),
       });
-      if (error) throw error;
+
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.error || 'Erro ao enviar broadcast');
+      }
+
       toast.success('Mensagem enviada com sucesso!');
       setBroadcastModal(false);
       setTitle('');
       setBody('');
     } catch (e: any) {
-      toast.error('Erro ao enviar broadcast: ' + e.message);
+      toast.error('Erro: ' + e.message);
     } finally {
       setSending(false);
     }

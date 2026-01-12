@@ -1,6 +1,5 @@
 
 import React, { useState } from 'react';
-import { supabase } from '../lib/supabase';
 import { Layout } from '../components/Layout';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
@@ -20,14 +19,21 @@ export default function SupportPage() {
     setLoading(true);
 
     try {
-      const { error } = await supabase.from('supporttickets').insert({
-        name,
-        email,
-        subject,
-        message,
+      const res = await fetch('/api/support', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name,
+          email,
+          subject,
+          message,
+        }),
       });
 
-      if (error) throw error;
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.error || 'Erro ao enviar mensagem');
+      }
 
       setSuccess(true);
       setName('');

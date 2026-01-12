@@ -1,11 +1,13 @@
 
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
-import { DivvyMember, Expense, ExpenseSplit, Transaction } from '../../types';
+import { supabase } from '../../lib/supabase';
+import { DivvyMember, Expense, ExpenseSplit, Transaction, PaymentMethod } from '../../types';
 import { Button } from '../ui/Button';
 import { Modal } from '../ui/Modal';
-import { ArrowRight, Wallet, AlertTriangle, CheckCircle, Clock, XCircle, History, ChevronDown, ChevronUp, Copy, Phone } from 'lucide-react';
+import { ArrowRight, Wallet, AlertTriangle, CheckCircle, Clock, XCircle, History, ChevronDown, ChevronUp, Copy, Phone, QrCode, Banknote } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { POPULAR_BANKS } from '../../lib/constants';
 
 interface BalanceViewProps {
   divvyId: string;
@@ -32,6 +34,10 @@ export default function BalanceView({
   // Payment Modal State
   const [paymentModalOpen, setPaymentModalOpen] = useState(false);
   const [selectedDebt, setSelectedDebt] = useState<{ to: string; amount: number } | null>(null);
+  
+  // Loaded Payment Methods for the target user
+  const [targetPaymentMethods, setTargetPaymentMethods] = useState<PaymentMethod[]>([]);
+  const [methodsLoading, setMethodsLoading] = useState(false);
 
   const getMemberName = (uid: string) => {
     const m = members.find(m => m.userid === uid);
@@ -40,7 +46,7 @@ export default function BalanceView({
     return p?.displayname || p?.fullname || m.email?.split('@')[0] || 'Participante';
   };
 
-  const getMemberPix = (uid: string) => {
+  const getMemberPhone = (uid: string) => {
     const m = members.find(m => m.userid === uid);
     return m?.userprofiles?.phone || null;
   };
@@ -63,8 +69,8 @@ export default function BalanceView({
     
     // Process Confirmed Transactions (Settlements)
     transactions.filter(t => t.status === 'confirmed').forEach(t => {
-      if (balances[t.fromuserid] !== undefined) balances[t.fromuserid] += t.amount; // Debtor paid, so balance increases (less negative)
-      if (balances[t.touserid] !== undefined) balances[t.touserid] -= t.amount;     // Creditor received, balance decreases (less positive)
+      if (balances[t.fromuserid] !== undefined) balances[t.fromuserid] += t.amount; 
+      if (balances[t.touserid] !== undefined) balances[t.touserid] -= t.amount;     
     });
 
     // Simplify Debts Algorithm
@@ -91,9 +97,27 @@ export default function BalanceView({
   const rejectedSent = transactions.filter(t => t.status === 'rejected' && t.fromuserid === user?.id);
   const historyTransactions = transactions.filter(t => t.status === 'confirmed' || t.status === 'rejected' || (t.status === 'paymentsent' && t.touserid !== user?.id));
 
-  const handlePayClick = (to: string, amount: number) => {
+  const handlePayClick = async (to: string, amount: number) => {
     setSelectedDebt({ to, amount });
     setPaymentModalOpen(true);
+    setMethodsLoading(true);
+    setTargetPaymentMethods([]);
+
+    // Fetch Payment Methods for the target user
+    try {
+        const { data } = await supabase
+            .from('payment_methods')
+            .select('*')
+            .eq('user_id', to)
+            .eq('is_active', true)
+            .order('is_primary', { ascending: false });
+        
+        if (data) setTargetPaymentMethods(data);
+    } catch (e) {
+        console.error("Error fetching payment methods", e);
+    } finally {
+        setMethodsLoading(false);
+    }
   };
 
   const confirmPayment = () => {
@@ -102,6 +126,10 @@ export default function BalanceView({
       setPaymentModalOpen(false);
       setSelectedDebt(null);
     }
+  };
+
+  const getBankName = (code?: string) => {
+    return POPULAR_BANKS.find(b => b.code === code)?.name || 'Banco';
   };
 
   return (
@@ -287,23 +315,64 @@ export default function BalanceView({
         {selectedDebt && (
           <div className="space-y-6">
             <div className="text-center">
-              <p className="text-sm text-gray-500 dark:text-gray-400 mb-1">Você vai pagar para</p>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mb-1">Você deve pagar para</p>
               <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">{getMemberName(selectedDebt.to)}</h3>
               <p className="text-3xl font-black text-brand-600 dark:text-brand-400">{formatMoney(selectedDebt.amount)}</p>
             </div>
 
             <div className="bg-gray-50 dark:bg-dark-800 p-4 rounded-xl border border-gray-200 dark:border-dark-700">
-              <p className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3 flex items-center gap-2">
-                <Phone size={14} /> Chave Pix / Celular
+              <p className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3">
+                Dados de Pagamento
               </p>
               
-              {getMemberPix(selectedDebt.to) ? (
+              {methodsLoading ? (
+                  <div className="text-center py-4 text-gray-400 text-sm">Carregando métodos...</div>
+              ) : targetPaymentMethods.length > 0 ? (
+                  <div className="space-y-3">
+                      {targetPaymentMethods.map((method) => (
+                          <div key={method.id} className="bg-white dark:bg-dark-900 p-3 rounded-lg border border-gray-200 dark:border-dark-700">
+                              <div className="flex justify-between items-start mb-1">
+                                  <div className="flex items-center gap-2">
+                                      {method.type === 'pix' ? <QrCode size={16} className="text-brand-500" /> : <Banknote size={16} className="text-green-500" />}
+                                      <span className="font-bold text-sm text-gray-800 dark:text-gray-200">
+                                          {method.type === 'pix' ? 'Chave Pix' : getBankName(method.bank_id)}
+                                      </span>
+                                  </div>
+                                  <button 
+                                    onClick={() => { 
+                                        const text = method.type === 'pix' ? method.pix_key : `${method.account_number} ${method.agency}`;
+                                        if(text) navigator.clipboard.writeText(text); 
+                                        toast.success('Copiado!'); 
+                                    }} 
+                                    className="text-brand-600 hover:text-brand-700 p-1"
+                                    title="Copiar"
+                                  >
+                                      <Copy size={14} />
+                                  </button>
+                              </div>
+                              
+                              {method.type === 'pix' ? (
+                                  <p className="font-mono text-sm text-gray-600 dark:text-gray-300 break-all">{method.pix_key}</p>
+                              ) : (
+                                  <div className="text-sm text-gray-600 dark:text-gray-300">
+                                      <p>Ag: {method.agency} | CC: {method.account_number}-{method.account_digit}</p>
+                                      <p className="text-xs text-gray-400 mt-1">{method.account_holder_name}</p>
+                                  </div>
+                              )}
+                          </div>
+                      ))}
+                  </div>
+              ) : getMemberPhone(selectedDebt.to) ? (
+                // Fallback to phone if no payment methods set
                 <div className="flex items-center justify-between bg-white dark:bg-dark-900 p-3 rounded-lg border border-gray-200 dark:border-dark-700">
-                  <span className="font-mono text-lg text-gray-900 dark:text-white select-all">
-                    {getMemberPix(selectedDebt.to)}
-                  </span>
+                  <div className="flex items-center gap-2">
+                      <Phone size={16} className="text-gray-400" />
+                      <span className="font-mono text-lg text-gray-900 dark:text-white select-all">
+                        {getMemberPhone(selectedDebt.to)}
+                      </span>
+                  </div>
                   <button 
-                    onClick={() => { navigator.clipboard.writeText(getMemberPix(selectedDebt.to) || ''); toast.success('Chave copiada!'); }} 
+                    onClick={() => { navigator.clipboard.writeText(getMemberPhone(selectedDebt.to) || ''); toast.success('Copiado!'); }} 
                     className="p-2 text-gray-500 hover:text-brand-600 hover:bg-brand-50 dark:hover:bg-brand-900/20 rounded-lg transition-colors"
                     title="Copiar"
                   >
@@ -312,7 +381,7 @@ export default function BalanceView({
                 </div>
               ) : (
                 <div className="text-center py-4 text-gray-500 dark:text-gray-400 text-sm italic">
-                  Este membro não informou uma chave Pix no perfil.
+                  Este membro não possui dados de pagamento cadastrados.
                 </div>
               )}
             </div>

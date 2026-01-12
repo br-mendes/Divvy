@@ -9,13 +9,15 @@ import { Modal } from '../../components/ui/Modal';
 import { ExpenseCharts } from '../../components/Charts';
 import DivvyHeader from '../../components/divvy/DivvyHeader';
 import ExpenseForm from '../../components/expense/ExpenseForm';
+import ExpenseList from '../../components/expense/ExpenseList';
 import InviteModal from '../../components/invite/InviteModal';
 import BalanceView from '../../components/balance/BalanceView';
 import LoadingSpinner from '../../components/ui/LoadingSpinner';
 import EmptyState from '../../components/ui/EmptyState';
+import ImageViewerModal from '../../components/ui/ImageViewerModal';
 import { 
   Plus, UserPlus, Receipt, PieChart, Users, Lock, LockOpen, 
-  Wallet, Archive, LucideIcon, FileText, Trash2, Shield, Calendar
+  Wallet, Archive, LucideIcon, Trash2, Shield, Calendar, Download, LogOut, Maximize2
 } from 'lucide-react';
 import { ProtectedRoute } from '../../components/ProtectedRoute';
 import toast from 'react-hot-toast';
@@ -39,6 +41,15 @@ const DivvyDetailContent: React.FC = () => {
   const [isViewModalOpen, setIsViewModalOpen] = useState(false);
   const [viewingExpense, setViewingExpense] = useState<Expense | null>(null);
   const [isEditingExpense, setIsEditingExpense] = useState(false);
+  
+  // Image Viewer
+  const [isImageViewerOpen, setIsImageViewerOpen] = useState(false);
+  const [imageViewerSrc, setImageViewerSrc] = useState('');
+
+  // Filters State
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filterCategory, setFilterCategory] = useState<string>('all');
+  const [filterPayer, setFilterPayer] = useState<string>('all');
 
   // Fetch Logic
   const fetchDivvyData = useCallback(async () => {
@@ -100,7 +111,6 @@ const DivvyDetailContent: React.FC = () => {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'expenses', filter: `divvyid=eq.${divvyId}` }, () => fetchDivvyData())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'transactions', filter: `divvyid=eq.${divvyId}` }, () => fetchDivvyData())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'divvymembers', filter: `divvyid=eq.${divvyId}` }, () => fetchDivvyData())
-      // Also listen for Divvy updates (archived/locked status)
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'divvies', filter: `id=eq.${divvyId}` }, () => fetchDivvyData())
       .subscribe();
 
@@ -147,7 +157,6 @@ const DivvyDetailContent: React.FC = () => {
   };
 
   const handleMarkAsSent = async (to: string, amount: number) => {
-    // Note: Confirmation is handled in BalanceView modal now, but API call remains here
     const toastId = toast.loading("Registrando...");
     try {
       const response = await fetch('/api/payments/mark-sent', {
@@ -178,7 +187,6 @@ const DivvyDetailContent: React.FC = () => {
           await supabase.from('expenses').update({ locked: false, lockedreason: null, lockedat: null }).eq('id', exp.id);
           toast.success("Despesa desbloqueada.");
           setIsViewModalOpen(false);
-          // fetchDivvyData handled by realtime
       } catch(e: any) { toast.error(e.message); }
   };
 
@@ -186,14 +194,11 @@ const DivvyDetailContent: React.FC = () => {
       if (!viewingExpense) return;
       if (!confirm("Tem certeza que deseja excluir esta despesa? Isso afetará os saldos.")) return;
       try {
-          // Utilizar API DELETE para segurança
           const res = await fetch(`/api/expenses/${viewingExpense.id}`, { method: 'DELETE' });
-          
           if (!res.ok) {
               const data = await res.json();
               throw new Error(data.error || 'Erro ao excluir');
           }
-          
           toast.success("Despesa excluída.");
           setIsViewModalOpen(false);
           setViewingExpense(null);
@@ -215,9 +220,7 @@ const DivvyDetailContent: React.FC = () => {
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ divvyId: divvy.id, userId: user.id })
           });
-          
           if (!res.ok) throw new Error('Erro ao arquivar');
-          
           toast.success("Grupo arquivado.");
       } catch(e: any) { toast.error(e.message); }
   };
@@ -230,9 +233,7 @@ const DivvyDetailContent: React.FC = () => {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ divvyId: divvy.id, userId: user.id })
         });
-        
         if (!res.ok) throw new Error('Erro ao ocultar');
-        
         toast.success("Sugestão ocultada."); 
     } 
     catch(e: any) { toast.error(e.message); }
@@ -241,24 +242,72 @@ const DivvyDetailContent: React.FC = () => {
   const handleRemoveMember = async (memberUserId: string, memberName: string) => {
     if (!isCreator) return;
     if (memberUserId === user?.id) {
-        toast.error("Você não pode remover a si mesmo. Use a opção 'Sair do grupo' nas configurações.");
+        toast.error("Você não pode remover a si mesmo.");
         return;
     }
-    
-    if (!confirm(`Tem certeza que deseja remover ${memberName} do grupo? O histórico de despesas pagas por ele permanecerá, mas ele perderá acesso.`)) return;
+    if (!confirm(`Tem certeza que deseja remover ${memberName} do grupo?`)) return;
 
     const toastId = toast.loading("Removendo...");
     try {
-        const { error } = await supabase.from('divvymembers')
-            .delete()
-            .eq('divvyid', divvyId)
-            .eq('userid', memberUserId);
-        
+        const { error } = await supabase.from('divvymembers').delete().eq('divvyid', divvyId).eq('userid', memberUserId);
         if (error) throw error;
         toast.success(`${memberName} removido.`, { id: toastId });
     } catch (e: any) {
         toast.error("Erro ao remover: " + e.message, { id: toastId });
     }
+  };
+
+  const handleLeaveGroup = async () => {
+    if (!divvy || !user) return;
+    if (isCreator) {
+        toast.error("O criador não pode sair do grupo.");
+        return;
+    }
+    if (!confirm("Tem certeza que deseja sair deste grupo?")) return;
+
+    const toastId = toast.loading("Saindo do grupo...");
+    try {
+        const res = await fetch('/api/groups/leave', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ divvyId: divvy.id, userId: user.id })
+        });
+
+        if (!res.ok) throw new Error('Erro ao sair');
+
+        toast.success("Você saiu do grupo.", { id: toastId });
+        router.push('/dashboard');
+    } catch (e: any) {
+        toast.error(e.message, { id: toastId });
+    }
+  };
+
+  const handleExportCSV = () => {
+    if (!expenses.length) return toast.error('Não há despesas para exportar.');
+    
+    const BOM = '\uFEFF';
+    const headers = ['Data', 'Descrição', 'Categoria', 'Quem Pagou', 'Valor', 'Comprovante'];
+    
+    const csvRows = expenses.map(exp => {
+      const date = new Date(exp.date).toLocaleDateString('pt-BR');
+      const payer = getMemberName(exp.paidbyuserid);
+      const desc = `"${(exp.description || '').replace(/"/g, '""')}"`;
+      const category = `"${(exp.category || '').replace(/"/g, '""')}"`;
+      const amount = exp.amount.toFixed(2).replace('.', ',');
+      const receipt = exp.receiptphotourl || '';
+      
+      return [date, desc, category, payer, amount, receipt].join(';');
+    });
+
+    const csvContent = BOM + [headers.join(';'), ...csvRows].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `${divvy?.name.replace(/\s+/g, '_')}_extrato_${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   if (loading) return <div className="flex justify-center p-20"><LoadingSpinner /></div>;
@@ -293,11 +342,18 @@ const DivvyDetailContent: React.FC = () => {
         </div>
       )}
 
-      <div className="flex justify-end gap-3 px-1">
-        <Button variant="outline" onClick={() => setIsInviteModalOpen(true)}><UserPlus size={18} className="mr-2" /> Convidar</Button>
-        <Button onClick={() => { setViewingExpense(null); setIsEditingExpense(false); setIsExpenseModalOpen(true); }} disabled={divvy.isarchived}>
-            <Plus size={18} className="mr-2" /> Nova Despesa
-        </Button>
+      <div className="flex justify-between items-center gap-3 px-1 flex-wrap">
+        <div className="flex items-center gap-2">
+           <Button variant="ghost" size="sm" onClick={handleExportCSV} className="text-gray-500 hover:text-brand-600">
+              <Download size={18} className="mr-2" /> Exportar CSV
+           </Button>
+        </div>
+        <div className="flex items-center gap-2">
+            <Button variant="outline" onClick={() => setIsInviteModalOpen(true)}><UserPlus size={18} className="mr-2" /> Convidar</Button>
+            <Button onClick={() => { setViewingExpense(null); setIsEditingExpense(false); setIsExpenseModalOpen(true); }} disabled={divvy.isarchived}>
+                <Plus size={18} className="mr-2" /> Nova Despesa
+            </Button>
+        </div>
       </div>
 
       <div className="border-b border-gray-200 dark:border-dark-700">
@@ -318,26 +374,20 @@ const DivvyDetailContent: React.FC = () => {
 
       <div className="min-h-[400px]">
         {activeTab === 'expenses' && (
-          <div className="space-y-4">
-            {expenses.length === 0 ? <EmptyState message="Sem despesas ainda" /> : expenses.map(exp => (
-              <div key={exp.id} onClick={() => { setViewingExpense(exp); setIsEditingExpense(false); setIsViewModalOpen(true); }} className="bg-white dark:bg-dark-900 p-4 rounded-xl shadow-sm border border-gray-100 dark:border-dark-800 flex justify-between items-center cursor-pointer hover:bg-gray-50 dark:hover:bg-dark-800 transition-all group">
-                <div className="flex items-center gap-4">
-                  <div className="h-10 w-10 rounded-full bg-brand-50 dark:bg-brand-900/30 flex items-center justify-center text-xl group-hover:scale-110 transition-transform">
-                    {exp.category === 'food' ? '🍽️' : exp.category === 'transport' ? '🚗' : exp.category === 'shopping' ? '🛍️' : '💰'}
-                  </div>
-                  <div>
-                    <p className="font-bold flex items-center gap-2 text-gray-900 dark:text-white">
-                        {exp.description || exp.category} 
-                        {exp.receiptphotourl && <span title="Com comprovante"><FileText size={14} className="text-gray-400" /></span>}
-                        {isLocked(exp) && <span title="Bloqueado"><Lock size={14} className="text-red-500" /></span>}
-                    </p>
-                    <p className="text-xs text-gray-500">{new Date(exp.date).toLocaleDateString()} • {getMemberName(exp.paidbyuserid)}</p>
-                  </div>
-                </div>
-                <span className="font-bold text-lg text-gray-900 dark:text-white">{formatMoney(exp.amount)}</span>
-              </div>
-            ))}
-          </div>
+          <ExpenseList 
+            expenses={expenses}
+            members={members}
+            loading={loading}
+            onExpenseClick={(exp) => { setViewingExpense(exp); setIsEditingExpense(false); setIsViewModalOpen(true); }}
+            formatMoney={formatMoney}
+            getMemberName={getMemberName}
+            searchQuery={searchQuery}
+            setSearchQuery={setSearchQuery}
+            filterCategory={filterCategory}
+            setFilterCategory={setFilterCategory}
+            filterPayer={filterPayer}
+            setFilterPayer={setFilterPayer}
+          />
         )}
 
         {activeTab === 'balances' && (
@@ -390,6 +440,7 @@ const DivvyDetailContent: React.FC = () => {
                     <span className="text-[10px] uppercase font-black px-2 py-1 bg-gray-100 dark:bg-dark-800 rounded text-gray-500">
                         {member.role === 'admin' ? 'Admin' : 'Membro'}
                     </span>
+                    
                     {isCreator && member.userid !== user?.id && (
                         <button 
                             onClick={() => handleRemoveMember(member.userid, memberName)}
@@ -397,6 +448,16 @@ const DivvyDetailContent: React.FC = () => {
                             title="Remover membro"
                         >
                             <Trash2 size={16} />
+                        </button>
+                    )}
+
+                    {!isCreator && member.userid === user?.id && (
+                        <button 
+                            onClick={handleLeaveGroup}
+                            className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded transition-colors"
+                            title="Sair do Grupo"
+                        >
+                            <LogOut size={16} />
                         </button>
                     )}
                  </div>
@@ -462,8 +523,25 @@ const DivvyDetailContent: React.FC = () => {
             </div>
 
             {viewingExpense.receiptphotourl && (
-                <div className="rounded-lg overflow-hidden border border-gray-200 dark:border-dark-700">
-                    <img src={viewingExpense.receiptphotourl} alt="Comprovante" className="w-full object-cover max-h-64" />
+                <div className="rounded-lg overflow-hidden border border-gray-200 dark:border-dark-700 relative group">
+                    <img 
+                      src={viewingExpense.receiptphotourl} 
+                      alt="Comprovante" 
+                      className="w-full object-cover max-h-64 cursor-zoom-in hover:brightness-95 transition-all"
+                      onClick={() => {
+                        setImageViewerSrc(viewingExpense.receiptphotourl!);
+                        setIsImageViewerOpen(true);
+                      }}
+                    />
+                    <button 
+                      className="absolute top-2 right-2 p-2 bg-black/50 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                      onClick={() => {
+                        setImageViewerSrc(viewingExpense.receiptphotourl!);
+                        setIsImageViewerOpen(true);
+                      }}
+                    >
+                      <Maximize2 size={16} />
+                    </button>
                     <div className="p-2 bg-gray-50 dark:bg-dark-800 text-xs text-center text-gray-500">
                         <a href={viewingExpense.receiptphotourl} target="_blank" rel="noreferrer" className="underline hover:text-brand-600">Ver original</a>
                     </div>
@@ -495,6 +573,13 @@ const DivvyDetailContent: React.FC = () => {
           </div>
         )}
       </Modal>
+
+      <ImageViewerModal 
+        isOpen={isImageViewerOpen} 
+        onClose={() => setIsImageViewerOpen(false)} 
+        src={imageViewerSrc} 
+        alt="Comprovante" 
+      />
 
       {/* CREATE / EDIT EXPENSE MODAL */}
       <Modal isOpen={isExpenseModalOpen} onClose={() => setIsExpenseModalOpen(false)} title={isEditingExpense ? "Editar Despesa" : "Nova Despesa"} size="lg">
