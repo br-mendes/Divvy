@@ -4,9 +4,9 @@ import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../context/AuthContext';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
-import { DivvyMember, Expense, ExpenseSplit } from '../../types';
+import { DivvyMember, Expense } from '../../types';
 import toast from 'react-hot-toast';
-import { Camera, X, FileText, Upload } from 'lucide-react';
+import { Camera, Upload } from 'lucide-react';
 
 interface ExpenseFormProps {
   divvyId: string;
@@ -59,19 +59,24 @@ export default function ExpenseForm({ divvyId, members, onSuccess, onCancel, ini
           .eq('expenseid', initialData.id);
 
         if (splits && splits.length > 0) {
-          // Detect Split Type logic could be complex, simplifying to 'equal' if close, or 'exact'
-          // For editing, we often default to 'exact' to preserve accuracy unless it matches 'equal' logic perfectly
-          // For simplicity in MVP, we reload as 'exact' if not all are selected or amounts differ significantly
           const totalMembers = members.length;
           const participantIds = new Set<string>(splits.map((s: any) => s.participantuserid as string));
           
           setSelectedParticipants(participantIds);
           
           const amounts: Record<string, string> = {};
-          splits.forEach((s: any) => amounts[s.participantuserid] = s.amountowed.toFixed(2));
-          setManualAmounts(amounts);
+          const percentages: Record<string, string> = {};
+          const totalAmount = initialData.amount;
+
+          splits.forEach((s: any) => {
+              amounts[s.participantuserid] = s.amountowed.toFixed(2);
+              percentages[s.participantuserid] = ((s.amountowed / totalAmount) * 100).toFixed(1);
+          });
           
-          // Heuristic: If all members are participants and amounts are roughly equal
+          setManualAmounts(amounts);
+          setManualPercentages(percentages);
+          
+          // Simple Heuristic for type detection
           const isAll = splits.length === totalMembers;
           const firstAmount = splits[0].amountowed;
           const isEqual = splits.every((s: any) => Math.abs(s.amountowed - firstAmount) < 0.05);
@@ -120,7 +125,7 @@ export default function ExpenseForm({ divvyId, members, onSuccess, onCancel, ini
     setLoading(true);
 
     try {
-      // 1. Calculate Splits
+      // 1. Calculate Splits Logic (Client-Side Validation)
       let splitsPayload: { participantuserid: string; amountowed: number; }[] = [];
 
       if (splitType === 'equal') {
@@ -138,7 +143,7 @@ export default function ExpenseForm({ divvyId, members, onSuccess, onCancel, ini
               return null;
           }).filter(Boolean) as any;
           
-          if (Math.abs(sum - val) > 0.05) throw new Error(`A soma das divisões (R$ ${sum.toFixed(2)}) deve ser igual ao total (R$ ${val.toFixed(2)}).`);
+          if (Math.abs(sum - val) > 0.05) throw new Error(`A soma (R$ ${sum.toFixed(2)}) deve ser igual ao total (R$ ${val.toFixed(2)}).`);
       } else if (splitType === 'percentage') {
           let totalPct = 0;
           splitsPayload = members.map(m => {
@@ -153,14 +158,13 @@ export default function ExpenseForm({ divvyId, members, onSuccess, onCancel, ini
           if (Math.abs(totalPct - 100) > 0.5) throw new Error("A soma das porcentagens deve ser 100%.");
       }
 
-      // 2. Upload Receipt if exists
+      // 2. Upload Receipt to Supabase Storage (Client-Side)
       let finalReceiptUrl = receiptUrl;
       if (receiptFile) {
         const fileExt = receiptFile.name.split('.').pop();
         const fileName = `${divvyId}/${Date.now()}.${fileExt}`;
         const { error: uploadError } = await supabase.storage.from('receipts').upload(fileName, receiptFile);
         if (uploadError) {
-            // Se o bucket não existir ou der erro, avisa mas continua salvando a despesa
             console.error("Upload error:", uploadError);
             toast.error("Erro ao enviar imagem. A despesa será salva sem o comprovante.");
         } else {
@@ -169,54 +173,29 @@ export default function ExpenseForm({ divvyId, members, onSuccess, onCancel, ini
         }
       }
 
-      // 3. Save Expense
-      const expensePayload = {
-        divvyid: divvyId,
-        paidbyuserid: payerId,
-        amount: val,
-        category,
-        description,
-        date,
-        receiptphotourl: finalReceiptUrl,
-        locked: false // Ensure it's unlocked if editing or creating
-      };
+      // 3. Send to API
+      const endpoint = initialData ? `/api/expenses/${initialData.id}` : '/api/expenses';
+      const method = initialData ? 'PUT' : 'POST';
 
-      let expenseId = initialData?.id;
+      const response = await fetch(endpoint, {
+          method,
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+              divvyId,
+              paidByUserId: payerId,
+              amount: val,
+              category,
+              description,
+              date,
+              receiptPhotoUrl: finalReceiptUrl,
+              splits: splitsPayload
+          })
+      });
 
-      if (initialData) {
-        // Update
-        const { error: updateError } = await supabase.from('expenses').update(expensePayload).eq('id', initialData.id);
-        if (updateError) throw updateError;
-        
-        // Delete old splits to replace
-        await supabase.from('expensesplits').delete().eq('expenseid', initialData.id);
-      } else {
-        // Insert
-        const { data: newExp, error: insertError } = await supabase.from('expenses').insert(expensePayload).select().single();
-        if (insertError) throw insertError;
-        expenseId = newExp.id;
-      }
+      const result = await response.json();
 
-      // 4. Save Splits
-      if (expenseId && splitsPayload.length > 0) {
-        const { error: splitsError } = await supabase.from('expensesplits').insert(
-            splitsPayload.map(s => ({ ...s, expenseid: expenseId }))
-        );
-        if (splitsError) throw splitsError;
-      }
-
-      // 5. Notify (Simple Logic: Only on creation to avoid spam on edits)
-      if (!initialData) {
-         const payerName = getMemberName(payerId);
-         members.filter(m => m.userid !== user?.id).forEach(async (m) => {
-             await supabase.from('notifications').insert({
-                 user_id: m.userid,
-                 divvy_id: divvyId,
-                 type: 'expense',
-                 title: 'Nova Despesa',
-                 message: `${payerName} adicionou: ${description} (${formatMoney(val)})`
-             });
-         });
+      if (!response.ok) {
+          throw new Error(result.error || 'Erro ao processar despesa');
       }
 
       toast.success(initialData ? 'Despesa atualizada!' : 'Despesa salva!');

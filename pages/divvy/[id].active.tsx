@@ -1,5 +1,5 @@
 
-import React, { useEffect, useState, useMemo, useCallback } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/router';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../context/AuthContext';
@@ -10,11 +10,12 @@ import { ExpenseCharts } from '../../components/Charts';
 import DivvyHeader from '../../components/divvy/DivvyHeader';
 import ExpenseForm from '../../components/expense/ExpenseForm';
 import InviteModal from '../../components/invite/InviteModal';
+import BalanceView from '../../components/balance/BalanceView';
 import LoadingSpinner from '../../components/ui/LoadingSpinner';
 import EmptyState from '../../components/ui/EmptyState';
 import { 
   Plus, UserPlus, Receipt, PieChart, Users, Lock, LockOpen, 
-  ArrowRight, Wallet, Archive, LucideIcon, AlertTriangle, FileText
+  Wallet, Archive, LucideIcon, FileText, Trash2, Shield
 } from 'lucide-react';
 import { ProtectedRoute } from '../../components/ProtectedRoute';
 import toast from 'react-hot-toast';
@@ -115,42 +116,8 @@ const DivvyDetailContent: React.FC = () => {
 
   const formatMoney = (v: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v);
 
-  const calculateBalances = useMemo(() => {
-    const balances: Record<string, number> = {};
-    members.forEach(m => balances[m.userid] = 0);
-
-    expenses.forEach(e => { 
-        if (balances[e.paidbyuserid] !== undefined) balances[e.paidbyuserid] += e.amount; 
-    });
-    
-    allSplits.forEach(s => { 
-        if (balances[s.participantuserid] !== undefined) balances[s.participantuserid] -= s.amountowed; 
-    });
-    
-    transactions.filter(t => t.status === 'confirmed').forEach(t => {
-      if (balances[t.fromuserid] !== undefined) balances[t.fromuserid] += t.amount;
-      if (balances[t.touserid] !== undefined) balances[t.touserid] -= t.amount;
-    });
-
-    const plan: { from: string; to: string; amount: number }[] = [];
-    const debtors = Object.entries(balances).filter(([_, b]) => b < -0.01).map(([id, b]) => ({ id, b: Math.abs(b) }));
-    const creditors = Object.entries(balances).filter(([_, b]) => b > 0.01).map(([id, b]) => ({ id, b }));
-
-    let i = 0, j = 0;
-    while (i < debtors.length && j < creditors.length) {
-      const amount = Math.min(debtors[i].b, creditors[j].b);
-      if (amount > 0.01) plan.push({ from: debtors[i].id, to: creditors[j].id, amount });
-      debtors[i].b -= amount; creditors[j].b -= amount;
-      if (debtors[i].b < 0.01) i++;
-      if (creditors[j].b < 0.01) j++;
-    }
-
-    const hasPendingTransactions = transactions.some(t => t.status === 'pending' || t.status === 'paymentsent');
-    
-    return { plan, isGroupBalanced: expenses.length > 0 && plan.length === 0 && !hasPendingTransactions };
-  }, [expenses, allSplits, members, transactions]);
-
   const isLocked = (exp: Expense) => exp.locked;
+  const isCreator = user?.id === divvy?.creatorid;
 
   // --- ACTIONS WITH API ---
   const handleUpdateTransaction = async (t: Transaction, action: 'confirm' | 'reject') => {
@@ -206,7 +173,7 @@ const DivvyDetailContent: React.FC = () => {
   };
 
   const handleUnlockExpense = async (exp: Expense) => {
-      if (user?.id !== divvy?.creatorid) return;
+      if (!isCreator) return;
       if (!confirm("Desbloquear despesa manualmente?")) return;
       try {
           await supabase.from('expenses').update({ locked: false, lockedreason: null, lockedat: null }).eq('id', exp.id);
@@ -220,37 +187,79 @@ const DivvyDetailContent: React.FC = () => {
       if (!viewingExpense) return;
       if (!confirm("Tem certeza que deseja excluir esta despesa? Isso afetará os saldos.")) return;
       try {
-          // Splits are deleted via CASCADE in SQL, but explicit delete is safer if not configured
-          await supabase.from('expensesplits').delete().eq('expenseid', viewingExpense.id);
-          const { error } = await supabase.from('expenses').delete().eq('id', viewingExpense.id);
-          if (error) throw error;
+          // Utilizar API DELETE para segurança
+          const res = await fetch(`/api/expenses/${viewingExpense.id}`, { method: 'DELETE' });
+          
+          if (!res.ok) {
+              const data = await res.json();
+              throw new Error(data.error || 'Erro ao excluir');
+          }
           
           toast.success("Despesa excluída.");
           setIsViewModalOpen(false);
           setViewingExpense(null);
       } catch(e: any) {
-          toast.error("Erro ao excluir: " + e.message);
+          toast.error(e.message);
       }
   };
 
   const handleEditExpense = () => {
       setIsEditingExpense(true);
-      // Close view modal, allow form to open with initial data
       setIsExpenseModalOpen(true);
   };
 
   const handleArchiveGroup = async () => {
-      if(!divvy) return;
+      if(!divvy || !user) return;
       try {
-          await supabase.from('divvies').update({ isarchived: true, endedat: new Date().toISOString(), archivesuggested: false }).eq('id', divvy.id);
+          const res = await fetch('/api/groups/archive', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ divvyId: divvy.id, userId: user.id })
+          });
+          
+          if (!res.ok) throw new Error('Erro ao arquivar');
+          
           toast.success("Grupo arquivado.");
-      } catch(e) { toast.error("Erro ao arquivar"); }
+      } catch(e: any) { toast.error(e.message); }
   };
 
   const handleDismissArchive = async () => {
-    if (!divvy) return;
-    try { await supabase.from('divvies').update({ archivesuggested: false }).eq('id', divvy.id); toast.success("Sugestão ocultada."); } 
-    catch(e) { toast.error("Erro ao ocultar"); }
+    if (!divvy || !user) return;
+    try { 
+        const res = await fetch('/api/groups/dismiss-archive-suggestion', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ divvyId: divvy.id, userId: user.id })
+        });
+        
+        if (!res.ok) throw new Error('Erro ao ocultar');
+        
+        toast.success("Sugestão ocultada."); 
+    } 
+    catch(e: any) { toast.error(e.message); }
+  };
+
+  const handleRemoveMember = async (memberUserId: string, memberName: string) => {
+    if (!isCreator) return;
+    if (memberUserId === user?.id) {
+        toast.error("Você não pode remover a si mesmo. Use a opção 'Sair do grupo' nas configurações.");
+        return;
+    }
+    
+    if (!confirm(`Tem certeza que deseja remover ${memberName} do grupo? O histórico de despesas pagas por ele permanecerá, mas ele perderá acesso.`)) return;
+
+    const toastId = toast.loading("Removendo...");
+    try {
+        const { error } = await supabase.from('divvymembers')
+            .delete()
+            .eq('divvyid', divvyId)
+            .eq('userid', memberUserId);
+        
+        if (error) throw error;
+        toast.success(`${memberName} removido.`, { id: toastId });
+    } catch (e: any) {
+        toast.error("Erro ao remover: " + e.message, { id: toastId });
+    }
   };
 
   if (loading) return <div className="flex justify-center p-20"><LoadingSpinner /></div>;
@@ -278,7 +287,7 @@ const DivvyDetailContent: React.FC = () => {
             </div>
             <div className="flex gap-2">
                 <Button size="sm" variant="outline" className="border-blue-200 text-blue-700 hover:bg-blue-100" onClick={handleDismissArchive}>Não agora</Button>
-                <Button size="sm" onClick={handleArchiveGroup}>Arquivar Agora</Button>
+                {isCreator && <Button size="sm" onClick={handleArchiveGroup}>Arquivar Agora</Button>}
             </div>
         </div>
       )}
@@ -291,13 +300,13 @@ const DivvyDetailContent: React.FC = () => {
       </div>
 
       <div className="border-b border-gray-200 dark:border-dark-700">
-        <nav className="flex space-x-8 overflow-x-auto">
+        <nav className="flex space-x-8 overflow-x-auto scrollbar-hide">
           {tabs.map((tab) => (
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
               className={`pb-4 px-1 border-b-2 font-medium text-sm flex items-center gap-2 transition-colors whitespace-nowrap ${
-                activeTab === tab.id ? 'border-brand-500 text-brand-600 dark:text-brand-400' : 'border-transparent text-gray-500'
+                activeTab === tab.id ? 'border-brand-500 text-brand-600 dark:text-brand-400' : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
               }`}
             >
               <tab.icon size={16} /> {tab.label}
@@ -310,9 +319,9 @@ const DivvyDetailContent: React.FC = () => {
         {activeTab === 'expenses' && (
           <div className="space-y-4">
             {expenses.length === 0 ? <EmptyState message="Sem despesas ainda" /> : expenses.map(exp => (
-              <div key={exp.id} onClick={() => { setViewingExpense(exp); setIsEditingExpense(false); setIsViewModalOpen(true); }} className="bg-white dark:bg-dark-900 p-4 rounded-xl shadow-sm border border-gray-100 dark:border-dark-800 flex justify-between items-center cursor-pointer hover:bg-gray-50 dark:hover:bg-dark-800 transition-all">
+              <div key={exp.id} onClick={() => { setViewingExpense(exp); setIsEditingExpense(false); setIsViewModalOpen(true); }} className="bg-white dark:bg-dark-900 p-4 rounded-xl shadow-sm border border-gray-100 dark:border-dark-800 flex justify-between items-center cursor-pointer hover:bg-gray-50 dark:hover:bg-dark-800 transition-all group">
                 <div className="flex items-center gap-4">
-                  <div className="h-10 w-10 rounded-full bg-brand-50 dark:bg-brand-900/30 flex items-center justify-center text-xl">
+                  <div className="h-10 w-10 rounded-full bg-brand-50 dark:bg-brand-900/30 flex items-center justify-center text-xl group-hover:scale-110 transition-transform">
                     {exp.category === 'food' ? '🍽️' : exp.category === 'transport' ? '🚗' : exp.category === 'shopping' ? '🛍️' : '💰'}
                   </div>
                   <div>
@@ -331,69 +340,63 @@ const DivvyDetailContent: React.FC = () => {
         )}
 
         {activeTab === 'balances' && (
-          <div className="space-y-6">
-            {/* Pending Transactions */}
-            {transactions.filter(t => t.status === 'paymentsent' && t.touserid === user?.id).map(t => (
-              <div key={t.id} className="bg-yellow-50 dark:bg-yellow-900/10 p-5 rounded-2xl border border-yellow-200 dark:border-yellow-900/30 flex flex-col md:flex-row justify-between items-center gap-4 border-l-4 border-l-yellow-500">
-                <p className="text-sm text-gray-800 dark:text-gray-200"><b>{getMemberName(t.fromuserid)}</b> informou que pagou <b>{formatMoney(t.amount)}</b>.</p>
-                <div className="flex gap-2 w-full md:w-auto">
-                  <Button size="sm" variant="outline" onClick={() => handleUpdateTransaction(t, 'reject')}>Recusar</Button>
-                  <Button size="sm" className="bg-green-600 text-white" onClick={() => handleUpdateTransaction(t, 'confirm')}>Confirmar</Button>
-                </div>
-              </div>
-            ))}
-
-            {transactions.filter(t => t.status === 'rejected' && t.fromuserid === user?.id).map(t => (
-                <div key={t.id} className="bg-red-50 dark:bg-red-900/20 p-4 rounded-lg border border-red-200 dark:border-red-800 flex items-center gap-3">
-                    <AlertTriangle className="text-red-500" />
-                    <p className="text-sm text-red-800 dark:text-red-300">Seu pagamento de {formatMoney(t.amount)} para {getMemberName(t.touserid)} foi recusado.</p>
-                </div>
-            ))}
-
-            <div className="bg-white dark:bg-dark-900 p-6 rounded-2xl border border-gray-100 dark:border-dark-800 shadow-sm">
-              <h3 className="font-bold mb-6 flex items-center gap-2 text-gray-900 dark:text-white"><Wallet size={20} className="text-brand-500" /> Acertos Sugeridos</h3>
-              <div className="space-y-3">
-                {calculateBalances.plan.length === 0 ? <p className="text-gray-500 text-center py-10">Tudo em dia!</p> : calculateBalances.plan.map((p, i) => (
-                  <div key={i} className="p-4 bg-gray-50 dark:bg-dark-800/50 rounded-xl flex flex-col sm:flex-row justify-between items-center gap-4">
-                    <div className="flex items-center gap-3 text-gray-900 dark:text-white">
-                      <span className="font-semibold">{getMemberName(p.from)}</span>
-                      <ArrowRight size={14} className="text-gray-400" />
-                      <span className="font-semibold">{getMemberName(p.to)}</span>
-                    </div>
-                    <div className="flex items-center gap-4">
-                      <span className="font-bold text-brand-600 text-lg">{formatMoney(p.amount)}</span>
-                      {p.from === user?.id && !transactions.some(t => t.fromuserid === p.from && t.touserid === p.to && (t.status === 'pending' || t.status === 'paymentsent')) && (
-                        <Button size="sm" className="bg-green-600 text-white" onClick={() => handleMarkAsSent(p.to, p.amount)}>Paguei</Button>
-                      )}
-                      {p.from === user?.id && transactions.some(t => t.fromuserid === p.from && t.touserid === p.to && t.status === 'paymentsent') && (
-                          <span className="text-xs font-bold text-yellow-600 bg-yellow-100 px-2 py-1 rounded">Aguardando Confirmação</span>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
+          <BalanceView 
+            divvyId={divvyId}
+            members={members}
+            expenses={expenses}
+            allSplits={allSplits}
+            transactions={transactions}
+            onUpdateTransaction={handleUpdateTransaction}
+            onMarkAsSent={handleMarkAsSent}
+          />
         )}
         
         {activeTab === 'charts' && <div className="bg-white dark:bg-dark-900 p-6 rounded-2xl border border-gray-100 dark:border-dark-800"><ExpenseCharts expenses={expenses} /></div>}
         
         {activeTab === 'members' && (
            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-             {members.map(member => (
-               <div key={member.id} className="bg-white dark:bg-dark-900 p-4 rounded-xl border border-gray-100 dark:border-dark-800 flex items-center justify-between">
+             {members.map(member => {
+               const memberName = getMemberName(member.userid);
+               return (
+               <div key={member.id} className="bg-white dark:bg-dark-900 p-4 rounded-xl border border-gray-100 dark:border-dark-800 flex items-center justify-between group hover:border-brand-200 dark:hover:border-brand-800 transition-colors">
                  <div className="flex items-center gap-3">
-                   <div className="h-10 w-10 rounded-full bg-gray-100 dark:bg-dark-800 flex items-center justify-center font-bold text-gray-600 dark:text-gray-300">
-                       {(member.userprofiles?.fullname || member.email || '?').charAt(0).toUpperCase()}
+                   <div className="h-10 w-10 rounded-full bg-gray-100 dark:bg-dark-800 flex items-center justify-center overflow-hidden">
+                       {member.userprofiles?.avatarurl ? (
+                           <img src={member.userprofiles.avatarurl} alt={memberName} className="w-full h-full object-cover" />
+                       ) : (
+                           <span className="font-bold text-gray-600 dark:text-gray-300">
+                               {(member.userprofiles?.fullname || member.email || '?').charAt(0).toUpperCase()}
+                           </span>
+                       )}
                    </div>
                    <div>
-                       <p className="font-bold text-gray-900 dark:text-white">{getMemberName(member.userid)}</p>
+                       <p className="font-bold text-gray-900 dark:text-white flex items-center gap-1">
+                           {memberName}
+                           {divvy?.creatorid === member.userid && (
+                             <span title="Criador do Grupo" className="flex items-center">
+                               <Shield size={12} className="text-brand-500 fill-brand-500" />
+                             </span>
+                           )}
+                       </p>
                        <p className="text-xs text-gray-500">{member.email}</p>
                    </div>
                  </div>
-                 <span className="text-[10px] uppercase font-black px-2 py-1 bg-gray-100 dark:bg-dark-800 rounded text-gray-500">{member.role}</span>
+                 <div className="flex items-center gap-2">
+                    <span className="text-[10px] uppercase font-black px-2 py-1 bg-gray-100 dark:bg-dark-800 rounded text-gray-500">
+                        {member.role === 'admin' ? 'Admin' : 'Membro'}
+                    </span>
+                    {isCreator && member.userid !== user?.id && (
+                        <button 
+                            onClick={() => handleRemoveMember(member.userid, memberName)}
+                            className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded transition-colors"
+                            title="Remover membro"
+                        >
+                            <Trash2 size={16} />
+                        </button>
+                    )}
+                 </div>
                </div>
-             ))}
+             )})}
            </div>
         )}
       </div>
@@ -436,8 +439,8 @@ const DivvyDetailContent: React.FC = () => {
                   </Button>
               ) : (
                 <>
-                    <Button fullWidth variant="outline" onClick={() => { setIsViewModalOpen(false); handleEditExpense(); }} disabled={divvy.isarchived || isLocked(viewingExpense)}>Editar</Button>
-                    <Button fullWidth variant="outline" className="text-red-600 border-red-200 hover:bg-red-50 dark:hover:bg-red-900/20" onClick={handleDeleteExpense} disabled={divvy.isarchived || isLocked(viewingExpense)}>Excluir</Button>
+                    <Button fullWidth variant="outline" onClick={() => { setIsViewModalOpen(false); handleEditExpense(); }} disabled={divvy?.isarchived || isLocked(viewingExpense)}>Editar</Button>
+                    <Button fullWidth variant="outline" className="text-red-600 border-red-200 hover:bg-red-50 dark:hover:bg-red-900/20" onClick={handleDeleteExpense} disabled={divvy?.isarchived || isLocked(viewingExpense)}>Excluir</Button>
                 </>
               )}
             </div>
