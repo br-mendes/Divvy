@@ -14,7 +14,7 @@ import LoadingSpinner from '../../components/ui/LoadingSpinner';
 import EmptyState from '../../components/ui/EmptyState';
 import { 
   Plus, UserPlus, Receipt, PieChart, Users, Lock, LockOpen, 
-  ArrowRight, Wallet, CheckCircle, Info, Archive, Clock, AlertTriangle, Check, LucideIcon
+  ArrowRight, Wallet, CheckCircle, Info, Archive, Clock, AlertTriangle, Check
 } from 'lucide-react';
 import { ProtectedRoute } from '../../components/ProtectedRoute';
 import toast from 'react-hot-toast';
@@ -91,7 +91,7 @@ const DivvyDetailContent: React.FC = () => {
       setSettlements(settlementsRes.data || []);
 
       // 2. Processamento robusto de Membros e Perfis (Manual Join)
-      // Isso evita falhas caso a Foreign Key não esteja configurada corretamente no banco
+      // Evita falhas se a Foreign Key não estiver configurada corretamente e previne crashes
       const membersRaw = membersRes.data || [];
       let finalMembers: DivvyMember[] = [];
 
@@ -107,8 +107,13 @@ const DivvyDetailContent: React.FC = () => {
           // Une os dados manualmente no cliente
           finalMembers = membersRaw.map(m => {
               const profile = profilesData?.find(p => p.id === m.user_id);
+              // Garante que haja um fallback para o email se não vier no membersRaw
+              // Isso é CRÍTICO para evitar crash ao acessar .email
+              const email = m.email || profile?.email || 'Email não disponível';
+              
               return {
                   ...m,
+                  email,
                   profiles: profile // Anexa o perfil encontrado
               };
           });
@@ -130,7 +135,7 @@ const DivvyDetailContent: React.FC = () => {
     const m = members.find(m => m.user_id === uid);
     if (!m) return 'Membro desconhecido';
     
-    // Como fizemos o join manual, profiles é um objeto direto, não array
+    // Prioriza o perfil carregado manualmente
     const profile: any = m.profiles;
     
     return profile?.nickname || profile?.full_name || m.email?.split('@')[0] || 'Membro';
@@ -191,7 +196,6 @@ const DivvyDetailContent: React.FC = () => {
         message: `${getMemberName(s.receiver_id)} ${status === 'confirmed' ? 'confirmou' : 'recusou'} o recebimento de ${formatMoney(s.amount)}.`
       });
 
-      // Recalcula saldos e fecha grupo se necessário (simplificado para UI update local)
       fetchDivvyData();
       toast.success(`Pagamento ${status === 'confirmed' ? 'confirmado' : 'recusado'}.`);
     } catch (e: any) { toast.error(e.message); }
@@ -292,15 +296,14 @@ const DivvyDetailContent: React.FC = () => {
     }
 
     // Validação da Divisão
-    let splitsPayload: { participant_user_id: string, amount_owed: number }[] = [];
-    
     interface SplitItem { participant_user_id: string; amount_owed: number; }
-
+    let splitsPayload: SplitItem[] = [];
+    
     if (splitType === 'equal') {
         if (selectedParticipants.size === 0) return;
         const splitVal = val / selectedParticipants.size;
-        splitsPayload = Array.from(selectedParticipants).map(uid => ({
-            participant_user_id: uid,
+        splitsPayload = Array.from(selectedParticipants).map((uid) => ({
+            participant_user_id: uid as string,
             amount_owed: splitVal
         }));
     } else if (splitType === 'exact') {
@@ -397,7 +400,7 @@ const DivvyDetailContent: React.FC = () => {
   if (loading) return <div className="flex justify-center p-12"><LoadingSpinner /></div>;
   if (!divvy) return <div className="p-12 text-center text-gray-500">Grupo não encontrado.</div>;
 
-  const tabs: { id: 'expenses' | 'balances' | 'charts' | 'members', label: string, icon: LucideIcon }[] = [
+  const tabs = [
     { id: 'expenses', label: 'Despesas', icon: Receipt },
     { id: 'balances', label: 'Balanços', icon: Wallet },
     { id: 'charts', label: 'Análise', icon: PieChart },
@@ -438,7 +441,7 @@ const DivvyDetailContent: React.FC = () => {
           {tabs.map((tab) => (
             <button
               key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
+              onClick={() => setActiveTab(tab.id as any)}
               className={`pb-4 px-1 border-b-2 font-medium text-sm flex items-center gap-2 transition-colors whitespace-nowrap ${
                 activeTab === tab.id ? 'border-brand-500 text-brand-600 dark:text-brand-400' : 'border-transparent text-gray-500'
               }`}
@@ -534,7 +537,10 @@ const DivvyDetailContent: React.FC = () => {
              {members.map(member => (
                <div key={member.id} className="bg-white dark:bg-dark-800 p-4 rounded-xl border border-gray-100 flex items-center justify-between">
                  <div className="flex items-center gap-3">
-                   <div className="h-10 w-10 rounded-full bg-gray-100 flex items-center justify-center font-bold">{member.email.charAt(0).toUpperCase()}</div>
+                   <div className="h-10 w-10 rounded-full bg-gray-100 flex items-center justify-center font-bold">
+                      {/* Robust access to name/email to prevent crash if data is incomplete */}
+                      {(member.profiles?.full_name || member.email || '?').charAt(0).toUpperCase()}
+                   </div>
                    <div>
                      <p className="font-bold">{getMemberName(member.user_id)}</p>
                      <p className="text-xs text-gray-500">{member.email}</p>
