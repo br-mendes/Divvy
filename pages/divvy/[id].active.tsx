@@ -15,7 +15,7 @@ import LoadingSpinner from '../../components/ui/LoadingSpinner';
 import EmptyState from '../../components/ui/EmptyState';
 import { 
   Plus, UserPlus, Receipt, PieChart, Users, Lock, LockOpen, 
-  Wallet, Archive, LucideIcon, FileText, Trash2, Shield
+  Wallet, Archive, LucideIcon, FileText, Trash2, Shield, Calendar
 } from 'lucide-react';
 import { ProtectedRoute } from '../../components/ProtectedRoute';
 import toast from 'react-hot-toast';
@@ -147,8 +147,7 @@ const DivvyDetailContent: React.FC = () => {
   };
 
   const handleMarkAsSent = async (to: string, amount: number) => {
-    if (!confirm(`Confirmar que você enviou ${formatMoney(amount)} para ${getMemberName(to)}?`)) return;
-    
+    // Note: Confirmation is handled in BalanceView modal now, but API call remains here
     const toastId = toast.loading("Registrando...");
     try {
       const response = await fetch('/api/payments/mark-sent', {
@@ -272,6 +271,8 @@ const DivvyDetailContent: React.FC = () => {
     { id: 'members', label: 'Membros', icon: Users },
   ];
 
+  const currentExpenseSplits = viewingExpense ? allSplits.filter(s => s.expenseid === viewingExpense.id) : [];
+
   return (
     <div className="space-y-6">
       <DivvyHeader divvy={divvy} onUpdate={fetchDivvyData} />
@@ -351,7 +352,11 @@ const DivvyDetailContent: React.FC = () => {
           />
         )}
         
-        {activeTab === 'charts' && <div className="bg-white dark:bg-dark-900 p-6 rounded-2xl border border-gray-100 dark:border-dark-800"><ExpenseCharts expenses={expenses} /></div>}
+        {activeTab === 'charts' && (
+          <div className="bg-white dark:bg-dark-900 p-6 rounded-2xl border border-gray-100 dark:border-dark-800">
+            <ExpenseCharts expenses={expenses} members={members} />
+          </div>
+        )}
         
         {activeTab === 'members' && (
            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -405,14 +410,57 @@ const DivvyDetailContent: React.FC = () => {
       <Modal isOpen={isViewModalOpen} onClose={() => setIsViewModalOpen(false)} title="Detalhes da Despesa">
         {viewingExpense && (
           <div className="space-y-6">
-            <div className="flex justify-between items-center">
+            <div className="flex justify-between items-start">
               <div>
-                <h3 className="text-xl font-bold text-gray-900 dark:text-white">{viewingExpense.description || viewingExpense.category}</h3>
-                <p className="text-sm text-gray-500">{new Date(viewingExpense.date).toLocaleDateString()} • {getMemberName(viewingExpense.paidbyuserid)}</p>
+                <h3 className="text-xl font-bold text-gray-900 dark:text-white leading-tight">{viewingExpense.description || viewingExpense.category}</h3>
+                <div className="flex items-center gap-2 mt-1 text-sm text-gray-500">
+                   <Calendar size={14} /> 
+                   <span>{new Date(viewingExpense.date).toLocaleDateString()}</span>
+                   <span>•</span>
+                   <span>Pago por <strong className="text-gray-700 dark:text-gray-300">{getMemberName(viewingExpense.paidbyuserid)}</strong></span>
+                </div>
               </div>
-              <span className="text-2xl font-black text-brand-600">{formatMoney(viewingExpense.amount)}</span>
+              <span className="text-2xl font-black text-brand-600 dark:text-brand-400">{formatMoney(viewingExpense.amount)}</span>
             </div>
             
+            {/* Split Details */}
+            <div className="pt-2">
+              <h4 className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3">
+                Divisão ({currentExpenseSplits.length})
+              </h4>
+              <div className="space-y-2 max-h-48 overflow-y-auto custom-scrollbar bg-gray-50 dark:bg-dark-800 p-3 rounded-xl">
+                {currentExpenseSplits.length === 0 ? (
+                    <p className="text-sm text-gray-400">Nenhuma divisão registrada.</p>
+                ) : (
+                    currentExpenseSplits.map(split => {
+                    const member = members.find(m => m.userid === split.participantuserid);
+                    const name = getMemberName(split.participantuserid);
+                    const isPayer = split.participantuserid === viewingExpense.paidbyuserid;
+                    
+                    return (
+                        <div key={split.id} className="flex justify-between items-center text-sm">
+                            <div className="flex items-center gap-2">
+                                <div className="w-6 h-6 rounded-full bg-gray-200 dark:bg-dark-700 flex items-center justify-center text-[10px] font-bold text-gray-600 dark:text-gray-300 overflow-hidden">
+                                    {member?.userprofiles?.avatarurl ? (
+                                        <img src={member.userprofiles.avatarurl} alt={name} className="w-full h-full object-cover"/>
+                                    ) : (
+                                        name.charAt(0).toUpperCase()
+                                    )}
+                                </div>
+                                <span className={`text-gray-700 dark:text-gray-200 ${isPayer ? 'font-semibold text-brand-600 dark:text-brand-400' : ''}`}>
+                                    {name} {isPayer && <span className="text-[10px] bg-brand-100 dark:bg-brand-900/30 text-brand-700 dark:text-brand-300 px-1 rounded ml-1">Pagou</span>}
+                                </span>
+                            </div>
+                            <span className="font-mono font-medium text-gray-900 dark:text-white">
+                                {formatMoney(split.amountowed)}
+                            </span>
+                        </div>
+                    );
+                    })
+                )}
+              </div>
+            </div>
+
             {viewingExpense.receiptphotourl && (
                 <div className="rounded-lg overflow-hidden border border-gray-200 dark:border-dark-700">
                     <img src={viewingExpense.receiptphotourl} alt="Comprovante" className="w-full object-cover max-h-64" />
@@ -432,7 +480,7 @@ const DivvyDetailContent: React.FC = () => {
                 </div>
             ) : null}
 
-            <div className="flex gap-3 pt-4">
+            <div className="flex gap-3 pt-2">
               {(isLocked(viewingExpense) && user?.id === divvy?.creatorid) ? (
                   <Button fullWidth variant="outline" onClick={() => handleUnlockExpense(viewingExpense)}>
                       <LockOpen size={16} className="mr-2" /> Desbloquear (Criador)
@@ -440,7 +488,7 @@ const DivvyDetailContent: React.FC = () => {
               ) : (
                 <>
                     <Button fullWidth variant="outline" onClick={() => { setIsViewModalOpen(false); handleEditExpense(); }} disabled={divvy?.isarchived || isLocked(viewingExpense)}>Editar</Button>
-                    <Button fullWidth variant="outline" className="text-red-600 border-red-200 hover:bg-red-50 dark:hover:bg-red-900/20" onClick={handleDeleteExpense} disabled={divvy?.isarchived || isLocked(viewingExpense)}>Excluir</Button>
+                    <Button fullWidth variant="outline" className="text-red-600 border-red-200 hover:bg-red-50 dark:hover:bg-red-900/20 dark:border-red-900/30" onClick={handleDeleteExpense} disabled={divvy?.isarchived || isLocked(viewingExpense)}>Excluir</Button>
                 </>
               )}
             </div>

@@ -8,13 +8,14 @@ import { Input } from '../components/ui/Input';
 import { Modal } from '../components/ui/Modal';
 import { ProtectedRoute } from '../components/ProtectedRoute';
 import toast from 'react-hot-toast';
-import { ShieldCheck, Users, Megaphone, Activity } from 'lucide-react';
+import { ShieldCheck, Users, Megaphone, Activity, MessageSquare, ExternalLink } from 'lucide-react';
 
 export default function AdminPage() {
   const { user, loading } = useAuth();
   const router = useRouter();
   const [stats, setStats] = useState<any>(null);
-  const [loadingStats, setLoadingStats] = useState(true);
+  const [tickets, setTickets] = useState<any[]>([]);
+  const [loadingData, setLoadingData] = useState(true);
   const [broadcastModal, setBroadcastModal] = useState(false);
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
@@ -27,30 +28,34 @@ export default function AdminPage() {
         router.push('/');
         return;
       }
-      fetchStats();
+      fetchData();
     }
   }, [user, loading, router]);
 
-  const fetchStats = async () => {
+  const fetchData = async () => {
+    setLoadingData(true);
     try {
-      // Fetch User Count
-      const { count: userCount } = await supabase.from('userprofiles').select('*', { count: 'exact', head: true });
+      // 1. Fetch Stats via API
+      const res = await fetch('/api/admin/stats');
+      if (res.ok) {
+        const statsData = await res.json();
+        setStats(statsData);
+      }
+
+      // 2. Fetch Support Tickets via Supabase Client (RLS protected)
+      const { data: ticketData, error: ticketError } = await supabase
+        .from('supporttickets')
+        .select('*')
+        .order('createdat', { ascending: false })
+        .limit(50);
       
-      // Fetch Divvy Count
-      const { count: divvyCount } = await supabase.from('divvies').select('*', { count: 'exact', head: true });
+      if (ticketError) console.error("Error fetching tickets", ticketError);
+      if (ticketData) setTickets(ticketData);
 
-      // Fetch Active Divvies (not archived)
-      const { count: activeDivvyCount } = await supabase.from('divvies').select('*', { count: 'exact', head: true }).eq('isarchived', false);
-
-      setStats({
-        totalUsers: userCount || 0,
-        totalDivvies: divvyCount || 0,
-        activeDivvies: activeDivvyCount || 0,
-      });
     } catch (e) {
       console.error(e);
     } finally {
-      setLoadingStats(false);
+      setLoadingData(false);
     }
   };
 
@@ -92,7 +97,7 @@ export default function AdminPage() {
            <div className="bg-white dark:bg-dark-900 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-dark-800 flex items-center justify-between">
               <div>
                  <p className="text-sm text-gray-500 dark:text-gray-400 font-bold uppercase tracking-wider">Usuários Totais</p>
-                 <p className="text-4xl font-black text-gray-900 dark:text-white mt-2">{loadingStats ? '...' : stats?.totalUsers}</p>
+                 <p className="text-4xl font-black text-gray-900 dark:text-white mt-2">{loadingData ? '...' : stats?.totalUsers}</p>
               </div>
               <div className="w-12 h-12 bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-full flex items-center justify-center">
                  <Users size={24} />
@@ -102,7 +107,7 @@ export default function AdminPage() {
            <div className="bg-white dark:bg-dark-900 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-dark-800 flex items-center justify-between">
               <div>
                  <p className="text-sm text-gray-500 dark:text-gray-400 font-bold uppercase tracking-wider">Grupos Totais</p>
-                 <p className="text-4xl font-black text-gray-900 dark:text-white mt-2">{loadingStats ? '...' : stats?.totalDivvies}</p>
+                 <p className="text-4xl font-black text-gray-900 dark:text-white mt-2">{loadingData ? '...' : stats?.totalDivvies}</p>
               </div>
               <div className="w-12 h-12 bg-purple-50 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400 rounded-full flex items-center justify-center">
                  <Activity size={24} />
@@ -112,7 +117,7 @@ export default function AdminPage() {
            <div className="bg-white dark:bg-dark-900 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-dark-800 flex items-center justify-between">
               <div>
                  <p className="text-sm text-gray-500 dark:text-gray-400 font-bold uppercase tracking-wider">Grupos Ativos</p>
-                 <p className="text-4xl font-black text-green-600 dark:text-green-400 mt-2">{loadingStats ? '...' : stats?.activeDivvies}</p>
+                 <p className="text-4xl font-black text-green-600 dark:text-green-400 mt-2">{loadingData ? '...' : stats?.activeDivvies}</p>
               </div>
               <div className="w-12 h-12 bg-green-50 dark:bg-green-900/30 text-green-600 dark:text-green-400 rounded-full flex items-center justify-center">
                  <Activity size={24} />
@@ -120,14 +125,47 @@ export default function AdminPage() {
            </div>
         </div>
 
-        {/* Actions */}
-        <div className="bg-white dark:bg-dark-900 p-8 rounded-xl shadow-sm border border-gray-100 dark:border-dark-800">
-           <h2 className="text-xl font-bold mb-6 flex items-center gap-2 text-gray-900 dark:text-white">
-              <Megaphone size={20} /> Ações Globais
-           </h2>
-           <div className="flex gap-4">
-              <Button onClick={() => setBroadcastModal(true)}>Enviar Broadcast</Button>
-           </div>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            {/* Actions */}
+            <div className="bg-white dark:bg-dark-900 p-8 rounded-xl shadow-sm border border-gray-100 dark:border-dark-800 h-fit">
+                <h2 className="text-xl font-bold mb-6 flex items-center gap-2 text-gray-900 dark:text-white">
+                    <Megaphone size={20} /> Ações Globais
+                </h2>
+                <div className="flex gap-4">
+                    <Button onClick={() => setBroadcastModal(true)}>Enviar Broadcast</Button>
+                </div>
+            </div>
+
+            {/* Support Tickets */}
+            <div className="bg-white dark:bg-dark-900 p-8 rounded-xl shadow-sm border border-gray-100 dark:border-dark-800">
+                <h2 className="text-xl font-bold mb-6 flex items-center gap-2 text-gray-900 dark:text-white">
+                    <MessageSquare size={20} /> Tickets de Suporte
+                </h2>
+                
+                <div className="space-y-4 max-h-[400px] overflow-y-auto custom-scrollbar">
+                    {loadingData ? (
+                        <p className="text-gray-500">Carregando...</p>
+                    ) : tickets.length === 0 ? (
+                        <p className="text-gray-500">Nenhum ticket encontrado.</p>
+                    ) : (
+                        tickets.map(ticket => (
+                            <div key={ticket.id} className="p-4 border border-gray-100 dark:border-dark-700 rounded-lg hover:bg-gray-50 dark:hover:bg-dark-800 transition-colors">
+                                <div className="flex justify-between items-start mb-2">
+                                    <h3 className="font-bold text-gray-900 dark:text-white text-sm">{ticket.subject}</h3>
+                                    <span className="text-xs text-gray-400">{new Date(ticket.createdat).toLocaleDateString()}</span>
+                                </div>
+                                <p className="text-sm text-gray-600 dark:text-gray-300 mb-2 line-clamp-2">{ticket.message}</p>
+                                <div className="flex justify-between items-center text-xs">
+                                    <span className="text-gray-500">{ticket.email}</span>
+                                    <a href={`mailto:${ticket.email}?subject=Re: ${ticket.subject}`} className="flex items-center gap-1 text-brand-600 hover:underline">
+                                        Responder <ExternalLink size={12} />
+                                    </a>
+                                </div>
+                            </div>
+                        ))
+                    )}
+                </div>
+            </div>
         </div>
 
         {/* Broadcast Modal */}

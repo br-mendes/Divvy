@@ -4,13 +4,14 @@ import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../context/AuthContext';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
-import { User, Camera, Trash2, Loader2 } from 'lucide-react';
+import { User, Camera, Trash2, Loader2, Phone } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 export default function ProfileForm() {
   const { user } = useAuth();
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState('');
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [avatarLoading, setAvatarLoading] = useState(false);
@@ -26,13 +27,14 @@ export default function ProfileForm() {
     if (!user) return;
     const { data: profile } = await supabase
       .from('userprofiles')
-      .select('fullname, displayname, avatarurl')
+      .select('fullname, displayname, avatarurl, phone')
       .eq('id', user.id)
       .single();
 
     if (profile) {
       setName(profile.displayname || profile.fullname || user.user_metadata?.full_name || '');
       setAvatarUrl(profile.avatarurl || user.user_metadata?.avatar_url || null);
+      setPhone(profile.phone || '');
     } else {
       setName(user.user_metadata?.full_name || '');
     }
@@ -103,6 +105,7 @@ export default function ProfileForm() {
         .update({
           fullname: name,
           displayname: name,
+          phone: phone,
           updatedat: new Date().toISOString()
         })
         .eq('id', user.id);
@@ -167,21 +170,30 @@ export default function ProfileForm() {
 
       <form onSubmit={handleSubmit} className="space-y-6">
         <div className="grid md:grid-cols-2 gap-6">
-          <div>
+          <div className="space-y-4">
               <Input
                 label="Nome ou Apelido"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 required
               />
-              <p className="text-xs text-gray-500 mt-1">Como será visto nos grupos</p>
+              <Input
+                label="Celular / Chave Pix"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                placeholder="(99) 99999-9999"
+                icon={<Phone size={16} />}
+              />
+              <p className="text-xs text-gray-500 mt-1">Isso facilita para seus amigos te pagarem.</p>
           </div>
-          <Input
-            label="Email"
-            value={email}
-            disabled
-            className="bg-gray-50 dark:bg-dark-800"
-          />
+          <div>
+            <Input
+              label="Email"
+              value={email}
+              disabled
+              className="bg-gray-50 dark:bg-dark-800"
+            />
+          </div>
         </div>
         <Button type="submit" isLoading={loading}>
           Salvar Alterações
