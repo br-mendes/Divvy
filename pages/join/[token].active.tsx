@@ -29,12 +29,13 @@ export default function JoinDivvy() {
       setLoading(true);
       
       // Busca direta na tabela, confiando nas regras RLS (SELECT USING true)
+      // Ajuste: userprofiles sem alias para evitar erro de relação não encontrada
       const { data, error } = await supabase
         .from('divvyinvites')
         .select(`
           *,
           divvies ( name ),
-          userprofiles:invitedbyuserid ( fullname, displayname )
+          userprofiles ( fullname, displayname )
         `)
         .eq('id', inviteId)
         .single();

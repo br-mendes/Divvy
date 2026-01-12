@@ -99,7 +99,7 @@ const DashboardContent: React.FC = () => {
           divvyid, 
           userid, 
           email,
-          userprofiles:userid (
+          userprofiles (
             id,
             fullname,
             displayname,

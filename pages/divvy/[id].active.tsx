@@ -66,7 +66,7 @@ const DivvyDetailContent: React.FC = () => {
 
       const { data: membersData, error: mErr } = await supabase
         .from('divvymembers')
-        .select(`*, userprofiles:userid (*)`)
+        .select(`*, userprofiles (*)`)
         .eq('divvyid', divvyId);
 
       if (mErr) throw mErr;
