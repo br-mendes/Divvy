@@ -29,33 +29,30 @@ const DashboardContent: React.FC = () => {
     if (!silent) setLoading(true);
 
     try {
-      // Método Robusto: Busca através da tabela de membros para garantir visibilidade via RLS
-      const { data: memberRows, error } = await supabase
-        .from('divvy_members')
-        .select('divvies (*)')
-        .eq('user_id', user.id);
+      // CONSULTA DIRETA: O RLS do banco de dados fará o filtro automaticamente
+      // Isso evita erros de Join que causam o erro de sincronização
+      const { data, error } = await supabase
+        .from('divvies')
+        .select('*')
+        .order('created_at', { ascending: false });
 
       if (error) throw error;
 
-      const groups = (memberRows || [])
-        .map(row => row.divvies)
-        .filter(Boolean) as unknown as Divvy[];
-
-      const sortedGroups = groups.sort((a, b) => 
-        new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-      );
-
-      setDivvies(sortedGroups);
+      setDivvies(data || []);
       
-      // Limpa erros anteriores se houver sucesso
+      // Se deu certo, remove qualquer aviso de erro persistente
       if (toastId.current) {
         toast.dismiss(toastId.current);
         toastId.current = null;
       }
     } catch (err: any) {
-      console.error("Dashboard Fetch Error:", err);
+      console.error("Dashboard Sync Error:", err);
+      // Evita disparar múltiplos toasts se um já estiver visível
       if (!silent && !toastId.current) {
-        toastId.current = toast.error('Sincronizando grupos... Verifique sua conexão.');
+        toastId.current = toast.error('Sincronizando grupos...', {
+          duration: 4000,
+          icon: '🔄'
+        });
       }
     } finally {
       setLoading(false);
@@ -74,83 +71,95 @@ const DashboardContent: React.FC = () => {
   const displayName = user?.user_metadata?.full_name?.split(' ')[0] || 'Usuário';
 
   return (
-    <div className="min-h-screen bg-dark-950 transition-colors duration-700 pb-20">
-      <div className="max-w-7xl mx-auto px-4 py-8 space-y-10">
+    <div className="min-h-screen bg-[#000000] transition-colors duration-700 pb-20 selection:bg-brand-500/30">
+      <div className="max-w-7xl mx-auto px-4 py-10 space-y-12">
         
-        {/* Hero Section Header */}
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 animate-fade-in-up">
-          <div className="space-y-2">
-            <h1 className="text-4xl md:text-5xl font-black text-white tracking-tighter flex items-center gap-4">
-              Olá, {displayName} <Sparkles className="text-brand-400 w-8 h-8 animate-glow-pulse" />
-            </h1>
-            <p className="text-dark-400 font-medium text-lg">
-              Suas finanças compartilhadas em um só lugar.
+        {/* Hero Section Premium */}
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-8 animate-fade-in-up">
+          <div className="space-y-3">
+            <div className="flex items-center gap-3">
+              <h1 className="text-4xl md:text-6xl font-black text-white tracking-tight">
+                Olá, {displayName}
+              </h1>
+              <Sparkles className="text-brand-400 w-8 h-8 md:w-10 md:h-10 animate-glow-pulse" />
+            </div>
+            <p className="text-dark-400 font-medium text-lg md:text-xl">
+              Gerencie suas finanças compartilhadas com elegância.
             </p>
           </div>
           
-          <div className="flex gap-3 w-full md:w-auto">
+          <div className="flex gap-4 w-full md:w-auto">
             <button 
               onClick={() => fetchDivvies()}
-              className="p-3 bg-dark-900 border border-dark-700 rounded-2xl text-dark-400 hover:text-white transition-all active:rotate-180"
-              title="Recarregar"
+              className="p-4 bg-dark-900 border border-dark-700 rounded-[1.25rem] text-dark-400 hover:text-white transition-all active:scale-90"
+              title="Atualizar"
             >
-              <RefreshCcw size={20} />
+              <RefreshCcw size={24} />
             </button>
             <Button 
                 onClick={() => setShowForm(!showForm)} 
                 variant={showForm ? 'outline' : 'primary'}
-                className="flex-1 md:flex-none h-14 px-8 rounded-2xl font-black uppercase tracking-widest text-sm shadow-2xl shadow-brand-500/20 active:scale-95"
+                className="flex-1 md:flex-none h-16 px-10 rounded-[1.25rem] font-black uppercase tracking-[0.15em] text-xs shadow-[0_0_30px_rgba(139,92,246,0.15)] active:scale-95 transition-all"
             >
-                {showForm ? 'Cancelar' : <><Plus size={20} className="mr-2" /> Criar Grupo</>}
+                {showForm ? 'Cancelar' : <><Plus size={20} className="mr-3" /> Criar Novo Grupo</>}
             </Button>
           </div>
         </div>
 
-        {/* Filter Navigation */}
-        <div className="flex items-center gap-2 bg-dark-900/50 backdrop-blur-xl p-1.5 rounded-2xl w-fit border border-dark-700/50 shadow-inner">
+        {/* Tab Switcher OLED Style */}
+        <div className="flex items-center gap-2 bg-dark-900/40 backdrop-blur-3xl p-2 rounded-[1.5rem] w-fit border border-dark-700/50 shadow-inner">
           <button
             onClick={() => { setViewMode('active'); setShowForm(false); }}
-            className={`flex items-center gap-2 px-8 py-3 rounded-xl text-sm font-black tracking-widest uppercase transition-all ${
+            className={`flex items-center gap-3 px-10 py-4 rounded-[1.1rem] text-xs font-black tracking-widest uppercase transition-all duration-300 ${
               viewMode === 'active'
-                ? 'bg-brand-600 text-white shadow-xl shadow-brand-600/20'
+                ? 'bg-brand-600 text-white shadow-[0_10px_20px_rgba(139,92,246,0.3)]'
                 : 'text-dark-500 hover:text-dark-300'
             }`}
           >
-            <LayoutGrid size={16} /> Ativos
+            <LayoutGrid size={18} /> Ativos ({divvies.filter(d => !d.is_archived).length})
           </button>
           <button
             onClick={() => { setViewMode('archived'); setShowForm(false); }}
-            className={`flex items-center gap-2 px-8 py-3 rounded-xl text-sm font-black tracking-widest uppercase transition-all ${
+            className={`flex items-center gap-3 px-10 py-4 rounded-[1.1rem] text-xs font-black tracking-widest uppercase transition-all duration-300 ${
               viewMode === 'archived'
-                ? 'bg-brand-600 text-white shadow-xl shadow-brand-600/20'
+                ? 'bg-brand-600 text-white shadow-[0_10px_20px_rgba(139,92,246,0.3)]'
                 : 'text-dark-500 hover:text-dark-300'
             }`}
           >
-            <Archive size={16} /> Arquivos
+            <Archive size={18} /> Arquivos ({divvies.filter(d => d.is_archived).length})
           </button>
         </div>
 
-        {/* Create Form Area */}
+        {/* Creation Form Overlay */}
         {showForm && (
-          <div className="p-8 bg-dark-900 rounded-[2.5rem] shadow-2xl border border-dark-700 animate-fade-in-up">
+          <div className="p-10 bg-dark-900 border border-dark-700 rounded-[2.5rem] shadow-2xl animate-fade-in-up">
             <DivvyForm onSuccess={() => { setShowForm(false); fetchDivvies(); }} />
           </div>
         )}
 
-        {/* List Results */}
-        <div className="min-h-[500px] animate-fade-in-up" style={{ animationDelay: '0.2s' }}>
+        {/* Main Grid Content */}
+        <div className="min-h-[500px]">
           {loading ? (
-            <div className="py-40 flex flex-col items-center gap-6">
+            <div className="py-48 flex flex-col items-center gap-8">
               <LoadingSpinner />
-              <p className="text-dark-500 text-sm font-bold uppercase tracking-[0.3em] animate-pulse">Sincronizando Dados</p>
+              <div className="space-y-2 text-center">
+                <p className="text-dark-500 text-xs font-black uppercase tracking-[0.4em] animate-pulse">Sincronizando</p>
+                <p className="text-dark-600 text-[10px] uppercase tracking-widest">Aguardando resposta do banco...</p>
+              </div>
             </div>
           ) : filteredDivvies.length > 0 ? (
-            <DivvyList divvies={filteredDivvies} onRefresh={fetchDivvies} />
+            <div className="animate-fade-in-up" style={{ animationDelay: '0.1s' }}>
+              <DivvyList divvies={filteredDivvies} onRefresh={fetchDivvies} />
+            </div>
           ) : (
-            <div className="pt-10">
+            <div className="pt-20 opacity-80 animate-fade-in-up">
               <EmptyState 
                 message={viewMode === 'active' ? "Tudo limpo por aqui!" : "Sem arquivados"} 
-                description={viewMode === 'active' ? "Você não possui grupos ativos no momento. Clique no botão acima para criar o primeiro!" : "Seus grupos arquivados aparecerão nesta seção."}
+                description={
+                  viewMode === 'active' 
+                  ? "Você ainda não possui grupos ativos. Que tal criar o primeiro agora?" 
+                  : "Seus grupos arquivados para consulta futura aparecerão aqui."
+                }
               />
             </div>
           )}
