@@ -3,9 +3,20 @@ import { createMiddlewareClient } from '@supabase/auth-helpers-nextjs';
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
+// Fallback values must match those in lib/supabase.ts
+const DEFAULT_URL = 'https://jpgifiumxqzbroejhudc.supabase.co';
+const DEFAULT_KEY = 'sb_publishable_RWrlgQRxQHCQ45cEIia_ug_OT9ouCwi';
+
 export async function middleware(req: NextRequest) {
   const res = NextResponse.next();
-  const supabase = createMiddlewareClient({ req, res });
+  
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || DEFAULT_URL;
+  const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || DEFAULT_KEY;
+
+  const supabase = createMiddlewareClient(
+    { req, res },
+    { supabaseUrl, supabaseKey }
+  );
 
   const {
     data: { session },
