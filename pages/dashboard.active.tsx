@@ -27,20 +27,30 @@ const DashboardContent: React.FC = () => {
     try {
       if (!user) return;
       
-      const { data, error } = await supabase.rpc('get_dashboard_divvies');
+      // Tentamos primeiro pelo RPC que é mais performático para o Dashboard completo
+      const { data: rpcData, error: rpcError } = await supabase.rpc('get_dashboard_divvies');
 
-      if (error) throw error;
-
-      if (!data || data.length === 0) {
-        setDivvies([]);
+      if (!rpcError && rpcData) {
+        setDivvies(rpcData as Divvy[]);
       } else {
-        setDivvies(data as Divvy[]);
+        // Fallback: Busca direta via tabelas caso o RPC falhe ou esteja desatualizado
+        // Graças ao RLS (ajustado via SQL), esta query retornará apenas o que o usuário tem acesso
+        const { data: directData, error: directError } = await supabase
+          .from('divvies')
+          .select(`
+            *,
+            divvy_members!inner(user_id)
+          `)
+          .order('created_at', { ascending: false });
+
+        if (directError) throw directError;
+        setDivvies(directData as any[]);
       }
 
     } catch (err: any) {
       console.error("Fetch Divvies Error:", err);
       if (err.message && err.message !== 'Failed to fetch') {
-          toast.error('Não foi possível carregar os grupos.');
+          toast.error('Não foi possível carregar seus grupos.');
       }
     } finally {
       setLoading(false);
@@ -52,11 +62,11 @@ const DashboardContent: React.FC = () => {
   );
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 py-8 px-4 transition-colors duration-200">
+    <div className="min-h-screen bg-gray-50 dark:bg-dark-950 py-8 px-4 transition-colors duration-200">
       <div className="max-w-7xl mx-auto space-y-6">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Meus Divvies</h1>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Meus Grupos</h1>
             <p className="text-sm text-gray-500 dark:text-gray-400">Gerencie suas despesas compartilhadas</p>
           </div>
           
@@ -67,14 +77,13 @@ const DashboardContent: React.FC = () => {
                     variant={showForm ? 'outline' : 'primary'}
                     className="flex-1 md:flex-none"
                 >
-                    {showForm ? 'Cancelar' : '+ Novo Divvy'}
+                    {showForm ? 'Cancelar' : '+ Novo Grupo'}
                 </Button>
              )}
           </div>
         </div>
 
-        {/* Tabs */}
-        <div className="border-b border-gray-200 dark:border-gray-700">
+        <div className="border-b border-gray-200 dark:border-dark-700">
           <nav className="-mb-px flex space-x-8">
             <button
               onClick={() => { setViewMode('active'); setShowForm(false); }}
@@ -102,7 +111,7 @@ const DashboardContent: React.FC = () => {
         </div>
 
         {showForm && viewMode === 'active' && (
-          <div className="p-6 bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-brand-100 dark:border-gray-700 animate-fade-in-down">
+          <div className="p-6 bg-white dark:bg-dark-800 rounded-xl shadow-sm border border-brand-100 dark:border-dark-700 animate-fade-in-down">
             <DivvyForm onSuccess={() => { setShowForm(false); fetchDivvies(); }} />
           </div>
         )}
