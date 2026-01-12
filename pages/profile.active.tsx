@@ -4,6 +4,7 @@ import { ProtectedRoute } from '../components/ProtectedRoute';
 import ProfileForm from '../components/settings/ProfileForm';
 import Security2FAForm from '../components/settings/Security2FAForm';
 import PaymentMethodsForm from '../components/settings/PaymentMethodsForm';
+import ChangePasswordForm from '../components/settings/ChangePasswordForm';
 import DangerZone from '../components/settings/DangerZone';
 
 function ProfileContent() {
@@ -17,6 +18,8 @@ function ProfileContent() {
       <ProfileForm />
       
       <PaymentMethodsForm />
+      
+      <ChangePasswordForm />
       
       <Security2FAForm />
 
