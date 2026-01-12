@@ -1,5 +1,5 @@
 
-import React, { useEffect, useState, useCallback, useRef } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabase';
 import { Divvy } from '../types';
@@ -10,7 +10,7 @@ import LoadingSpinner from '../components/ui/LoadingSpinner';
 import EmptyState from '../components/ui/EmptyState';
 import toast from 'react-hot-toast';
 import { ProtectedRoute } from '../components/ProtectedRoute';
-import { Archive, LayoutGrid, Plus, Sparkles, RefreshCcw } from 'lucide-react';
+import { Archive, LayoutGrid, Plus, Sparkles, RefreshCcw, WifiOff } from 'lucide-react';
 
 const DashboardContent: React.FC = () => {
   const { user } = useAuth();
@@ -18,112 +18,122 @@ const DashboardContent: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [viewMode, setViewMode] = useState<'active' | 'archived'>('active');
-  
-  const isFetching = useRef(false);
+  const [hasError, setHasError] = useState(false);
 
   const fetchDivvies = useCallback(async (silent = false) => {
-    if (!user || isFetching.current) return;
+    if (!user) return;
     
-    isFetching.current = true;
     if (!silent) setLoading(true);
+    setHasError(false);
 
     try {
-      // ESTRATÉGIA SEGURA (SPLIT FETCH):
-      // Busca em duas etapas para evitar conflitos de permissão (RLS Recursivo) no banco.
+      // ESTRATÉGIA RESILIENTE: Busca paralela independente
+      // Isso impede que a falha em uma permissão bloqueie todo o painel
       
-      // 1. Buscar grupos criados por mim (Permissão de Criador)
-      const { data: createdData, error: createdError } = await supabase
-        .from('divvies')
-        .select('*')
-        .eq('creator_id', user.id);
-
-      if (createdError) console.warn('Erro ao buscar criados:', createdError);
-
-      // 2. Buscar grupos onde sou membro (Permissão de Membro)
-      const { data: membershipData, error: memberError } = await supabase
-        .from('divvy_members')
-        .select('divvy_id')
-        .eq('user_id', user.id);
-
-      if (memberError) console.warn('Erro ao buscar afiliações:', memberError);
-
-      // Filtrar IDs que eu participe mas NÃO criei (para não duplicar)
-      const myCreatedIds = new Set((createdData || []).map(d => d.id));
-      const joinedIds = (membershipData || [])
-          .map((m: any) => m.divvy_id)
-          .filter((id: string) => !myCreatedIds.has(id));
-
-      let joinedDivvies: Divvy[] = [];
-
-      // Se houver grupos onde sou apenas membro, buscar os detalhes deles
-      if (joinedIds.length > 0) {
-        const { data: joinedData, error: joinedDataError } = await supabase
+      const [createdResult, membershipResult] = await Promise.allSettled([
+        // 1. Grupos que criei
+        supabase
           .from('divvies')
           .select('*')
-          .in('id', joinedIds);
-          
-        if (!joinedDataError && joinedData) {
-          joinedDivvies = joinedData;
+          .eq('creator_id', user.id)
+          .order('created_at', { ascending: false }),
+        
+        // 2. Grupos que participo (pegar IDs primeiro é mais seguro para RLS)
+        supabase
+          .from('divvy_members')
+          .select('divvy_id')
+          .eq('user_id', user.id)
+      ]);
+
+      const myDivvies: Divvy[] = [];
+      const divvyIdsToFetch = new Set<string>();
+
+      // Processar Criados
+      if (createdResult.status === 'fulfilled' && createdResult.value.data) {
+        myDivvies.push(...createdResult.value.data);
+      } else if (createdResult.status === 'rejected') {
+        console.error('Erro ao buscar criados:', createdResult.reason);
+      }
+
+      // Processar Membros
+      if (membershipResult.status === 'fulfilled' && membershipResult.value.data) {
+        membershipResult.value.data.forEach((m: any) => divvyIdsToFetch.add(m.divvy_id));
+      }
+
+      // Remover duplicatas (se eu criei, já está em myDivvies)
+      myDivvies.forEach(d => divvyIdsToFetch.delete(d.id));
+
+      // Buscar detalhes dos grupos onde sou apenas membro
+      if (divvyIdsToFetch.size > 0) {
+        const { data: joinedData, error: joinedError } = await supabase
+          .from('divvies')
+          .select('*')
+          .in('id', Array.from(divvyIdsToFetch));
+        
+        if (!joinedError && joinedData) {
+          myDivvies.push(...joinedData);
+        } else if (joinedError) {
+           console.warn('Erro ao buscar detalhes dos grupos participados:', joinedError);
         }
       }
 
-      // 3. Unificar Listas
-      const allDivvies = [...(createdData || []), ...joinedDivvies];
-      
-      // Ordenar por data de criação (mais recente primeiro)
-      allDivvies.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+      // Ordenação final unificada
+      myDivvies.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
-      setDivvies(allDivvies);
-
+      setDivvies(myDivvies);
     } catch (err: any) {
-      console.error("Dashboard Sync Error:", err);
-      if (!silent) {
-        // Mensagem genérica apenas se falhar tudo
-        toast.error('Erro de conexão ao sincronizar.');
-      }
+      console.error("Dashboard Sync Critical Error:", err);
+      setHasError(true);
+      if (!silent) toast.error('Falha na conexão com o banco de dados.');
     } finally {
       setLoading(false);
-      isFetching.current = false;
     }
   }, [user]);
 
+  // Carregar ao montar e ao focar na janela
   useEffect(() => {
     fetchDivvies();
+    
+    const channel = supabase.channel('dashboard_updates')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'divvies' }, () => fetchDivvies(true))
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
   }, [fetchDivvies]);
 
   const filteredDivvies = divvies.filter(d => 
     viewMode === 'active' ? !d.is_archived : d.is_archived
   );
 
-  const displayName = user?.user_metadata?.full_name?.split(' ')[0] || 'Usuário';
+  const displayName = user?.user_metadata?.full_name?.split(' ')[0] || user?.email?.split('@')[0] || 'Usuário';
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-slate-950 transition-colors duration-300 pb-20">
+    <div className="min-h-screen bg-gray-50 dark:bg-dark-950 transition-colors duration-300 pb-20">
       <div className="max-w-6xl mx-auto px-4 py-8 md:py-12 space-y-8">
         
         {/* Header Section */}
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
           <div className="animate-fade-in-up">
-            <h1 className="text-3xl md:text-4xl font-bold text-gray-900 dark:text-white flex items-center gap-3">
-              Olá, {displayName} <Sparkles className="text-brand-500" size={28} />
+            <h1 className="text-3xl md:text-4xl font-bold text-gray-900 dark:text-white flex items-center gap-3 tracking-tight">
+              Olá, {displayName} <Sparkles className="text-brand-500 fill-brand-500/20" size={28} />
             </h1>
-            <p className="text-gray-500 dark:text-slate-400 mt-1">
-              Gerencie suas despesas e saldos compartilhados.
+            <p className="text-gray-500 dark:text-gray-400 mt-2 text-lg">
+              Gerencie suas despesas compartilhadas.
             </p>
           </div>
           
-          <div className="flex gap-2 w-full md:w-auto animate-fade-in-up">
+          <div className="flex gap-3 w-full md:w-auto animate-fade-in-up">
             <button 
               onClick={() => fetchDivvies()}
-              className="p-2.5 text-gray-400 hover:text-brand-600 dark:hover:text-brand-400 bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-xl transition-all shadow-sm"
-              title="Atualizar"
+              className="p-3 text-gray-500 hover:text-brand-600 dark:text-gray-400 dark:hover:text-brand-400 bg-white dark:bg-dark-900 border border-gray-200 dark:border-dark-800 rounded-xl transition-all shadow-sm hover:shadow-md active:scale-95"
+              title="Sincronizar agora"
             >
-              <RefreshCcw size={20} />
+              <RefreshCcw size={20} className={loading ? 'animate-spin' : ''} />
             </button>
             <Button 
                 onClick={() => setShowForm(!showForm)} 
                 variant={showForm ? 'outline' : 'primary'}
-                className="flex-1 md:flex-none h-12 rounded-xl font-bold"
+                className="flex-1 md:flex-none h-12 rounded-xl font-bold shadow-lg shadow-brand-500/20 px-6"
             >
                 {showForm ? 'Cancelar' : <><Plus size={18} className="mr-2" /> Novo Grupo</>}
             </Button>
@@ -131,23 +141,23 @@ const DashboardContent: React.FC = () => {
         </div>
 
         {/* Filters */}
-        <div className="flex bg-white dark:bg-slate-900 p-1 rounded-xl border border-gray-200 dark:border-slate-800 w-fit shadow-sm">
+        <div className="flex bg-white dark:bg-dark-900 p-1.5 rounded-2xl border border-gray-200 dark:border-dark-800 w-fit shadow-sm">
           <button
             onClick={() => { setViewMode('active'); setShowForm(false); }}
-            className={`flex items-center gap-2 px-6 py-2.5 rounded-lg text-sm font-bold transition-all ${
+            className={`flex items-center gap-2 px-6 py-2.5 rounded-xl text-sm font-bold transition-all duration-300 ${
               viewMode === 'active'
-                ? 'bg-brand-600 text-white shadow-md'
-                : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
+                ? 'bg-brand-600 text-white shadow-md scale-[1.02]'
+                : 'text-gray-500 hover:text-gray-900 dark:hover:text-gray-200 hover:bg-gray-50 dark:hover:bg-dark-800'
             }`}
           >
             <LayoutGrid size={16} /> Ativos
           </button>
           <button
             onClick={() => { setViewMode('archived'); setShowForm(false); }}
-            className={`flex items-center gap-2 px-6 py-2.5 rounded-lg text-sm font-bold transition-all ${
+            className={`flex items-center gap-2 px-6 py-2.5 rounded-xl text-sm font-bold transition-all duration-300 ${
               viewMode === 'archived'
-                ? 'bg-brand-600 text-white shadow-md'
-                : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
+                ? 'bg-brand-600 text-white shadow-md scale-[1.02]'
+                : 'text-gray-500 hover:text-gray-900 dark:hover:text-gray-200 hover:bg-gray-50 dark:hover:bg-dark-800'
             }`}
           >
             <Archive size={16} /> Arquivados
@@ -156,17 +166,26 @@ const DashboardContent: React.FC = () => {
 
         {/* Form Container */}
         {showForm && (
-          <div className="p-6 bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-2xl shadow-lg animate-fade-in-up">
+          <div className="p-6 md:p-8 bg-white dark:bg-dark-900 border border-gray-200 dark:border-dark-800 rounded-3xl shadow-xl animate-fade-in-up ring-4 ring-gray-50 dark:ring-dark-800/50">
             <DivvyForm onSuccess={() => { setShowForm(false); fetchDivvies(); }} />
           </div>
         )}
 
         {/* List Content */}
         <div className="min-h-[400px]">
-          {loading ? (
+          {loading && divvies.length === 0 ? (
             <div className="py-32 flex flex-col items-center gap-4">
               <LoadingSpinner />
-              <p className="text-gray-400 text-sm animate-pulse font-medium">Sincronizando grupos...</p>
+              <p className="text-gray-400 text-sm animate-pulse font-medium">Buscando seus grupos...</p>
+            </div>
+          ) : hasError && divvies.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-20 text-center">
+                <div className="w-16 h-16 bg-red-50 dark:bg-red-900/20 rounded-full flex items-center justify-center mb-4">
+                    <WifiOff className="text-red-500" size={32} />
+                </div>
+                <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-2">Erro de Conexão</h3>
+                <p className="text-gray-500 max-w-sm mb-6">Não foi possível carregar seus grupos. Verifique sua internet ou tente novamente.</p>
+                <Button onClick={() => fetchDivvies()}>Tentar Novamente</Button>
             </div>
           ) : filteredDivvies.length > 0 ? (
             <div className="animate-fade-in-up">
@@ -175,11 +194,11 @@ const DashboardContent: React.FC = () => {
           ) : (
             <div className="pt-12">
               <EmptyState 
-                message={viewMode === 'active' ? "Tudo limpo por aqui!" : "Sem arquivados"} 
+                message={viewMode === 'active' ? "Tudo limpo por aqui!" : "Arquivo vazio"} 
                 description={
                   viewMode === 'active' 
-                  ? "Crie seu primeiro grupo para começar a dividir gastos com seus amigos." 
-                  : "Não há grupos arquivados para exibir."
+                  ? "Seus grupos ativos aparecerão aqui. Crie um novo grupo para começar." 
+                  : "Grupos que você arquivar ficarão guardados aqui."
                 }
               />
             </div>
