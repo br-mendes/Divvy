@@ -1,6 +1,7 @@
 
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { createServerSupabaseClient } from '../../../lib/supabaseServer';
+import { authorizeUser } from '../../../lib/serverAuth';
 import { sendPaymentConfirmedEmail } from '../../../lib/email';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -12,6 +13,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const { transactionId, userId } = req.body;
 
   try {
+    const user = await authorizeUser(req, res);
+
+    if (userId && user.id !== userId) {
+        return res.status(403).json({ error: 'Usuário inválido para confirmar pagamento.' });
+    }
+
     // 1. Buscar transação
     const { data: transaction, error: txError } = await supabase
       .from('transactions')
@@ -23,7 +30,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     // Validar que quem confirma é o credor (touserid)
     // Nota: Em produção, verificaríamos o JWT do req para garantir que 'userId' é quem diz ser.
-    if (transaction.touserid !== userId) {
+    if (transaction.touserid !== user.id) {
         return res.status(403).json({ error: 'Apenas o recebedor pode confirmar.' });
     }
 
@@ -116,6 +123,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   } catch (error: any) {
     console.error('Confirm Payment Error:', error);
+    if (error.message === 'Unauthorized') return res.status(401).json({ error: 'Não autorizado' });
     return res.status(500).json({ error: error.message });
   }
 }

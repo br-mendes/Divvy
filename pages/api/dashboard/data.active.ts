@@ -82,13 +82,75 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         });
     }
 
-    // 7. Montar Resposta Final
+    // 7. Buscar despesas e splits para cálculo de totais por membro
+    const memberTotalsByGroup: Record<string, Record<string, { paid: number; owed: number }>> = {};
+    const expenseGroupById = new Map<string, string>();
+
+    groupIds.forEach((groupId: string) => {
+        memberTotalsByGroup[groupId] = {};
+        (membersByGroup[groupId] || []).forEach((member: any) => {
+            memberTotalsByGroup[groupId][member.userid] = { paid: 0, owed: 0 };
+        });
+    });
+
+    if (groupIds.length > 0) {
+        const { data: expenses, error: expensesError } = await supabase
+            .from('expenses')
+            .select('id, divvyid, paidbyuserid, amount')
+            .in('divvyid', groupIds);
+
+        if (expensesError) throw expensesError;
+
+        (expenses || []).forEach((expense: any) => {
+            expenseGroupById.set(expense.id, expense.divvyid);
+            const groupTotals = memberTotalsByGroup[expense.divvyid] || {};
+            if (!groupTotals[expense.paidbyuserid]) {
+                groupTotals[expense.paidbyuserid] = { paid: 0, owed: 0 };
+            }
+            groupTotals[expense.paidbyuserid].paid += Number(expense.amount || 0);
+            memberTotalsByGroup[expense.divvyid] = groupTotals;
+        });
+
+        const expenseIds = (expenses || []).map((expense: any) => expense.id);
+        if (expenseIds.length > 0) {
+            const { data: splits, error: splitsError } = await supabase
+                .from('expensesplits')
+                .select('expenseid, participantuserid, amountowed')
+                .in('expenseid', expenseIds);
+
+            if (splitsError) throw splitsError;
+
+            (splits || []).forEach((split: any) => {
+                const groupId = expenseGroupById.get(split.expenseid);
+                if (!groupId) return;
+                const groupTotals = memberTotalsByGroup[groupId] || {};
+                if (!groupTotals[split.participantuserid]) {
+                    groupTotals[split.participantuserid] = { paid: 0, owed: 0 };
+                }
+                groupTotals[split.participantuserid].owed += Number(split.amountowed || 0);
+                memberTotalsByGroup[groupId] = groupTotals;
+            });
+        }
+    }
+
+    // 8. Montar Resposta Final
     const enrichedDivvies = uniqueGroups.map((g: any) => {
         const groupMembers = membersByGroup[g.id] || [];
+        const memberTotals = groupMembers.map((member: any) => {
+            const totals = memberTotalsByGroup[g.id]?.[member.userid] || { paid: 0, owed: 0 };
+            return {
+                userid: member.userid,
+                paid: totals.paid,
+                owed: totals.owed,
+                email: member.email,
+                userprofiles: member.userprofiles
+            };
+        });
         return {
             ...g,
             members: groupMembers,
-            member_count: Math.max(groupMembers.length, 1)
+            member_count: Math.max(groupMembers.length, 1),
+            member_totals: memberTotals
         };
     });
 
