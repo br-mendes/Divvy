@@ -174,12 +174,19 @@ export default function ExpenseForm({ divvyId, members, onSuccess, onCancel, ini
       }
 
       // 3. Send to API
+      // Authentication fix: Explicitly pass the session access token header
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+
       const endpoint = initialData ? `/api/expenses/${initialData.id}` : '/api/expenses';
       const method = initialData ? 'PUT' : 'POST';
 
       const response = await fetch(endpoint, {
           method,
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 
+            'Content-Type': 'application/json',
+            ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+          },
           body: JSON.stringify({
               divvyId,
               paidByUserId: payerId,
@@ -192,7 +199,16 @@ export default function ExpenseForm({ divvyId, members, onSuccess, onCancel, ini
           })
       });
 
-      const result = await response.json();
+      // Handle server HTML error response gracefully
+      const contentType = response.headers.get("content-type");
+      let result;
+      if (contentType && contentType.indexOf("application/json") !== -1) {
+        result = await response.json();
+      } else {
+        const text = await response.text();
+        console.error("Non-JSON Response:", text);
+        throw new Error(`Erro do servidor (${response.status})`);
+      }
 
       if (!response.ok) {
           throw new Error(result.error || 'Erro ao processar despesa');
