@@ -17,7 +17,7 @@ import {
 type AdminTab = 'overview' | 'users' | 'groups' | 'tickets' | 'broadcast';
 
 export default function AdminPage() {
-  const { user, loading } = useAuth();
+  const { user, session, loading } = useAuth();
   const router = useRouter();
   
   // State Global
@@ -43,22 +43,31 @@ export default function AdminPage() {
   const [target, setTarget] = useState<'all' | 'active' | 'inactive30'>('all');
   const [sending, setSending] = useState(false);
 
+  const getHeaders = useCallback(() => {
+    return {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${session?.access_token}`
+    };
+  }, [session]);
+
   const fetchData = useCallback(async (tab: AdminTab) => {
+    if (!session?.access_token) return;
+    
     setLoadingData(true);
     try {
       if (tab === 'overview') {
-        const res = await fetch('/api/admin/stats');
+        const res = await fetch('/api/admin/stats', { headers: getHeaders() });
         if (!res.ok) throw new Error((await res.json()).error || 'Falha ao carregar estatísticas');
         setStats(await res.json());
       } 
       else if (tab === 'users') {
-        const res = await fetch('/api/admin/users');
-        if (!res.ok) throw new Error((await res.json()).error || 'Falha ao carregar usuários (Verifique .active.ts)');
+        const res = await fetch('/api/admin/users', { headers: getHeaders() });
+        if (!res.ok) throw new Error((await res.json()).error || 'Falha ao carregar usuários');
         setUsersList(await res.json());
       }
       else if (tab === 'groups') {
-        const res = await fetch('/api/admin/groups');
-        if (!res.ok) throw new Error((await res.json()).error || 'Falha ao carregar grupos (Verifique .active.ts)');
+        const res = await fetch('/api/admin/groups', { headers: getHeaders() });
+        if (!res.ok) throw new Error((await res.json()).error || 'Falha ao carregar grupos');
         setGroupsList(await res.json());
       }
       else if (tab === 'tickets') {
@@ -76,7 +85,7 @@ export default function AdminPage() {
     } finally {
       setLoadingData(false);
     }
-  }, []);
+  }, [session, getHeaders]);
 
   // Security Check
   useEffect(() => {
@@ -133,7 +142,7 @@ export default function AdminPage() {
     try {
       const res = await fetch('/api/admin/broadcast', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getHeaders(),
         body: JSON.stringify({ title, body, target }),
       });
 
@@ -156,7 +165,10 @@ export default function AdminPage() {
   const handleResolveTicket = async (id: string) => {
     if(!confirm("Marcar este ticket como resolvido e excluir?")) return;
     try {
-        const res = await fetch(`/api/admin/tickets/${id}`, { method: 'DELETE' });
+        const res = await fetch(`/api/admin/tickets/${id}`, { 
+            method: 'DELETE',
+            headers: getHeaders()
+        });
         if (!res.ok) throw new Error("Falha ao resolver");
         
         toast.success("Ticket resolvido");
@@ -175,7 +187,7 @@ export default function AdminPage() {
       try {
           const res = await fetch(`/api/admin/users/${userId}/status`, {
               method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
+              headers: getHeaders(),
               body: JSON.stringify({ status: newStatus })
           });
 
@@ -195,7 +207,7 @@ export default function AdminPage() {
       try {
           const res = await fetch('/api/admin/groups', {
               method: 'DELETE',
-              headers: { 'Content-Type': 'application/json' },
+              headers: getHeaders(),
               body: JSON.stringify({ id: groupId })
           });
 
@@ -226,13 +238,12 @@ export default function AdminPage() {
      );
   }
 
-  if (!isAdmin) return null; // Redirecionamento acontece no useEffect
+  if (!isAdmin) return null;
 
   return (
     <ProtectedRoute>
       <div className="min-h-screen bg-gray-50 dark:bg-dark-950 pb-20">
         <div className="max-w-7xl mx-auto px-4 py-8">
-            
             {/* Header */}
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
                 <div className="flex items-center gap-4">
