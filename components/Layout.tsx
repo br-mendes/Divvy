@@ -1,7 +1,9 @@
 
+"use client";
+
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/router';
+import { usePathname } from 'next/navigation';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import DivvyLogo from './branding/DivvyLogo';
@@ -22,13 +24,13 @@ import {
 export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { signOut, user, session } = useAuth();
   const { theme, toggleTheme } = useTheme();
-  const router = useRouter();
+  const pathname = usePathname();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   
   const [liveProfile, setLiveProfile] = useState<any>(null);
   const [isAdmin, setIsAdmin] = useState(false);
 
-  const isActive = (path: string) => router.pathname === path;
+  const isActive = (path: string) => pathname === path;
 
   useEffect(() => {
     let mounted = true;
