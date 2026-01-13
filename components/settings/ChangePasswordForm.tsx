@@ -14,9 +14,6 @@ export default function ChangePasswordForm() {
   const [loading, setLoading] = useState(false);
 
   // Check if user is logged in via Email/Password provider.
-  // Social logins (Google, etc) usually have 'google', 'facebook', etc in app_metadata.provider
-  // Email logins usually have 'email'.
-  // We hide this form for non-email providers as they don't have a password managed by Supabase.
   const isEmailProvider = user?.app_metadata?.provider === 'email';
 
   if (!isEmailProvider) {

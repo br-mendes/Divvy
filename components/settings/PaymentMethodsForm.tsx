@@ -142,8 +142,6 @@ export default function PaymentMethodsForm() {
         payload.pix_key_type = null;
       }
 
-      let newMethod;
-
       if (editingId) {
         // Update existing
         const { data, error } = await supabase
@@ -171,6 +169,7 @@ export default function PaymentMethodsForm() {
 
       setIsModalOpen(false);
       resetForm();
+      setEditingId(null);
     } catch (err: any) {
       toast.error(err.message);
     } finally {
@@ -323,7 +322,7 @@ export default function PaymentMethodsForm() {
           <div className="flex justify-end gap-3 pt-4">
             <Button type="button" variant="outline" onClick={() => setIsModalOpen(false)}>Cancelar</Button>
             <Button type="submit" isLoading={saving}>
-                {editingId ? 'Atualizar' : 'Salvar'}
+                {editingId ? 'Salvar Alterações' : 'Adicionar'}
             </Button>
           </div>
         </form>
