@@ -2,16 +2,24 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { createServerSupabaseClient } from '../../../lib/supabaseServer';
 import { sendPaymentRejectedEmail } from '../../../lib/email';
+import { authorizeUser } from '../../../lib/serverAuth';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
+  const authHeader = req.headers.authorization;
+  if (!authHeader?.startsWith('Bearer ')) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+
   const supabase = createServerSupabaseClient();
-  const { transactionId, userId } = req.body;
+  const { transactionId } = req.body;
 
   try {
+    const user = await authorizeUser(req, res);
+
     const { data: transaction, error: txError } = await supabase
       .from('transactions')
       .select('*')
@@ -20,7 +28,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     if (txError || !transaction) throw new Error('Transação não encontrada');
 
-    if (transaction.touserid !== userId) {
+    if (transaction.touserid !== user.id) {
         return res.status(403).json({ error: 'Apenas o recebedor pode rejeitar.' });
     }
 
@@ -62,6 +70,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(200).json({ success: true });
 
   } catch (error: any) {
+    if (error?.message === 'Unauthorized') {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
     return res.status(500).json({ error: error.message });
   }
 }

@@ -5,33 +5,35 @@ import { sendInviteEmail } from '../../../lib/email';
 import { v4 as uuid } from 'uuid';
 import QRCode from 'qrcode';
 import { getURL } from '../../../lib/getURL';
+import { authorizeUser } from '../../../lib/serverAuth';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
+  const authHeader = req.headers.authorization;
+  if (!authHeader?.startsWith('Bearer ')) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+
   const supabase = createServerSupabaseClient();
   
-  // 1. Verificar Autenticação
-  // Nota: Em API Routes do Pages Router, pegamos o token do header ou cookies. 
-  // O createServerSupabaseClient usa a service role, então confiamos na validação manual ou passamos o token do cliente.
-  // Aqui, vamos confiar no corpo da requisição contendo o ID do usuário, mas idealmente validaríamos o JWT.
-  // Para simplificar e manter compatibilidade com o hook useAuth no client, vamos validar se o usuário existe no banco.
-  
-  const { divvyId, email, invitedByUserId } = req.body;
+  const { divvyId, email } = req.body;
 
-  if (!divvyId || !email || !invitedByUserId) {
+  if (!divvyId || !email) {
     return res.status(400).json({ error: 'Missing required fields' });
   }
 
   try {
+    const user = await authorizeUser(req, res);
+
     // 2. Validar se quem convidou é membro
     const { data: membership, error: memberError } = await supabase
       .from('divvymembers')
       .select('id')
       .eq('divvyid', divvyId)
-      .eq('userid', invitedByUserId)
+      .eq('userid', user.id)
       .single();
 
     if (memberError || !membership) {
@@ -59,7 +61,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       id: inviteToken,
       divvyid: divvyId,
       invitedemail: email.toLowerCase(),
-      invitedbyuserid: invitedByUserId,
+      invitedbyuserid: user.id,
       status: 'pending',
       expiresat: expiresAt,
     });
@@ -68,7 +70,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     // 5. Preparar dados para email
     const { data: divvy } = await supabase.from('divvies').select('name').eq('id', divvyId).single();
-    const { data: inviterProfile } = await supabase.from('userprofiles').select('fullname, displayname').eq('id', invitedByUserId).single();
+    const { data: inviterProfile } = await supabase.from('userprofiles').select('fullname, displayname').eq('id', user.id).single();
     
     // Fallback se não tiver userprofiles preenchido (usa email do auth se possível, mas aqui usamos placeholders)
     const inviterName = inviterProfile?.displayname || inviterProfile?.fullname || 'Um amigo';
@@ -84,6 +86,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(200).json({ success: true, inviteLink });
 
   } catch (error: any) {
+    if (error?.message === 'Unauthorized') {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
     console.error('Invite Error:', error);
     return res.status(500).json({ error: error.message });
   }
