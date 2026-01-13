@@ -8,16 +8,19 @@ import QRCode from 'qrcode';
 import { getURL } from '../../../lib/getURL';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  // Configuração para garantir JSON mesmo em erros
+  res.setHeader('Content-Type', 'application/json');
+
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
   try {
-    // 1. Autenticação Segura (Obtém usuário da sessão)
+    // 1. Autenticação Segura
+    // Se falhar, authorizeUser lança erro, que é pego pelo catch abaixo
     const user = await authorizeUser(req, res);
     const supabase = createServerSupabaseClient();
     
-    // invitedByUserId agora vem da sessão autenticada (user.id)
     const { divvyId, email } = req.body;
 
     if (!divvyId || !email) {
@@ -43,29 +46,26 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       .eq('divvyid', divvyId)
       .eq('invitedemail', email.toLowerCase())
       .eq('status', 'pending')
-      .maybeSingle(); // maybeSingle evita erro se não encontrar
+      .maybeSingle();
 
     let inviteToken;
-    // Expira em 7 dias
     const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(); 
 
     if (existing) {
-      // REENVIO: Se já existe pendente, reutilizamos o token e renovamos a validade
+      // Reenvio
       inviteToken = existing.id;
-      
       const { error: updateError } = await supabase
         .from('divvyinvites')
         .update({ 
             expiresat: expiresAt,
-            createdat: new Date().toISOString() // Atualiza data de criação para parecer novo
+            createdat: new Date().toISOString()
         })
         .eq('id', inviteToken);
 
       if (updateError) throw updateError;
     } else {
-      // NOVO: Se não existe ou o anterior foi rejeitado/aceito, cria novo
+      // Novo
       inviteToken = uuidv4();
-
       const { error: insertError } = await supabase.from('divvyinvites').insert({
         id: inviteToken,
         divvyid: divvyId,
@@ -78,7 +78,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       if (insertError) throw insertError;
     }
 
-    // 4. Preparar dados para email
+    // 4. Preparar dados
     const { data: divvy } = await supabase.from('divvies').select('name').eq('id', divvyId).single();
     const { data: inviterProfile } = await supabase.from('userprofiles').select('fullname, displayname').eq('id', user.id).single();
     
@@ -88,23 +88,28 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const baseUrl = getURL();
     const inviteLink = `${baseUrl}/join/${inviteToken}`;
     
-    // Gerar QR Code com segurança contra falhas
     let qrCode = '';
     try {
         qrCode = await QRCode.toDataURL(inviteLink);
     } catch (qrErr) {
         console.error("Erro ao gerar QR Code:", qrErr);
-        // Prossegue sem QR Code se falhar
     }
 
     // 5. Enviar Email
-    await sendInviteEmail(email, divvyName, inviterName, inviteLink, qrCode);
+    try {
+        await sendInviteEmail(email, divvyName, inviterName, inviteLink, qrCode);
+    } catch (emailErr) {
+        console.error("Erro no envio de email, mas convite criado:", emailErr);
+        // Não falhamos a requisição se o email falhar, retornamos o link
+    }
 
     return res.status(200).json({ success: true, inviteLink });
 
   } catch (error: any) {
     console.error('Invite API Error:', error);
-    // Garante retorno JSON mesmo em erro fatal
-    return res.status(500).json({ error: error.message || 'Erro interno do servidor' });
+    const message = error.message === 'Unauthorized' ? 'Sessão expirada. Faça login novamente.' : (error.message || 'Erro interno do servidor');
+    const status = error.message === 'Unauthorized' ? 401 : 500;
+    
+    return res.status(status).json({ error: message });
   }
 }

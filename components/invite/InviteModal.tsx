@@ -56,7 +56,7 @@ export default function InviteModal({
     try {
       if (!user) throw new Error('Usuário não autenticado');
 
-      // Obter token atual para enviar no header (Fallback para cookies)
+      // Obter token atual para enviar no header (Fallback crítico para cookies)
       const { data: { session } } = await supabase.auth.getSession();
       const token = session?.access_token;
 
@@ -75,13 +75,14 @@ export default function InviteModal({
       // Verificação de segurança: O retorno é JSON?
       const contentType = response.headers.get("content-type");
       let data;
+      
       if (contentType && contentType.indexOf("application/json") !== -1) {
         data = await response.json();
       } else {
         // Se não for JSON (ex: erro 500 do Next.js HTML), lança erro legível
         const text = await response.text();
-        console.error("Resposta não-JSON do servidor:", text);
-        throw new Error(`Erro de comunicação com o servidor (${response.status}).`);
+        console.error("Resposta inválida do servidor:", text);
+        throw new Error(`Erro de servidor (${response.status}). Tente novamente mais tarde.`);
       }
 
       if (!response.ok) {
