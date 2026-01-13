@@ -29,11 +29,18 @@ const DashboardContent: React.FC = () => {
 
   const fetchBroadcasts = useCallback(async () => {
     try {
+      const now = new Date().toISOString();
+      
+      // Buscar broadcasts ativos:
+      // starts_at deve ser menor ou igual a agora
+      // ends_at deve ser nulo OU maior ou igual a agora
       const { data, error } = await supabase
         .from('broadcastmessages')
         .select('*')
         .eq('target', 'all')
-        .order('createdat', { ascending: false })
+        .lte('starts_at', now) // Já começou
+        .or(`ends_at.is.null,ends_at.gte.${now}`) // Ainda não acabou
+        .order('starts_at', { ascending: false }) // Pega o mais recente que começou
         .limit(1)
         .single();
 

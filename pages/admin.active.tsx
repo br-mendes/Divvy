@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/router';
 import { supabase } from '../lib/supabase';
@@ -11,8 +10,9 @@ import toast from 'react-hot-toast';
 import { 
   ShieldCheck, Users, Megaphone, Activity, MessageSquare, 
   ExternalLink, Search, Trash2, LayoutDashboard, CheckCircle, Mail,
-  Layers, Ban, Check, Lock, Loader2
+  Layers, Ban, Lock, Loader2, Calendar, Clock, Check
 } from 'lucide-react';
+import { BroadcastMessage } from '../types';
 
 type AdminTab = 'overview' | 'users' | 'groups' | 'tickets' | 'broadcast';
 
@@ -30,6 +30,7 @@ export default function AdminPage() {
   const [usersList, setUsersList] = useState<any[]>([]);
   const [groupsList, setGroupsList] = useState<any[]>([]);
   const [tickets, setTickets] = useState<any[]>([]);
+  const [broadcastsList, setBroadcastsList] = useState<BroadcastMessage[]>([]);
   const [loadingData, setLoadingData] = useState(false);
   
   // Filter States
@@ -41,6 +42,8 @@ export default function AdminPage() {
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
   const [target, setTarget] = useState<'all' | 'active' | 'inactive30'>('all');
+  const [startsAt, setStartsAt] = useState('');
+  const [endsAt, setEndsAt] = useState('');
   const [sending, setSending] = useState(false);
 
   const getHeaders = useCallback(() => {
@@ -78,6 +81,11 @@ export default function AdminPage() {
         
         if (error) throw error;
         setTickets(data || []);
+      }
+      else if (tab === 'broadcast') {
+        const res = await fetch('/api/admin/broadcasts/list', { headers: getHeaders() });
+        if (!res.ok) throw new Error((await res.json()).error || 'Falha ao carregar mensagens');
+        setBroadcastsList(await res.json());
       }
     } catch (e: any) {
       console.error(e);
@@ -140,10 +148,18 @@ export default function AdminPage() {
     e.preventDefault();
     setSending(true);
     try {
+      const payload = { 
+          title, 
+          body, 
+          target,
+          starts_at: startsAt || new Date().toISOString(),
+          ends_at: endsAt || null
+      };
+
       const res = await fetch('/api/admin/broadcast', {
         method: 'POST',
         headers: getHeaders(),
-        body: JSON.stringify({ title, body, target }),
+        body: JSON.stringify(payload),
       });
 
       if (!res.ok) {
@@ -151,15 +167,36 @@ export default function AdminPage() {
           throw new Error(err.error || 'Erro ao enviar broadcast');
       }
 
-      toast.success('Mensagem enviada com sucesso!');
+      toast.success('Mensagem programada/enviada com sucesso!');
       setBroadcastModal(false);
       setTitle('');
       setBody('');
+      setStartsAt('');
+      setEndsAt('');
+      fetchData('broadcast'); // Refresh list
     } catch (e: any) {
       toast.error('Erro: ' + e.message);
     } finally {
       setSending(false);
     }
+  };
+
+  const handleDeleteBroadcast = async (id: string) => {
+      if (!confirm("Tem certeza que deseja excluir esta mensagem? Ela deixará de aparecer para todos os usuários imediatamente.")) return;
+      
+      try {
+          const res = await fetch(`/api/admin/broadcasts/${id}`, {
+              method: 'DELETE',
+              headers: getHeaders()
+          });
+          
+          if (!res.ok) throw new Error("Erro ao excluir");
+          
+          toast.success("Mensagem excluída.");
+          setBroadcastsList(broadcastsList.filter(b => b.id !== id));
+      } catch (e: any) {
+          toast.error(e.message);
+      }
   };
 
   const handleResolveTicket = async (id: string) => {
@@ -228,6 +265,17 @@ export default function AdminPage() {
   const filteredGroups = groupsList.filter(g =>
     (g.name || '').toLowerCase().includes(groupSearch.toLowerCase())
   );
+
+  // Helper para status do broadcast
+  const getBroadcastStatus = (b: BroadcastMessage) => {
+      const now = new Date();
+      const start = b.starts_at ? new Date(b.starts_at) : new Date(b.createdat);
+      const end = b.ends_at ? new Date(b.ends_at) : null;
+
+      if (end && now > end) return { label: 'Expirado', color: 'bg-red-100 text-red-700' };
+      if (now < start) return { label: 'Agendado', color: 'bg-yellow-100 text-yellow-700' };
+      return { label: 'Ativo', color: 'bg-green-100 text-green-700' };
+  };
 
   if (loading || checkingPermission) {
      return (
@@ -529,17 +577,73 @@ export default function AdminPage() {
 
                 {/* 5. BROADCAST TAB */}
                 {activeTab === 'broadcast' && (
-                    <div className="bg-white dark:bg-dark-900 rounded-2xl shadow-sm border border-gray-100 dark:border-dark-800 p-8 flex flex-col items-center text-center">
-                        <div className="w-20 h-20 bg-purple-50 dark:bg-purple-900/20 text-purple-600 dark:text-purple-400 rounded-full flex items-center justify-center mb-6">
-                            <Megaphone size={40} />
+                    <div className="space-y-8">
+                        {/* Hero Section / Action */}
+                        <div className="bg-white dark:bg-dark-900 rounded-2xl shadow-sm border border-gray-100 dark:border-dark-800 p-8 flex flex-col items-center text-center">
+                            <div className="w-20 h-20 bg-purple-50 dark:bg-purple-900/20 text-purple-600 dark:text-purple-400 rounded-full flex items-center justify-center mb-6">
+                                <Megaphone size={40} />
+                            </div>
+                            <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Enviar Mensagem Global</h2>
+                            <p className="text-gray-500 dark:text-gray-400 max-w-md mb-8">
+                                Envie notificações importantes para todos os usuários do sistema. Você pode agendar o início e o fim da exibição.
+                            </p>
+                            <Button size="lg" onClick={() => setBroadcastModal(true)} className="px-8 shadow-xl shadow-brand-500/20">
+                                Criar Nova Mensagem
+                            </Button>
                         </div>
-                        <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Enviar Mensagem Global</h2>
-                        <p className="text-gray-500 dark:text-gray-400 max-w-md mb-8">
-                            Envie notificações importantes para todos os usuários do sistema. A mensagem aparecerá no topo do dashboard deles.
-                        </p>
-                        <Button size="lg" onClick={() => setBroadcastModal(true)} className="px-8 shadow-xl shadow-brand-500/20">
-                            Criar Nova Mensagem
-                        </Button>
+
+                        {/* List of Broadcasts */}
+                        <div className="bg-white dark:bg-dark-900 rounded-2xl shadow-sm border border-gray-100 dark:border-dark-800 overflow-hidden">
+                            <div className="p-6 border-b border-gray-100 dark:border-dark-800">
+                                <h3 className="font-bold text-gray-900 dark:text-white">Histórico de Mensagens</h3>
+                            </div>
+                            <div className="divide-y divide-gray-100 dark:divide-dark-800">
+                                {loadingData ? (
+                                    <p className="p-8 text-center text-gray-500">Carregando...</p>
+                                ) : broadcastsList.length === 0 ? (
+                                    <p className="p-8 text-center text-gray-500">Nenhuma mensagem enviada.</p>
+                                ) : (
+                                    broadcastsList.map(b => {
+                                        const status = getBroadcastStatus(b);
+                                        return (
+                                            <div key={b.id} className="p-6 flex flex-col md:flex-row justify-between items-start gap-4">
+                                                <div className="flex-1">
+                                                    <div className="flex items-center gap-3 mb-2">
+                                                        <span className={`px-2 py-0.5 rounded text-xs font-bold uppercase tracking-wider ${status.color}`}>
+                                                            {status.label}
+                                                        </span>
+                                                        <span className="text-xs text-gray-400">{new Date(b.createdat).toLocaleDateString()}</span>
+                                                    </div>
+                                                    <h4 className="font-bold text-lg text-gray-900 dark:text-white mb-1">{b.title}</h4>
+                                                    <p className="text-gray-600 dark:text-gray-400 text-sm">{b.body}</p>
+                                                    
+                                                    {/* Dates Info */}
+                                                    <div className="flex gap-4 mt-3 text-xs text-gray-500 dark:text-gray-500">
+                                                        <div className="flex items-center gap-1">
+                                                            <Calendar size={12} /> 
+                                                            Início: {b.starts_at ? new Date(b.starts_at).toLocaleString() : 'Imediato'}
+                                                        </div>
+                                                        {b.ends_at && (
+                                                            <div className="flex items-center gap-1">
+                                                                <Clock size={12} /> 
+                                                                Fim: {new Date(b.ends_at).toLocaleString()}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                                <button 
+                                                    onClick={() => handleDeleteBroadcast(b.id)}
+                                                    className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
+                                                    title="Excluir Mensagem"
+                                                >
+                                                    <Trash2 size={18} />
+                                                </button>
+                                            </div>
+                                        );
+                                    })
+                                )}
+                            </div>
+                        </div>
                     </div>
                 )}
             </div>
@@ -559,7 +663,9 @@ export default function AdminPage() {
                             <option value="inactive30">Inativos (+30 dias)</option>
                         </select>
                     </div>
+                    
                     <Input label="Título da Mensagem" value={title} onChange={e => setTitle(e.target.value)} required placeholder="Ex: Manutenção Programada" />
+                    
                     <div>
                         <label className="block text-sm font-medium mb-1 text-gray-700 dark:text-gray-300">Conteúdo</label>
                         <textarea 
@@ -570,7 +676,33 @@ export default function AdminPage() {
                             placeholder="Digite sua mensagem aqui..."
                         />
                     </div>
-                    <Button fullWidth type="submit" isLoading={sending}>Enviar Transmissão</Button>
+
+                    <div className="grid grid-cols-2 gap-4 bg-gray-50 dark:bg-dark-800 p-3 rounded-lg border border-gray-200 dark:border-dark-700">
+                        <div>
+                            <label className="block text-xs font-bold mb-1 text-gray-500 uppercase">Agendar Início</label>
+                            <input 
+                                type="datetime-local" 
+                                className="w-full rounded border border-gray-300 dark:border-dark-600 bg-white dark:bg-dark-900 px-2 py-1 text-sm text-gray-900 dark:text-white"
+                                value={startsAt}
+                                onChange={e => setStartsAt(e.target.value)}
+                            />
+                            <p className="text-[10px] text-gray-400 mt-1">Deixe vazio para enviar agora.</p>
+                        </div>
+                        <div>
+                            <label className="block text-xs font-bold mb-1 text-gray-500 uppercase">Agendar Fim (Expiração)</label>
+                            <input 
+                                type="datetime-local" 
+                                className="w-full rounded border border-gray-300 dark:border-dark-600 bg-white dark:bg-dark-900 px-2 py-1 text-sm text-gray-900 dark:text-white"
+                                value={endsAt}
+                                onChange={e => setEndsAt(e.target.value)}
+                            />
+                            <p className="text-[10px] text-gray-400 mt-1">Deixe vazio para não expirar.</p>
+                        </div>
+                    </div>
+
+                    <Button fullWidth type="submit" isLoading={sending}>
+                        {startsAt ? 'Agendar Mensagem' : 'Enviar Agora'}
+                    </Button>
                 </form>
             </Modal>
         </div>

@@ -108,6 +108,8 @@ export interface BroadcastMessage {
   body: string;
   target: 'all' | 'inactive30' | 'active';
   createdat: string;
+  starts_at?: string;
+  ends_at?: string;
 }
 
 export interface SupportTicket {

@@ -4,14 +4,8 @@ import { createServerSupabaseClient } from '../../../lib/supabaseServer';
 import { authorizeUser } from '../../../lib/serverAuth';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (req.method !== 'POST') {
+  if (req.method !== 'GET') {
     return res.status(405).json({ error: 'Method not allowed' });
-  }
-
-  const { title, body, target, starts_at, ends_at } = req.body;
-
-  if (!title || !body || !target) {
-    return res.status(400).json({ error: 'Campos obrigatórios faltando.' });
   }
 
   try {
@@ -26,18 +20,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         return res.status(403).json({ error: 'Forbidden' });
     }
 
-    const { error } = await supabase.from('broadcastmessages').insert({
-      title,
-      body,
-      target,
-      starts_at: starts_at || new Date().toISOString(),
-      ends_at: ends_at || null, // null significa "sem data de término" (ou nunca expira, dependendo da regra, mas aqui vamos usar null como infinito)
-      createdat: new Date().toISOString()
-    });
+    const { data, error } = await supabase
+      .from('broadcastmessages')
+      .select('*')
+      .order('createdat', { ascending: false });
 
     if (error) throw error;
 
-    return res.status(200).json({ success: true });
+    return res.status(200).json(data);
   } catch (error: any) {
     return res.status(500).json({ error: error.message });
   }
