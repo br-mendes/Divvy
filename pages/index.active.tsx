@@ -105,8 +105,12 @@ export default function HomePage() {
             <div className="flex flex-col sm:flex-row gap-4 pt-4 justify-center lg:justify-start">
               <Link href="/signup" className="w-full sm:w-auto">
                 <Button variant="primary" size="lg" className="w-full sm:px-12 group bg-brand-600 hover:bg-brand-700 shadow-xl shadow-brand-500/30 hover:scale-[1.02] transition-transform">
-                  Começar agora
-                  <ArrowRight size={18} className="ml-2 group-hover:translate-x-1 transition-transform" />
+                  <span className="inline-flex items-center gap-3">
+                    <span className="font-semibold tracking-tight">Comece agora</span>
+                    <span className="inline-flex items-center justify-center w-9 h-9 rounded-full bg-white/20 group-hover:bg-white/30 transition-colors">
+                      <ArrowRight size={18} className="text-white group-hover:translate-x-0.5 transition-transform" />
+                    </span>
+                  </span>
                 </Button>
               </Link>
               <Link href="#features" className="w-full sm:w-auto">
