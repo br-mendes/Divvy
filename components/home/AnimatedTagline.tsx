@@ -30,9 +30,11 @@ export default function AnimatedTagline() {
 
   return (
     <span className="block">
-      Divida despesas{' '}
+      <span className="block whitespace-nowrap text-[clamp(1.9rem,6vw,4.5rem)]">
+        Despesas em grupo
+      </span>
       <span
-        className={`text-brand-600 dark:text-brand-400 block sm:inline transition-all duration-500 ${
+        className={`text-brand-600 dark:text-brand-400 block whitespace-nowrap text-[clamp(1.7rem,5.5vw,4rem)] transition-all duration-500 ${
           isTransitioning ? 'opacity-0 -translate-y-2' : 'opacity-100 translate-y-0'
         }`}
       >

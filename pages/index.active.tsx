@@ -57,7 +57,9 @@ export default function HomePage() {
               {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
             </button>
             <Link href="/signup">
-              <Button variant="primary" className="shadow-lg shadow-brand-500/20 px-6">Criar Conta</Button>
+              <Button variant="primary" className="bg-brand-600 hover:bg-brand-700 shadow-lg shadow-brand-500/30 px-6">
+                Começar agora
+              </Button>
             </Link>
           </nav>
 
@@ -78,7 +80,11 @@ export default function HomePage() {
         {mobileMenuOpen && (
           <div className="md:hidden border-t border-gray-100 dark:border-dark-700 p-6 bg-white dark:bg-dark-900 flex flex-col gap-4 animate-fade-in-down shadow-xl">
             <Link href="/login" onClick={() => setMobileMenuOpen(false)}><Button variant="outline" fullWidth>Entrar</Button></Link>
-            <Link href="/signup" onClick={() => setMobileMenuOpen(false)}><Button variant="primary" fullWidth>Criar Conta Grátis</Button></Link>
+            <Link href="/signup" onClick={() => setMobileMenuOpen(false)}>
+              <Button variant="primary" fullWidth className="bg-brand-600 hover:bg-brand-700 shadow-lg shadow-brand-500/30">
+                Começar agora
+              </Button>
+            </Link>
           </div>
         )}
       </header>
@@ -98,8 +104,8 @@ export default function HomePage() {
             </p>
             <div className="flex flex-col sm:flex-row gap-4 pt-4 justify-center lg:justify-start">
               <Link href="/signup" className="w-full sm:w-auto">
-                <Button variant="primary" size="lg" className="w-full sm:px-12 group shadow-xl shadow-brand-500/20 hover:scale-[1.02] transition-transform">
-                  Começar Agora
+                <Button variant="primary" size="lg" className="w-full sm:px-12 group bg-brand-600 hover:bg-brand-700 shadow-xl shadow-brand-500/30 hover:scale-[1.02] transition-transform">
+                  Começar agora
                   <ArrowRight size={18} className="ml-2 group-hover:translate-x-1 transition-transform" />
                 </Button>
               </Link>

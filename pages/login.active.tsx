@@ -162,7 +162,9 @@ export default function Login() {
     <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
       <div className="w-full max-w-md bg-white p-8 rounded-lg shadow-md border border-gray-100">
         <div className="text-center mb-8">
-          <DivvyLogo className="mx-auto w-16 h-16" />
+          <Link href="/" aria-label="Voltar para a home">
+            <DivvyLogo className="mx-auto w-16 h-16" />
+          </Link>
           <h1 className="text-2xl font-bold mt-4 text-gray-900">Bem-vindo de volta</h1>
           <p className="text-gray-500 text-sm mt-1">Acesse sua conta para gerenciar despesas</p>
         </div>
