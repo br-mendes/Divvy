@@ -15,6 +15,7 @@ export default function Signup() {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
 
   // Validação de senha: Min 8 chars, 1 Maiúscula, 1 Minúscula, 1 Número, 1 Especial
   const validatePassword = (pwd: string) => {
@@ -32,6 +33,11 @@ export default function Signup() {
 
     if (!validatePassword(password)) {
       toast.error('A senha deve ter no mínimo 8 caracteres, incluir maiúscula, minúscula, número e caractere especial.');
+      return;
+    }
+
+    if (!acceptedTerms) {
+      toast.error('Você precisa aceitar os termos de uso e a política de privacidade.');
       return;
     }
 
@@ -62,6 +68,11 @@ export default function Signup() {
   }
 
   async function handleGoogleSignup() {
+    if (!acceptedTerms) {
+      toast.error('Você precisa aceitar os termos de uso e a política de privacidade.');
+      return;
+    }
+
     setGoogleLoading(true);
     
     const redirectUrl = new URL(`${getURL()}/auth/callback`);
@@ -125,7 +136,26 @@ export default function Signup() {
               Mínimo 8 caracteres, maiúscula, minúscula, número e especial.
             </p>
           </div>
-          <Button type="submit" fullWidth isLoading={loading}>Cadastrar</Button>
+          <label className="flex items-start gap-3 text-sm text-gray-600">
+            <input
+              type="checkbox"
+              className="mt-1 h-4 w-4 rounded border-gray-300 text-brand-600 focus:ring-brand-500"
+              checked={acceptedTerms}
+              onChange={(e) => setAcceptedTerms(e.target.checked)}
+            />
+            <span>
+              Li e aceito os{' '}
+              <Link href="/terms" className="text-brand-600 font-semibold hover:underline">
+                termos de uso
+              </Link>{' '}
+              e a{' '}
+              <Link href="/privacy" className="text-brand-600 font-semibold hover:underline">
+                política de privacidade
+              </Link>
+              .
+            </span>
+          </label>
+          <Button type="submit" fullWidth isLoading={loading} disabled={!acceptedTerms}>Cadastrar</Button>
         </form>
 
         <div className="relative my-6">
@@ -143,6 +173,7 @@ export default function Signup() {
           fullWidth 
           onClick={handleGoogleSignup}
           isLoading={googleLoading}
+          disabled={!acceptedTerms}
           className="flex items-center justify-center gap-2"
         >
           {!googleLoading && (
