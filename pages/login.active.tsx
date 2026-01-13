@@ -8,6 +8,7 @@ import toast from 'react-hot-toast';
 import Link from 'next/link';
 import { getURL } from '../lib/getURL';
 import { ShieldCheck } from 'lucide-react';
+import StaticPageLinks from '../components/common/StaticPageLinks';
 
 export default function Login() {
   const router = useRouter();
@@ -130,29 +131,34 @@ export default function Login() {
   if (showMfaInput) {
      return (
         <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
-           <div className="w-full max-w-md bg-white p-8 rounded-lg shadow-md border border-gray-100 text-center">
-              <div className="mx-auto w-16 h-16 bg-brand-100 text-brand-600 rounded-full flex items-center justify-center mb-6">
-                  <ShieldCheck size={32} />
-              </div>
-              <h2 className="text-2xl font-bold text-gray-900 mb-2">Verificação em Duas Etapas</h2>
-              <p className="text-gray-500 text-sm mb-6">
-                 Digite o código de 6 dígitos do seu aplicativo autenticador para continuar.
-              </p>
+           <div className="w-full max-w-md">
+              <div className="bg-white p-8 rounded-lg shadow-md border border-gray-100 text-center">
+                <div className="mx-auto w-16 h-16 bg-brand-100 text-brand-600 rounded-full flex items-center justify-center mb-6">
+                    <ShieldCheck size={32} />
+                </div>
+                <h2 className="text-2xl font-bold text-gray-900 mb-2">Verificação em Duas Etapas</h2>
+                <p className="text-gray-500 text-sm mb-6">
+                   Digite o código de 6 dígitos do seu aplicativo autenticador para continuar.
+                </p>
 
-              <form onSubmit={handleMfaVerify} className="space-y-4">
-                 <Input 
-                    value={mfaCode}
-                    onChange={(e) => setMfaCode(e.target.value.replace(/[^0-9]/g, '').slice(0, 6))}
-                    placeholder="000 000"
-                    className="text-center text-2xl tracking-widest font-mono py-3"
-                    autoFocus
-                 />
-                 <Button type="submit" fullWidth isLoading={loading}>Verificar</Button>
-              </form>
-              
-              <button onClick={() => setShowMfaInput(false)} className="mt-4 text-sm text-gray-400 hover:text-gray-600 underline">
-                 Voltar para login
-              </button>
+                <form onSubmit={handleMfaVerify} className="space-y-4">
+                   <Input 
+                      value={mfaCode}
+                      onChange={(e) => setMfaCode(e.target.value.replace(/[^0-9]/g, '').slice(0, 6))}
+                      placeholder="000 000"
+                      className="text-center text-2xl tracking-widest font-mono py-3"
+                      autoFocus
+                   />
+                   <Button type="submit" fullWidth isLoading={loading}>Verificar</Button>
+                </form>
+                
+                <button onClick={() => setShowMfaInput(false)} className="mt-4 text-sm text-gray-400 hover:text-gray-600 underline">
+                   Voltar para login
+                </button>
+              </div>
+              <div className="mt-6">
+                <StaticPageLinks className="text-xs text-gray-500" linkClassName="hover:text-brand-600" />
+              </div>
            </div>
         </div>
      );
@@ -160,12 +166,13 @@ export default function Login() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
-      <div className="w-full max-w-md bg-white p-8 rounded-lg shadow-md border border-gray-100">
-        <div className="text-center mb-8">
-          <DivvyLogo className="mx-auto w-16 h-16" />
-          <h1 className="text-2xl font-bold mt-4 text-gray-900">Bem-vindo de volta</h1>
-          <p className="text-gray-500 text-sm mt-1">Acesse sua conta para gerenciar despesas</p>
-        </div>
+      <div className="w-full max-w-md">
+        <div className="bg-white p-8 rounded-lg shadow-md border border-gray-100">
+          <div className="text-center mb-8">
+            <DivvyLogo className="mx-auto w-16 h-16" />
+            <h1 className="text-2xl font-bold mt-4 text-gray-900">Bem-vindo de volta</h1>
+            <p className="text-gray-500 text-sm mt-1">Acesse sua conta para gerenciar despesas</p>
+          </div>
         
         <form onSubmit={handleLogin} className="space-y-4">
           <Input label="Email" type="email" value={email} onChange={e => setEmail(e.target.value)} required placeholder="seu@email.com" />
@@ -220,9 +227,13 @@ export default function Login() {
           Google
         </Button>
 
-        <p className="mt-6 text-center text-sm text-gray-600">
-          Ainda não tem conta? <Link href={`/signup${router.query.redirect ? `?redirect=${router.query.redirect}` : ''}`} className="text-brand-600 font-bold hover:underline">Cadastre-se grátis</Link>
-        </p>
+          <p className="mt-6 text-center text-sm text-gray-600">
+            Ainda não tem conta? <Link href={`/signup${router.query.redirect ? `?redirect=${router.query.redirect}` : ''}`} className="text-brand-600 font-bold hover:underline">Cadastre-se grátis</Link>
+          </p>
+        </div>
+        <div className="mt-6">
+          <StaticPageLinks className="text-xs text-gray-500" linkClassName="hover:text-brand-600" />
+        </div>
       </div>
     </div>
   );
