@@ -1,7 +1,8 @@
+
 import React, { useEffect, useState, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabase';
-import { Divvy, DivvyMember, BroadcastMessage } from '../types';
+import { Divvy, BroadcastMessage } from '../types';
 import { Button } from '../components/ui/Button';
 import DivvyList from '../components/divvy/DivvyList';
 import DivvyForm from '../components/divvy/DivvyForm';
@@ -13,7 +14,7 @@ import { Archive, LayoutGrid, Plus, Sparkles, RefreshCcw, Megaphone, X, Search, 
 import toast from 'react-hot-toast';
 
 const DashboardContent: React.FC = () => {
-  const { user } = useAuth();
+  const { user, session } = useAuth();
   const [divvies, setDivvies] = useState<Divvy[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
@@ -45,149 +46,44 @@ const DashboardContent: React.FC = () => {
   }, []);
 
   const fetchDivvies = useCallback(async (silent = false) => {
-    if (!user) return;
+    if (!user || !session?.access_token) return;
     
     if (!silent) setLoading(true);
     else setIsRefreshing(true);
     setError(null);
 
     try {
-      // 1. Buscar grupos onde sou o criador
-      const { data: createdGroups, error: createdError } = await supabase
-        .from('divvies')
-        .select('*')
-        .eq('creatorid', user.id);
-      
-      if (createdError) throw createdError;
-
-      // 2. Buscar IDs dos grupos onde sou apenas membro (participante)
-      const { data: membershipRows, error: memberError } = await supabase
-        .from('divvymembers')
-        .select('divvyid')
-        .eq('userid', user.id);
-      
-      if (memberError) throw memberError;
-
-      const joinedIds = (membershipRows || []).map((m: any) => m.divvyid);
-      
-      // 3. Buscar os detalhes desses outros grupos
-      let joinedGroups: Divvy[] = [];
-      if (joinedIds.length > 0) {
-        const { data: joinedData } = await supabase
-          .from('divvies')
-          .select('*')
-          .in('id', joinedIds);
-        
-        if (joinedData) joinedGroups = joinedData;
-      }
-
-      // 4. Combinar e remover duplicatas
-      const combined = [...(createdGroups || []), ...joinedGroups];
-      const uniqueMap = new Map<string, Divvy>();
-      combined.forEach(g => {
-        if (g && g.id) uniqueMap.set(g.id, g);
-      });
-
-      const finalGroups = Array.from(uniqueMap.values());
-      const allGroupIds = finalGroups.map(g => g.id);
-
-      // 5. Buscar TODOS os membros com Fallback de Robustez
-      let allMembers: any[] = [];
-      
-      if (allGroupIds.length > 0) {
-        // Tentativa A: Join direto (Ideal)
-        const { data: joinedMembers, error: fetchMembersError } = await supabase
-          .from('divvymembers')
-          .select(`
-            divvyid, 
-            userid, 
-            email,
-            userprofiles (
-              id,
-              fullname,
-              displayname,
-              avatarurl
-            )
-          `)
-          .in('divvyid', allGroupIds);
-
-        if (!fetchMembersError) {
-          allMembers = joinedMembers || [];
-        } else {
-          // Tentativa B: Fallback manual se o relacionamento falhar
-          console.warn("Relacionamento direto falhou, usando fallback manual...", fetchMembersError.message);
-          
-          // Buscar membros raw
-          const { data: rawMembers, error: rawError } = await supabase
-              .from('divvymembers')
-              .select('*')
-              .in('divvyid', allGroupIds);
-              
-          if (rawError) throw rawError;
-          
-          // Buscar perfis separadamente
-          const userIds = Array.from(new Set((rawMembers || []).map((m: any) => m.userid)));
-          let profiles: any[] = [];
-          
-          if (userIds.length > 0) {
-            const { data: pData } = await supabase
-                .from('userprofiles')
-                .select('id, fullname, displayname, avatarurl')
-                .in('id', userIds);
-            profiles = pData || [];
-          }
-          
-          // Merge manual
-          const profilesMap = new Map(profiles.map((p: any) => [p.id, p]));
-          allMembers = (rawMembers || []).map((m: any) => ({
-              ...m,
-              userprofiles: profilesMap.get(m.userid) || null
-          }));
+      // Usar a API Route segura em vez de chamada direta para evitar erro de recursão RLS
+      const response = await fetch('/api/dashboard/data', {
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`
         }
-      }
-
-      // 6. Mapear membros para seus respectivos grupos
-      const membersByGroup: Record<string, DivvyMember[]> = {};
-      if (allMembers) {
-        allMembers.forEach((m: any) => {
-          if (!membersByGroup[m.divvyid]) {
-            membersByGroup[m.divvyid] = [];
-          }
-          membersByGroup[m.divvyid].push(m);
-        });
-      }
-
-      // 7. Enriquecer os objetos dos grupos
-      const enrichedDivvies = finalGroups.map(g => {
-        const groupMembers = membersByGroup[g.id] || [];
-        return {
-          ...g,
-          members: groupMembers,
-          member_count: Math.max(groupMembers.length, 1) 
-        };
       });
 
-      // Ordenar por data (createdat)
-      enrichedDivvies.sort((a, b) => new Date(b.createdat).getTime() - new Date(a.createdat).getTime());
+      if (!response.ok) {
+        const errData = await response.json();
+        throw new Error(errData.error || 'Falha ao carregar dados');
+      }
 
-      setDivvies(enrichedDivvies);
+      const data = await response.json();
+      setDivvies(data);
+
     } catch (err: any) {
       console.error("Dashboard Error:", err);
       setError(err.message || 'Erro ao carregar dados.');
-      if (err.message?.includes('infinite recursion')) {
-         toast.error("Erro de configuração do banco de dados (Recursão de Política). Contate o administrador.");
-      }
     } finally {
       setLoading(false);
       setIsRefreshing(false);
     }
-  }, [user]);
+  }, [user, session]);
 
   useEffect(() => {
     fetchDivvies();
     fetchBroadcasts();
     
     // Inscrição para atualizações em tempo real
+    // Mesmo que a leitura via supabase-js falhe por RLS, o evento de mudança muitas vezes passa
+    // E então chamamos a API novamente para buscar os dados frescos de forma segura.
     const channel = supabase.channel('dashboard_realtime')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'divvies' }, () => fetchDivvies(true))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'divvymembers' }, () => fetchDivvies(true))
