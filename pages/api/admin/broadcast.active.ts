@@ -1,25 +1,31 @@
 
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { createServerSupabaseClient } from '../../../lib/supabaseServer';
+import { authorizeUser } from '../../../lib/serverAuth';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const { title, body, target, secret } = req.body;
+  const { title, body, target } = req.body;
 
-  // Verificação de segurança simples (em produção usaríamos sessões/JWT robustos)
-  // O frontend admin deve enviar uma chave ou verificamos a sessão no servidor.
-  // Aqui, assumimos que a proteção middleware é suficiente e/ou validamos um secret se necessário.
-  
   if (!title || !body || !target) {
     return res.status(400).json({ error: 'Campos obrigatórios faltando.' });
   }
 
-  const supabase = createServerSupabaseClient();
-
   try {
+    const user = await authorizeUser(req, res);
+    const supabase = createServerSupabaseClient();
+
+    // Check Admin Permissions
+    const { data: profile } = await supabase.from('userprofiles').select('is_super_admin').eq('id', user.id).single();
+    const isHardcodedAdmin = user.email === 'falecomdivvy@gmail.com';
+    
+    if (!isHardcodedAdmin && !profile?.is_super_admin) {
+        return res.status(403).json({ error: 'Forbidden' });
+    }
+
     const { error } = await supabase.from('broadcastmessages').insert({
       title,
       body,

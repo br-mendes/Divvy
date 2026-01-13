@@ -10,10 +10,11 @@ import { ProtectedRoute } from '../components/ProtectedRoute';
 import toast from 'react-hot-toast';
 import { 
   ShieldCheck, Users, Megaphone, Activity, MessageSquare, 
-  ExternalLink, Search, Trash2, LayoutDashboard, CheckCircle, Mail 
+  ExternalLink, Search, Trash2, LayoutDashboard, CheckCircle, Mail,
+  Layers, Ban, Check, Lock
 } from 'lucide-react';
 
-type AdminTab = 'overview' | 'users' | 'tickets' | 'broadcast';
+type AdminTab = 'overview' | 'users' | 'groups' | 'tickets' | 'broadcast';
 
 export default function AdminPage() {
   const { user, loading } = useAuth();
@@ -21,15 +22,18 @@ export default function AdminPage() {
   
   // State Global
   const [activeTab, setActiveTab] = useState<AdminTab>('overview');
+  const [isAdmin, setIsAdmin] = useState(false);
   
   // Data States
   const [stats, setStats] = useState<any>(null);
   const [usersList, setUsersList] = useState<any[]>([]);
+  const [groupsList, setGroupsList] = useState<any[]>([]);
   const [tickets, setTickets] = useState<any[]>([]);
   const [loadingData, setLoadingData] = useState(false);
   
   // Filter States
   const [userSearch, setUserSearch] = useState('');
+  const [groupSearch, setGroupSearch] = useState('');
 
   // Broadcast Modal State
   const [broadcastModal, setBroadcastModal] = useState(false);
@@ -41,14 +45,42 @@ export default function AdminPage() {
   // Security Check
   useEffect(() => {
     if (!loading) {
-      if (!user || user.email !== 'falecomdivvy@gmail.com') {
-        router.push('/');
-      } else {
-        // Carrega dados iniciais baseados na aba
-        fetchData(activeTab);
-      }
+      const checkAdmin = async () => {
+        if (!user) {
+            router.push('/');
+            return;
+        }
+
+        // Check 1: Email Hardcoded (Fallback/Bootstrap)
+        if (user.email === 'falecomdivvy@gmail.com') {
+            setIsAdmin(true);
+            fetchData(activeTab);
+            return;
+        }
+
+        // Check 2: Database Flag
+        const { data } = await supabase
+            .from('userprofiles')
+            .select('is_super_admin')
+            .eq('id', user.id)
+            .single();
+        
+        if (data?.is_super_admin) {
+            setIsAdmin(true);
+            fetchData(activeTab);
+        } else {
+            router.push('/');
+        }
+      };
+      
+      checkAdmin();
     }
-  }, [user, loading, activeTab, router]);
+  }, [user, loading, router]); // removido activeTab do deps para evitar loop, chamado explicitamente
+
+  // Refetch when tab changes if already admin
+  useEffect(() => {
+      if(isAdmin) fetchData(activeTab);
+  }, [activeTab, isAdmin]);
 
   const fetchData = useCallback(async (tab: AdminTab) => {
     setLoadingData(true);
@@ -60,6 +92,10 @@ export default function AdminPage() {
       else if (tab === 'users') {
         const res = await fetch('/api/admin/users');
         if (res.ok) setUsersList(await res.json());
+      }
+      else if (tab === 'groups') {
+        const res = await fetch('/api/admin/groups');
+        if (res.ok) setGroupsList(await res.json());
       }
       else if (tab === 'tickets') {
         const { data, error } = await supabase
@@ -112,13 +148,59 @@ export default function AdminPage() {
     }
   };
 
+  const handleToggleUserStatus = async (userId: string, currentStatus: string) => {
+      const newStatus = currentStatus === 'suspended' ? 'active' : 'suspended';
+      const action = newStatus === 'active' ? 'Reativar' : 'Suspender';
+      
+      if (!confirm(`Tem certeza que deseja ${action} este usuário?`)) return;
+
+      try {
+          const res = await fetch(`/api/admin/users/${userId}/status`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ status: newStatus })
+          });
+
+          if (!res.ok) throw new Error("Falha ao alterar status");
+
+          setUsersList(usersList.map(u => u.id === userId ? { ...u, status: newStatus } : u));
+          toast.success(`Usuário ${newStatus === 'active' ? 'reativado' : 'suspenso'}.`);
+      } catch (e: any) {
+          toast.error(e.message);
+      }
+  };
+
+  const handleDeleteGroup = async (groupId: string) => {
+      const confirmText = prompt("Para confirmar a exclusão deste grupo, digite 'DELETAR':");
+      if (confirmText !== 'DELETAR') return;
+
+      try {
+          const res = await fetch('/api/admin/groups', {
+              method: 'DELETE',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ id: groupId })
+          });
+
+          if (!res.ok) throw new Error("Falha ao deletar grupo");
+
+          setGroupsList(groupsList.filter(g => g.id !== groupId));
+          toast.success("Grupo excluído.");
+      } catch (e: any) {
+          toast.error(e.message);
+      }
+  };
+
   const filteredUsers = usersList.filter(u => 
     u.email.toLowerCase().includes(userSearch.toLowerCase()) ||
     (u.fullname && u.fullname.toLowerCase().includes(userSearch.toLowerCase()))
   );
 
-  if (loading || !user || user.email !== 'falecomdivvy@gmail.com') {
-     return <div className="min-h-screen flex items-center justify-center text-gray-500">Acesso restrito</div>;
+  const filteredGroups = groupsList.filter(g =>
+    g.name.toLowerCase().includes(groupSearch.toLowerCase())
+  );
+
+  if (loading || !isAdmin) {
+     return <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-dark-950 text-gray-500">Verificando permissões...</div>;
   }
 
   return (
@@ -137,38 +219,35 @@ export default function AdminPage() {
                         <p className="text-gray-500 dark:text-gray-400 text-sm">Controle total do sistema Divvy</p>
                     </div>
                 </div>
-                <div className="flex items-center gap-2 text-sm bg-white dark:bg-dark-900 py-2 px-4 rounded-full border border-gray-200 dark:border-dark-800 shadow-sm">
+                <div className="flex items-center gap-2 text-sm bg-white dark:bg-dark-900 py-2 px-4 rounded-full border border-gray-200 dark:border-dark-800 shadow-sm text-green-600 dark:text-green-400">
                     <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
-                    Sistema Operacional
+                    Admin Conectado
                 </div>
             </div>
 
             {/* Navigation Tabs */}
             <div className="flex overflow-x-auto gap-2 mb-8 pb-2 scrollbar-hide border-b border-gray-200 dark:border-dark-800">
-                <button 
-                    onClick={() => setActiveTab('overview')}
-                    className={`flex items-center gap-2 px-6 py-3 rounded-t-lg font-medium transition-all ${activeTab === 'overview' ? 'bg-white dark:bg-dark-900 text-brand-600 border-b-2 border-brand-600' : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'}`}
-                >
-                    <LayoutDashboard size={18} /> Visão Geral
-                </button>
-                <button 
-                    onClick={() => setActiveTab('users')}
-                    className={`flex items-center gap-2 px-6 py-3 rounded-t-lg font-medium transition-all ${activeTab === 'users' ? 'bg-white dark:bg-dark-900 text-brand-600 border-b-2 border-brand-600' : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'}`}
-                >
-                    <Users size={18} /> Usuários
-                </button>
-                <button 
-                    onClick={() => setActiveTab('tickets')}
-                    className={`flex items-center gap-2 px-6 py-3 rounded-t-lg font-medium transition-all ${activeTab === 'tickets' ? 'bg-white dark:bg-dark-900 text-brand-600 border-b-2 border-brand-600' : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'}`}
-                >
-                    <MessageSquare size={18} /> Tickets {tickets.length > 0 && <span className="ml-1 bg-red-500 text-white text-[10px] px-1.5 rounded-full">{tickets.length}</span>}
-                </button>
-                <button 
-                    onClick={() => setActiveTab('broadcast')}
-                    className={`flex items-center gap-2 px-6 py-3 rounded-t-lg font-medium transition-all ${activeTab === 'broadcast' ? 'bg-white dark:bg-dark-900 text-brand-600 border-b-2 border-brand-600' : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'}`}
-                >
-                    <Megaphone size={18} /> Broadcast
-                </button>
+                {[
+                    { id: 'overview', label: 'Visão Geral', icon: LayoutDashboard },
+                    { id: 'users', label: 'Usuários', icon: Users },
+                    { id: 'groups', label: 'Grupos', icon: Layers },
+                    { id: 'tickets', label: 'Tickets', icon: MessageSquare, count: tickets.length },
+                    { id: 'broadcast', label: 'Broadcast', icon: Megaphone },
+                ].map((tab) => (
+                    <button 
+                        key={tab.id}
+                        onClick={() => setActiveTab(tab.id as AdminTab)}
+                        className={`flex items-center gap-2 px-6 py-3 rounded-t-lg font-medium transition-all whitespace-nowrap ${
+                            activeTab === tab.id 
+                            ? 'bg-white dark:bg-dark-900 text-brand-600 border-b-2 border-brand-600' 
+                            : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
+                        }`}
+                    >
+                        <tab.icon size={18} /> 
+                        {tab.label}
+                        {tab.count ? <span className="ml-1 bg-red-500 text-white text-[10px] px-1.5 rounded-full">{tab.count}</span> : null}
+                    </button>
+                ))}
             </div>
 
             {/* CONTENT AREA */}
@@ -233,8 +312,8 @@ export default function AdminPage() {
                                         <th className="px-6 py-4">Usuário</th>
                                         <th className="px-6 py-4">Email</th>
                                         <th className="px-6 py-4">Cadastro</th>
-                                        <th className="px-6 py-4">Último Login</th>
-                                        <th className="px-6 py-4 text-center">Status</th>
+                                        <th className="px-6 py-4">Status</th>
+                                        <th className="px-6 py-4 text-center">Ações</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-gray-100 dark:divide-dark-800">
@@ -246,20 +325,37 @@ export default function AdminPage() {
                                         filteredUsers.map(u => (
                                             <tr key={u.id} className="hover:bg-gray-50 dark:hover:bg-dark-800/50 transition-colors">
                                                 <td className="px-6 py-4 font-medium text-gray-900 dark:text-white flex items-center gap-3">
-                                                    <div className="w-8 h-8 rounded-full bg-brand-100 dark:bg-brand-900/30 flex items-center justify-center text-brand-600 dark:text-brand-400 font-bold">
+                                                    <div className="w-8 h-8 rounded-full bg-brand-100 dark:bg-brand-900/30 flex items-center justify-center text-brand-600 dark:text-brand-400 font-bold shrink-0">
                                                         {u.fullname?.charAt(0) || u.email.charAt(0)}
                                                     </div>
-                                                    {u.fullname || 'Sem nome'}
+                                                    <div>
+                                                        <div>{u.fullname || 'Sem nome'}</div>
+                                                        <div className="text-xs text-gray-400">{u.id}</div>
+                                                    </div>
                                                 </td>
                                                 <td className="px-6 py-4 text-gray-600 dark:text-gray-300">{u.email}</td>
                                                 <td className="px-6 py-4 text-gray-500">{new Date(u.createdat).toLocaleDateString()}</td>
-                                                <td className="px-6 py-4 text-gray-500">
-                                                    {u.last_login_at ? new Date(u.last_login_at).toLocaleDateString() : 'Nunca'}
+                                                <td className="px-6 py-4">
+                                                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                                                        u.status === 'suspended' 
+                                                        ? 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400'
+                                                        : 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400'
+                                                    }`}>
+                                                        {u.status === 'suspended' ? 'Suspenso' : 'Ativo'}
+                                                    </span>
                                                 </td>
                                                 <td className="px-6 py-4 text-center">
-                                                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400">
-                                                        Ativo
-                                                    </span>
+                                                    <button 
+                                                        onClick={() => handleToggleUserStatus(u.id, u.status || 'active')}
+                                                        className={`p-2 rounded-lg transition-colors ${
+                                                            u.status === 'suspended'
+                                                            ? 'text-green-600 hover:bg-green-50 dark:hover:bg-green-900/20'
+                                                            : 'text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20'
+                                                        }`}
+                                                        title={u.status === 'suspended' ? "Reativar usuário" : "Suspender usuário"}
+                                                    >
+                                                        {u.status === 'suspended' ? <CheckCircle size={18} /> : <Ban size={18} />}
+                                                    </button>
                                                 </td>
                                             </tr>
                                         ))
@@ -270,7 +366,79 @@ export default function AdminPage() {
                     </div>
                 )}
 
-                {/* 3. TICKETS TAB */}
+                {/* 3. GROUPS TAB */}
+                {activeTab === 'groups' && (
+                    <div className="bg-white dark:bg-dark-900 rounded-2xl shadow-sm border border-gray-100 dark:border-dark-800 overflow-hidden">
+                        <div className="p-6 border-b border-gray-100 dark:border-dark-800 flex flex-col sm:flex-row justify-between items-center gap-4">
+                            <h2 className="text-lg font-bold text-gray-900 dark:text-white">Gerenciar Grupos</h2>
+                            <div className="relative w-full sm:w-64">
+                                <Search size={18} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+                                <input 
+                                    type="text" 
+                                    placeholder="Buscar grupos..." 
+                                    value={groupSearch}
+                                    onChange={(e) => setGroupSearch(e.target.value)}
+                                    className="w-full pl-10 pr-4 py-2 rounded-lg border border-gray-200 dark:border-dark-700 bg-gray-50 dark:bg-dark-800 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+                                />
+                            </div>
+                        </div>
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-sm text-left">
+                                <thead className="bg-gray-50 dark:bg-dark-800 text-gray-500 dark:text-gray-400 font-medium">
+                                    <tr>
+                                        <th className="px-6 py-4">Nome</th>
+                                        <th className="px-6 py-4">Tipo</th>
+                                        <th className="px-6 py-4 text-center">Membros</th>
+                                        <th className="px-6 py-4">Status</th>
+                                        <th className="px-6 py-4 text-center">Ações</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-gray-100 dark:divide-dark-800">
+                                    {loadingData ? (
+                                        <tr><td colSpan={5} className="px-6 py-8 text-center text-gray-500">Carregando grupos...</td></tr>
+                                    ) : filteredGroups.length === 0 ? (
+                                        <tr><td colSpan={5} className="px-6 py-8 text-center text-gray-500">Nenhum grupo encontrado.</td></tr>
+                                    ) : (
+                                        filteredGroups.map(g => (
+                                            <tr key={g.id} className="hover:bg-gray-50 dark:hover:bg-dark-800/50 transition-colors">
+                                                <td className="px-6 py-4 font-medium text-gray-900 dark:text-white">
+                                                    {g.name}
+                                                    <div className="text-xs text-gray-400">{g.id}</div>
+                                                </td>
+                                                <td className="px-6 py-4 capitalize text-gray-600 dark:text-gray-300">{g.type}</td>
+                                                <td className="px-6 py-4 text-center text-gray-600 dark:text-gray-300 font-mono">
+                                                    {g.member_count}
+                                                </td>
+                                                <td className="px-6 py-4">
+                                                    {g.isarchived ? (
+                                                        <span className="inline-flex items-center gap-1 text-xs text-gray-500 bg-gray-100 dark:bg-dark-700 px-2 py-0.5 rounded">
+                                                            <Lock size={10} /> Arquivado
+                                                        </span>
+                                                    ) : (
+                                                        <span className="inline-flex items-center gap-1 text-xs text-green-600 bg-green-100 dark:bg-green-900/20 px-2 py-0.5 rounded">
+                                                            <Check size={10} /> Ativo
+                                                        </span>
+                                                    )}
+                                                </td>
+                                                <td className="px-6 py-4 text-center">
+                                                    <button 
+                                                        onClick={() => handleDeleteGroup(g.id)}
+                                                        className="p-2 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
+                                                        title="Excluir Grupo"
+                                                    >
+                                                        <Trash2 size={18} />
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        ))
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                )}
+
+                {/* 4. TICKETS TAB */}
                 {activeTab === 'tickets' && (
                     <div className="bg-white dark:bg-dark-900 rounded-2xl shadow-sm border border-gray-100 dark:border-dark-800 p-6">
                         <h2 className="text-lg font-bold text-gray-900 dark:text-white mb-6">Tickets de Suporte</h2>
@@ -323,7 +491,7 @@ export default function AdminPage() {
                     </div>
                 )}
 
-                {/* 4. BROADCAST TAB */}
+                {/* 5. BROADCAST TAB */}
                 {activeTab === 'broadcast' && (
                     <div className="bg-white dark:bg-dark-900 rounded-2xl shadow-sm border border-gray-100 dark:border-dark-800 p-8 flex flex-col items-center text-center">
                         <div className="w-20 h-20 bg-purple-50 dark:bg-purple-900/20 text-purple-600 dark:text-purple-400 rounded-full flex items-center justify-center mb-6">

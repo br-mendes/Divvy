@@ -10,6 +10,9 @@ export interface UserProfile {
   last_login_at?: string;
   createdat: string;
   updatedat: string;
+  // Novos campos administrativos
+  is_super_admin?: boolean;
+  status?: 'active' | 'suspended';
 }
 
 export type DivvyType = 'trip' | 'roommate' | 'couple' | 'event' | 'other';

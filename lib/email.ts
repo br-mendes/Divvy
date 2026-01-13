@@ -1,8 +1,13 @@
 
+import { getURL } from './getURL';
+
 // Helper to send email via our own API Route (Server-Side)
 async function sendViaApiRoute(payload: { to: string | string[], subject: string, html: string }) {
   try {
-    const response = await fetch('/api/send-email', {
+    // Construct absolute URL to avoid "Failed to parse URL" on server-side
+    const apiUrl = `${getURL()}/api/send-email`;
+    
+    const response = await fetch(apiUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'

@@ -1,6 +1,7 @@
 
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { createServerSupabaseClient } from '../../../lib/supabaseServer';
+import { createServerSupabaseClient } from '../../../../lib/supabaseServer';
+import { authorizeUser } from '../../../../lib/serverAuth';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   const { id } = req.query;
@@ -9,9 +10,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const supabase = createServerSupabaseClient();
-
   try {
+    const user = await authorizeUser(req, res);
+    const supabase = createServerSupabaseClient();
+
+    // Check Admin Permissions
+    const { data: profile } = await supabase.from('userprofiles').select('is_super_admin').eq('id', user.id).single();
+    const isHardcodedAdmin = user.email === 'falecomdivvy@gmail.com';
+    
+    if (!isHardcodedAdmin && !profile?.is_super_admin) {
+        return res.status(403).json({ error: 'Forbidden' });
+    }
+
     const { error } = await supabase
       .from('supporttickets')
       .delete()
