@@ -137,7 +137,7 @@ export default function InviteModal({
         <div className="space-y-6">
           <div className="flex flex-col items-center justify-center">
             <SuccessCheck />
-            <p className="text-lg font-bold text-gray-900 dark:text-white mt-2">Convite Criado!</p>
+            <p className="text-lg font-bold text-gray-900 dark:text-white mt-2">Convite Gerado!</p>
             <p className="text-sm text-gray-500 text-center mb-4">Um email foi enviado para {email}.</p>
             
             {qrCodeUrl && (

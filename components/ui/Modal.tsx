@@ -38,7 +38,7 @@ export const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, children, 
         border border-gray-100 dark:border-dark-700 transition-all transform animate-fade-in-up
       `}>
         {/* Header */}
-        <div className="flex items-center justify-between p-5 border-b border-gray-50 dark:border-dark-700">
+        <div className={`flex items-center justify-between p-5 ${title ? 'border-b border-gray-50 dark:border-dark-700' : 'pb-0'}`}>
           <h3 className="text-lg font-bold text-gray-900 dark:text-white truncate pr-4">
             {title}
           </h3>
