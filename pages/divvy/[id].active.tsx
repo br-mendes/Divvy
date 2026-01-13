@@ -16,7 +16,7 @@ import EmptyState from '../../components/ui/EmptyState';
 import ImageViewerModal from '../../components/ui/ImageViewerModal';
 import { 
   Plus, UserPlus, Receipt, PieChart, Users, Lock, LockOpen, 
-  Wallet, Archive, LucideIcon, Trash2, Shield, Calendar, Download, LogOut, Maximize2
+  Wallet, Archive, LucideIcon, Trash2, Shield, Calendar, Download, LogOut, Maximize2, RefreshCw
 } from 'lucide-react';
 import { ProtectedRoute } from '../../components/ProtectedRoute';
 import toast from 'react-hot-toast';
@@ -58,6 +58,7 @@ const DivvyDetailContent: React.FC = () => {
       const { data: divvyData, error: dErr } = await supabase.from('divvies').select('*').eq('id', divvyId).single();
       if (dErr || !divvyData) { 
         console.error("Group fetch error:", dErr);
+        setDivvy(null);
         setLoading(false); 
         return; 
       }
@@ -349,7 +350,21 @@ const DivvyDetailContent: React.FC = () => {
   };
 
   if (loading) return <div className="flex justify-center p-20"><LoadingSpinner /></div>;
-  if (!divvy) return <EmptyState message="Grupo não acessível" />;
+  
+  if (!divvy) return (
+    <div className="flex flex-col items-center justify-center py-20 px-4">
+       <EmptyState 
+         message="Grupo não acessível" 
+         description="Você pode não ter permissão para ver este grupo ou ele não existe." 
+       />
+       <Button onClick={() => window.location.reload()} variant="outline" className="mt-4 flex items-center gap-2">
+          <RefreshCw size={16} /> Tentar Novamente
+       </Button>
+       <Button onClick={() => router.push('/dashboard')} variant="ghost" className="mt-2 text-gray-500">
+          Voltar ao Dashboard
+       </Button>
+    </div>
+  );
 
   const tabs: { id: any, label: string, icon: LucideIcon }[] = [
     { id: 'expenses', label: 'Despesas', icon: Receipt },
