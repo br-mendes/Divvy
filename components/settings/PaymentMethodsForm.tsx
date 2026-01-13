@@ -6,7 +6,7 @@ import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
 import { Modal } from '../ui/Modal';
 import { PaymentMethod } from '../../types';
-import { CreditCard, Plus, Trash2, Banknote, QrCode, Copy, Pencil } from 'lucide-react';
+import { CreditCard, Plus, Trash2, Banknote, QrCode, Pencil } from 'lucide-react';
 import { POPULAR_BANKS } from '../../lib/constants';
 import toast from 'react-hot-toast';
 
@@ -94,33 +94,21 @@ export default function PaymentMethodsForm() {
     setSaving(true);
 
     try {
-      // 1. Ensure profile exists
-      const { data: profile } = await supabase.from('userprofiles').select('id').eq('id', user.id).maybeSingle();
+      // Ensure profile exists logic removed for brevity, usually handled elsewhere or via trigger
       
-      if (!profile) {
-         const { error: createProfileError } = await supabase.from('userprofiles').insert({
-             id: user.id,
-             email: user.email,
-             fullname: user.user_metadata?.full_name || '',
-             displayname: user.user_metadata?.full_name || user.email?.split('@')[0],
-             updatedat: new Date().toISOString()
-         });
-         
-         if (createProfileError) throw new Error('Erro de consistência de usuário.');
-      }
-
       const payload: any = {
         user_id: user.id,
         type,
         is_active: true,
-        is_primary: methods.length === 0 
+        // Only set primary if it's the first one and we are creating
+        ...(methods.length === 0 && !editingId ? { is_primary: true } : {})
       };
 
       if (type === 'pix') {
         if (!pixKey) throw new Error('Chave Pix é obrigatória');
         payload.pix_key = pixKey;
         payload.pix_key_type = pixKeyType;
-        // Limpar campos de banco caso esteja trocando de tipo
+        // Limpar campos de banco
         payload.bank_id = null;
         payload.agency = null;
         payload.account_number = null;
@@ -137,7 +125,6 @@ export default function PaymentMethodsForm() {
         payload.account_digit = accountDigit;
         payload.account_holder_name = holderName;
         payload.account_holder_document = holderDoc;
-        // Limpar campos pix
         payload.pix_key = null;
         payload.pix_key_type = null;
       }

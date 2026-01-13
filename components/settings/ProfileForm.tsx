@@ -24,19 +24,23 @@ export default function ProfileForm() {
 
   const loadProfileData = async () => {
     if (!user) return;
-    const { data: profile } = await supabase
-      .from('userprofiles')
-      .select('fullname, displayname, avatarurl')
-      .eq('id', user.id)
-      .single();
+    try {
+        const { data: profile, error } = await supabase
+        .from('userprofiles')
+        .select('fullname, displayname, avatarurl')
+        .eq('id', user.id)
+        .single();
 
-    if (profile) {
-      setName(profile.displayname || profile.fullname || user.user_metadata?.full_name || '');
-      setAvatarUrl(profile.avatarurl || user.user_metadata?.avatar_url || null);
-    } else {
-      setName(user.user_metadata?.full_name || '');
+        if (profile) {
+        setName(profile.displayname || profile.fullname || user.user_metadata?.full_name || '');
+        setAvatarUrl(profile.avatarurl || user.user_metadata?.avatar_url || null);
+        } else {
+        setName(user.user_metadata?.full_name || '');
+        }
+        setEmail(user.email || '');
+    } catch (error) {
+        console.error("Erro ao carregar perfil:", error);
     }
-    setEmail(user.email || '');
   };
 
   const handleAvatarUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -59,21 +63,20 @@ export default function ProfileForm() {
         .from('avatars')
         .getPublicUrl(fileName);
 
-      // Use upsert here as well to be safe
       const { error: updateError } = await supabase
         .from('userprofiles')
-        .upsert({ 
-            id: user.id,
-            email: user.email,
+        .update({ 
             avatarurl: publicUrl,
             updatedat: new Date().toISOString()
-        }, { onConflict: 'id' });
+        })
+        .eq('id', user.id);
 
       if (updateError) throw updateError;
       
       setAvatarUrl(publicUrl);
       toast.success('Foto de perfil atualizada!');
     } catch (error: any) {
+      console.error(error);
       toast.error('Erro ao fazer upload: ' + error.message);
     } finally {
       setAvatarLoading(false);
@@ -85,7 +88,8 @@ export default function ProfileForm() {
       if (!user || !confirm("Remover foto de perfil?")) return;
       setAvatarLoading(true);
       try {
-          await supabase.from('userprofiles').update({ avatarurl: null }).eq('id', user.id);
+          const { error } = await supabase.from('userprofiles').update({ avatarurl: null }).eq('id', user.id);
+          if (error) throw error;
           setAvatarUrl(null);
           toast.success("Foto removida.");
       } catch (error: any) {
@@ -100,7 +104,6 @@ export default function ProfileForm() {
     if (!user) return;
     setLoading(true);
     try {
-      // Usar upsert para garantir que o perfil seja criado caso não exista
       const { error } = await supabase
         .from('userprofiles')
         .upsert({

@@ -13,9 +13,10 @@ export default function ChangePasswordForm() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
 
-  // Check if user is logged in via Email/Password provider.
+  // Verifica se o provedor principal é 'email' (login com senha)
   const isEmailProvider = user?.app_metadata?.provider === 'email';
 
+  // Se não for login por email/senha, não exibe o formulário
   if (!isEmailProvider) {
       return null;
   }
