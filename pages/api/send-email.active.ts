@@ -8,10 +8,8 @@ const API_KEY = process.env.RESEND_API_KEY || 're_D4Q38wCF_DkLPPDbmZMYR7fLbCDvYB
 
 const resend = new Resend(API_KEY);
 
-// CONFIGURAÇÃO DE DNS ATUALIZADA:
-// O domínio oficial configurado no Resend é 'divvyapp.online'.
-// O remetente deve corresponder a este domínio para validação SPF/DKIM.
-const FROM_EMAIL = process.env.NEXT_PUBLIC_RESEND_FROM_EMAIL || 'nao-responda@divvyapp.online';
+// Remetente padrão
+const FROM_EMAIL = 'nao-responda@divvyapp.online';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') {
@@ -39,12 +37,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     if (data.error) {
         console.error('Resend API Error Payload:', data.error);
-        
-        // Tratamento específico para erros de domínio (SPF/DKIM/Validação)
         if (data.error.message?.includes('domain') || data.error.name === 'validation_error') {
              throw new Error(`Erro de verificação de domínio no Resend. Certifique-se que '${FROM_EMAIL.split('@')[1]}' está verificado e as chaves DNS estão propagadas.`);
         }
-        
         throw new Error(data.error.message);
     }
 

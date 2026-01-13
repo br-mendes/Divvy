@@ -7,7 +7,7 @@ import QRCode from 'qrcode';
 import { getURL } from '../../../lib/getURL';
 import { Resend } from 'resend';
 
-// Inicializar Resend diretamente aqui para evitar loops de requisição HTTP
+// Inicializar Resend diretamente aqui
 const RESEND_API_KEY = process.env.RESEND_API_KEY || 're_D4Q38wCF_DkLPPDbmZMYR7fLbCDvYBLhG';
 const resend = new Resend(RESEND_API_KEY);
 const FROM_EMAIL = 'nao-responda@divvyapp.online';
@@ -79,12 +79,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     
     const inviterName = inviterProfile?.displayname || inviterProfile?.fullname || user.email || 'Um amigo';
     const divvyName = divvy?.name || 'Grupo de Despesas';
-    const inviteLink = `${getURL()}/join/${inviteToken}`;
+    
+    // DEFINIÇÃO DA URL DE CONVITE: 
+    // Prioriza divvyapp.online ou divvy-roan.vercel.app para emails, evitando links de preview quebrados.
+    const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://divvyapp.online';
+    const inviteLink = `${baseUrl}/join/${inviteToken}`;
     
     let qrCodeDataUrl = '';
     try { qrCodeDataUrl = await QRCode.toDataURL(inviteLink); } catch (e) {}
 
-    // 5. Enviar Email DIRETAMENTE (Sem fetch interno)
+    // 5. Enviar Email DIRETAMENTE
     const htmlContent = `
       <!DOCTYPE html>
       <html>
@@ -125,16 +129,21 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
         if (emailData.error) {
             console.error("Resend Error:", emailData.error);
-            // Retornar sucesso com aviso, pois o link foi gerado
+            // Retornar sucesso com aviso explícito
             return res.status(200).json({ 
                 success: true, 
                 inviteLink, 
-                warning: 'Convite criado, mas falha ao enviar email. Use o link manual.' 
+                warning: `Falha no envio de email: ${emailData.error.message}. Por favor, envie o link manualmente.` 
             });
         }
-    } catch (emailErr) {
+    } catch (emailErr: any) {
         console.error("Email Exception:", emailErr);
-        // Não falhar o request todo se o email falhar
+        // Retornar sucesso com aviso explícito
+        return res.status(200).json({ 
+            success: true, 
+            inviteLink, 
+            warning: `Erro técnico no email: ${emailErr.message}. Copie o link abaixo.`
+        });
     }
 
     return res.status(200).json({ success: true, inviteLink });

@@ -6,7 +6,7 @@ import { Input } from '../ui/Input';
 import { Modal } from '../ui/Modal';
 import SuccessCheck from '../ui/SuccessCheck';
 import toast from 'react-hot-toast';
-import { Copy, Share2, Send } from 'lucide-react';
+import { Copy, Share2, Send, AlertTriangle } from 'lucide-react';
 import QRCode from 'qrcode';
 import { supabase } from '../../lib/supabase';
 
@@ -29,6 +29,7 @@ export default function InviteModal({
   const [inviteLink, setInviteLink] = useState('');
   const [qrCodeUrl, setQrCodeUrl] = useState('');
   const [copiedToClipboard, setCopiedToClipboard] = useState(false);
+  const [emailWarning, setEmailWarning] = useState<string | null>(null);
 
   // Reset state when modal opens/closes
   useEffect(() => {
@@ -37,6 +38,7 @@ export default function InviteModal({
             setInviteLink('');
             setQrCodeUrl('');
             setEmail('');
+            setEmailWarning(null);
         }, 300);
     }
   }, [isOpen]);
@@ -53,6 +55,7 @@ export default function InviteModal({
   async function handleSendInvite(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
+    setEmailWarning(null);
     try {
       if (!user) throw new Error('Usuário não autenticado');
 
@@ -79,7 +82,6 @@ export default function InviteModal({
       if (contentType && contentType.indexOf("application/json") !== -1) {
         data = await response.json();
       } else {
-        // Se não for JSON (ex: erro 500 do Next.js HTML), lança erro legível
         const text = await response.text();
         console.error("Resposta inválida do servidor:", text);
         throw new Error(`Erro de servidor (${response.status}). Tente novamente mais tarde.`);
@@ -90,7 +92,14 @@ export default function InviteModal({
       }
 
       setInviteLink(data.inviteLink);
-      toast.success('Convite enviado com sucesso!');
+      
+      if (data.warning) {
+          setEmailWarning(data.warning);
+          toast(data.warning, { icon: '⚠️', duration: 5000 });
+      } else {
+          toast.success('Convite enviado com sucesso!');
+      }
+
     } catch (err: any) {
       console.error(err);
       toast.error(err.message || 'Erro ao enviar convite');
@@ -162,11 +171,19 @@ export default function InviteModal({
         <div className="space-y-6">
           <div className="flex flex-col items-center justify-center">
             <SuccessCheck />
-            <p className="text-lg font-bold text-gray-900 dark:text-white mt-2">Convite enviado!</p>
-            <p className="text-sm text-gray-500 text-center mb-4">Um email foi enviado para {email}.</p>
+            <p className="text-lg font-bold text-gray-900 dark:text-white mt-2">Convite Criado!</p>
+            
+            {emailWarning ? (
+                <div className="mt-3 p-3 bg-yellow-50 text-yellow-800 text-sm rounded-lg flex items-start gap-2 text-left w-full">
+                    <AlertTriangle className="shrink-0 mt-0.5" size={16} />
+                    <p>{emailWarning}</p>
+                </div>
+            ) : (
+                <p className="text-sm text-gray-500 text-center mb-4">Um email foi enviado para {email}.</p>
+            )}
             
             {qrCodeUrl && (
-                <div className="p-3 bg-white rounded-xl border border-gray-200 shadow-sm mb-4">
+                <div className="p-3 bg-white rounded-xl border border-gray-200 shadow-sm mb-4 mt-4">
                     <img src={qrCodeUrl} alt="QR Code do Convite" className="w-40 h-40" />
                 </div>
             )}
