@@ -1,6 +1,6 @@
 
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { createServerSupabaseClient } from '../../../../lib/supabaseServer';
+import { createServerSupabaseClient } from '../../../../../lib/supabaseServer';
 import { createClient } from '@supabase/supabase-js';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://jpgifiumxqzbroejhudc.supabase.co';
