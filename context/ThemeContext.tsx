@@ -17,7 +17,7 @@ const ThemeContext = createContext<ThemeContextType>({
 
 export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [theme, setTheme] = useState<Theme>('light');
-  const { user } = useAuth();
+  const { user, session } = useAuth();
   const [mounted, setMounted] = useState(false);
 
   // 1. Load initial theme from LocalStorage on mount
@@ -34,29 +34,35 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     setMounted(true);
   }, []);
 
-  // 2. If user logs in, fetch their preference from DB
+  // 2. If user logs in, fetch their preference from DB via Secure API
   useEffect(() => {
     const fetchUserTheme = async () => {
-      if (!user) return;
+      if (!user || !session?.access_token) return;
       
-      // Corrected table name to userprofiles (schema default)
-      const { data } = await supabase
-        .from('userprofiles')
-        .select('theme') // Note: 'theme' column is technically not in the prompt schema, assuming it was added or this fails gracefully
-        .eq('id', user.id)
-        .single();
-
-      if (data?.theme) {
-        setTheme(data.theme as Theme);
-        applyTheme(data.theme as Theme);
-        localStorage.setItem('divvy-theme', data.theme);
+      try {
+          const res = await fetch('/api/user/me', {
+              headers: {
+                  'Authorization': `Bearer ${session.access_token}`
+              }
+          });
+          
+          if (res.ok) {
+              const data = await res.json();
+              if (data?.theme) {
+                setTheme(data.theme as Theme);
+                applyTheme(data.theme as Theme);
+                localStorage.setItem('divvy-theme', data.theme);
+              }
+          }
+      } catch (err) {
+          console.error("Theme fetch error", err);
       }
     };
 
     if (user) {
         fetchUserTheme();
     }
-  }, [user]);
+  }, [user, session]);
 
   const applyTheme = (newTheme: Theme) => {
     const root = window.document.documentElement;
@@ -73,7 +79,7 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     // Persist to DB if logged in (Best effort)
     if (user) {
        await supabase.from('userprofiles').update({
-           theme: newTheme, // Needs column in DB
+           theme: newTheme,
            updatedat: new Date().toISOString()
        }).eq('id', user.id);
     }

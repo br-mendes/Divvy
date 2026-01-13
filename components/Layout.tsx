@@ -4,7 +4,6 @@ import Link from 'next/link';
 import { useRouter } from 'next/router';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
-import { supabase } from '../lib/supabase';
 import DivvyLogo from './branding/DivvyLogo';
 import Notifications from './ui/Notifications';
 import { 
@@ -21,7 +20,7 @@ import {
 } from 'lucide-react';
 
 export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { signOut, user } = useAuth();
+  const { signOut, user, session } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const router = useRouter();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -34,29 +33,45 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
   useEffect(() => {
     let mounted = true;
     const fetchLiveProfile = async () => {
-        if (!user) return;
-        // Set initial from metadata to avoid flicker
-        setLiveProfile({ avatarurl: user.user_metadata?.avatar_url, fullname: user.user_metadata?.full_name });
+        if (!user || !session?.access_token) return;
         
-        // Fetch fresh data from userprofiles table
-        const { data } = await supabase
-            .from('userprofiles')
-            .select('avatarurl, fullname, displayname, is_super_admin')
-            .eq('id', user.id)
-            .single();
+        // Set initial from metadata to avoid flicker
+        if (mounted) {
+            setLiveProfile({ 
+                avatarurl: user.user_metadata?.avatar_url, 
+                fullname: user.user_metadata?.full_name 
+            });
+        }
+        
+        try {
+            // Fetch fresh data from secure API to avoid RLS recursion
+            const res = await fetch('/api/user/me', {
+                headers: {
+                    'Authorization': `Bearer ${session.access_token}`
+                }
+            });
             
-        if (mounted && data) {
-            setLiveProfile(data);
-            if (data.is_super_admin || user.email === 'falecomdivvy@gmail.com') {
-                setIsAdmin(true);
+            if (res.ok) {
+                const data = await res.json();
+                if (mounted && data) {
+                    setLiveProfile(data);
+                    if (data.is_super_admin || user.email === 'falecomdivvy@gmail.com') {
+                        setIsAdmin(true);
+                    }
+                }
             }
-        } else if (user.email === 'falecomdivvy@gmail.com') {
-            if (mounted) setIsAdmin(true);
+        } catch (e) {
+            console.error("Layout profile fetch error", e);
+        }
+        
+        // Fallback admin check
+        if (user.email === 'falecomdivvy@gmail.com' && mounted) {
+            setIsAdmin(true);
         }
     };
     fetchLiveProfile();
     return () => { mounted = false; };
-  }, [user]);
+  }, [user, session]);
 
   const displayName = liveProfile?.displayname || liveProfile?.fullname || user?.email?.split('@')[0] || 'Usuário';
 
