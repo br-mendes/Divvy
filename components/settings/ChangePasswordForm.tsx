@@ -1,15 +1,27 @@
 
 import React, { useState } from 'react';
 import { supabase } from '../../lib/supabase';
+import { useAuth } from '../../context/AuthContext';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
-import { Lock, Check, X } from 'lucide-react';
+import { Lock, Check } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 export default function ChangePasswordForm() {
+  const { user } = useAuth();
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
+
+  // Check if user is logged in via Email/Password provider.
+  // Social logins (Google, etc) usually have 'google', 'facebook', etc in app_metadata.provider
+  // Email logins usually have 'email'.
+  // We hide this form for non-email providers as they don't have a password managed by Supabase.
+  const isEmailProvider = user?.app_metadata?.provider === 'email';
+
+  if (!isEmailProvider) {
+      return null;
+  }
 
   const validatePassword = (pwd: string) => {
     const minLength = pwd.length >= 8;

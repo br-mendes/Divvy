@@ -6,7 +6,7 @@ import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
 import { Modal } from '../ui/Modal';
 import { PaymentMethod } from '../../types';
-import { CreditCard, Plus, Trash2, Banknote, QrCode, Copy } from 'lucide-react';
+import { CreditCard, Plus, Trash2, Banknote, QrCode, Copy, Pencil } from 'lucide-react';
 import { POPULAR_BANKS } from '../../lib/constants';
 import toast from 'react-hot-toast';
 
@@ -16,6 +16,7 @@ export default function PaymentMethodsForm() {
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
 
   // Form States
   const [type, setType] = useState<'pix' | 'bank_account'>('pix');
@@ -62,17 +63,40 @@ export default function PaymentMethodsForm() {
     }
   };
 
-  const handleAddMethod = async (e: React.FormEvent) => {
+  const handleEdit = (method: PaymentMethod) => {
+    setEditingId(method.id);
+    setType(method.type);
+    
+    if (method.type === 'pix') {
+      setPixKey(method.pix_key || '');
+      setPixKeyType(method.pix_key_type || 'cpf');
+    } else {
+      setBankCode(method.bank_id || '260');
+      setAgency(method.agency || '');
+      setAccountNumber(method.account_number || '');
+      setAccountDigit(method.account_digit || '');
+      setHolderName(method.account_holder_name || '');
+      setHolderDoc(method.account_holder_document || '');
+    }
+    
+    setIsModalOpen(true);
+  };
+
+  const openAddModal = () => {
+    setEditingId(null);
+    resetForm();
+    setIsModalOpen(true);
+  };
+
+  const handleSaveMethod = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return;
     setSaving(true);
 
     try {
-      // 1. Ensure profile exists (Fix for FK constraint violation)
-      // Check if profile exists
+      // 1. Ensure profile exists
       const { data: profile } = await supabase.from('userprofiles').select('id').eq('id', user.id).maybeSingle();
       
-      // If not, create it
       if (!profile) {
          const { error: createProfileError } = await supabase.from('userprofiles').insert({
              id: user.id,
@@ -82,17 +106,13 @@ export default function PaymentMethodsForm() {
              updatedat: new Date().toISOString()
          });
          
-         if (createProfileError) {
-             console.error("Error creating profile lazily", createProfileError);
-             throw new Error('Erro de consistência de usuário. Por favor, atualize seu perfil antes de adicionar pagamentos.');
-         }
+         if (createProfileError) throw new Error('Erro de consistência de usuário.');
       }
 
       const payload: any = {
         user_id: user.id,
         type,
         is_active: true,
-        // Se for o primeiro, define como primário
         is_primary: methods.length === 0 
       };
 
@@ -100,25 +120,55 @@ export default function PaymentMethodsForm() {
         if (!pixKey) throw new Error('Chave Pix é obrigatória');
         payload.pix_key = pixKey;
         payload.pix_key_type = pixKeyType;
+        // Limpar campos de banco caso esteja trocando de tipo
+        payload.bank_id = null;
+        payload.agency = null;
+        payload.account_number = null;
+        payload.account_digit = null;
+        payload.account_holder_name = null;
+        payload.account_holder_document = null;
       } else {
         if (!agency || !accountNumber || !accountDigit || !holderName || !holderDoc) {
             throw new Error('Preencha todos os dados bancários');
         }
-        // Mocking bank relation logic by storing bank info directly or referencing ID if exists
-        // For this implementation we store generic fields
-        payload.bank_id = bankCode; // Storing code in ID field for simplicity in this demo context
+        payload.bank_id = bankCode; 
         payload.agency = agency;
         payload.account_number = accountNumber;
         payload.account_digit = accountDigit;
         payload.account_holder_name = holderName;
         payload.account_holder_document = holderDoc;
+        // Limpar campos pix
+        payload.pix_key = null;
+        payload.pix_key_type = null;
       }
 
-      const { data, error } = await supabase.from('payment_methods').insert(payload).select().single();
-      if (error) throw error;
+      let newMethod;
 
-      setMethods([...methods, data]);
-      toast.success('Método adicionado!');
+      if (editingId) {
+        // Update existing
+        const { data, error } = await supabase
+          .from('payment_methods')
+          .update({ ...payload, updated_at: new Date().toISOString() })
+          .eq('id', editingId)
+          .select()
+          .single();
+        
+        if (error) throw error;
+        setMethods(methods.map(m => m.id === editingId ? data : m));
+        toast.success('Método atualizado!');
+      } else {
+        // Create new
+        const { data, error } = await supabase
+          .from('payment_methods')
+          .insert(payload)
+          .select()
+          .single();
+        
+        if (error) throw error;
+        setMethods([...methods, data]);
+        toast.success('Método adicionado!');
+      }
+
       setIsModalOpen(false);
       resetForm();
     } catch (err: any) {
@@ -129,7 +179,10 @@ export default function PaymentMethodsForm() {
   };
 
   const resetForm = () => {
+    setType('pix');
     setPixKey('');
+    setPixKeyType('cpf');
+    setBankCode('260');
     setAgency('');
     setAccountNumber('');
     setAccountDigit('');
@@ -148,7 +201,7 @@ export default function PaymentMethodsForm() {
           <CreditCard size={24} className="text-brand-600" />
           Métodos de Pagamento
         </h2>
-        <Button size="sm" onClick={() => setIsModalOpen(true)}>
+        <Button size="sm" onClick={openAddModal}>
           <Plus size={16} className="mr-1" /> Adicionar
         </Button>
       </div>
@@ -180,19 +233,29 @@ export default function PaymentMethodsForm() {
                   </p>
                 </div>
               </div>
-              <button 
-                onClick={() => handleDelete(method.id)} 
-                className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
-              >
-                <Trash2 size={16} />
-              </button>
+              <div className="flex items-center gap-2">
+                <button 
+                  onClick={() => handleEdit(method)} 
+                  className="p-2 text-gray-400 hover:text-brand-600 hover:bg-brand-50 dark:hover:bg-brand-900/20 rounded-lg transition-colors"
+                  title="Editar"
+                >
+                  <Pencil size={16} />
+                </button>
+                <button 
+                  onClick={() => handleDelete(method.id)} 
+                  className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
+                  title="Excluir"
+                >
+                  <Trash2 size={16} />
+                </button>
+              </div>
             </div>
           ))
         )}
       </div>
 
-      <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title="Adicionar Método de Pagamento">
-        <form onSubmit={handleAddMethod} className="space-y-4">
+      <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={editingId ? "Editar Método" : "Adicionar Método"}>
+        <form onSubmit={handleSaveMethod} className="space-y-4">
           <div className="flex p-1 bg-gray-100 dark:bg-dark-700 rounded-lg mb-4">
             <button
               type="button"
@@ -259,7 +322,9 @@ export default function PaymentMethodsForm() {
 
           <div className="flex justify-end gap-3 pt-4">
             <Button type="button" variant="outline" onClick={() => setIsModalOpen(false)}>Cancelar</Button>
-            <Button type="submit" isLoading={saving}>Salvar</Button>
+            <Button type="submit" isLoading={saving}>
+                {editingId ? 'Atualizar' : 'Salvar'}
+            </Button>
           </div>
         </form>
       </Modal>
