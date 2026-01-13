@@ -165,3 +165,11 @@ export interface PaymentMethod {
   created_at?: string;
   updated_at?: string;
 }
+
+export interface BalancePair {
+  from: string;
+  to: string;
+  amount: number;
+  fromDisplayName: string | null;
+  toDisplayName: string | null;
+}

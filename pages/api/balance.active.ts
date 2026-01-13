@@ -93,10 +93,55 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       }
     });
 
-    return res.status(200).json({ 
-      balances, 
-      transactions: transactions || [] 
-    });
+    // --- PLANO DE ACERTOS ---
+    const plan: { from: string; to: string; amount: number }[] = [];
+    const debtors = Object.entries(balances)
+      .filter(([_, b]) => b < -0.01)
+      .map(([id, b]) => ({ id, b: Math.abs(b) }));
+    const creditors = Object.entries(balances)
+      .filter(([_, b]) => b > 0.01)
+      .map(([id, b]) => ({ id, b }));
+
+    let i = 0;
+    let j = 0;
+    while (i < debtors.length && j < creditors.length) {
+      const amount = Math.min(debtors[i].b, creditors[j].b);
+      if (amount > 0.01) {
+        plan.push({ from: debtors[i].id, to: creditors[j].id, amount });
+      }
+      debtors[i].b -= amount;
+      creditors[j].b -= amount;
+      if (debtors[i].b < 0.01) i += 1;
+      if (creditors[j].b < 0.01) j += 1;
+    }
+
+    const userIds = Array.from(new Set(plan.flatMap(item => [item.from, item.to])));
+    let profilesById = new Map<string, { displayname: string | null; fullname: string | null }>();
+    if (userIds.length > 0) {
+      const { data: profiles, error: pErr } = await supabase
+        .from('userprofiles')
+        .select('id, displayname, fullname')
+        .in('id', userIds);
+
+      if (pErr) throw pErr;
+      profilesById = new Map(
+        (profiles || []).map(profile => [
+          profile.id,
+          {
+            displayname: profile.displayname,
+            fullname: profile.fullname
+          }
+        ])
+      );
+    }
+
+    const balancesPlan = plan.map(item => ({
+      ...item,
+      fromDisplayName: profilesById.get(item.from)?.displayname || profilesById.get(item.from)?.fullname || null,
+      toDisplayName: profilesById.get(item.to)?.displayname || profilesById.get(item.to)?.fullname || null
+    }));
+
+    return res.status(200).json({ balances: balancesPlan });
 
   } catch (error: any) {
     console.error('Balance API Error:', error);
