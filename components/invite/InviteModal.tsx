@@ -8,6 +8,7 @@ import SuccessCheck from '../ui/SuccessCheck';
 import toast from 'react-hot-toast';
 import { Copy, Share2, Send } from 'lucide-react';
 import QRCode from 'qrcode';
+import { supabase } from '../../lib/supabase';
 
 interface InviteModalProps {
   divvyId: string;
@@ -55,12 +56,18 @@ export default function InviteModal({
     try {
       if (!user) throw new Error('Usuário não autenticado');
 
+      // Obter token atual para enviar no header (Fallback para cookies)
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+
       const response = await fetch('/api/invite/send', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+            'Content-Type': 'application/json',
+            ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        },
         body: JSON.stringify({
           divvyId,
-          // invitedByUserId removido pois agora é pego da sessão segura no backend
           email
         })
       });
@@ -74,7 +81,7 @@ export default function InviteModal({
         // Se não for JSON (ex: erro 500 do Next.js HTML), lança erro legível
         const text = await response.text();
         console.error("Resposta não-JSON do servidor:", text);
-        throw new Error(`Erro de comunicação com o servidor (${response.status}). Tente novamente.`);
+        throw new Error(`Erro de comunicação com o servidor (${response.status}).`);
       }
 
       if (!response.ok) {
