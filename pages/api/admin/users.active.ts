@@ -2,13 +2,16 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { createPagesServerClient } from '@supabase/auth-helpers-nextjs';
 
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://jpgifiumxqzbroejhudc.supabase.co';
+const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'sb_publishable_RWrlgQRxQHCQ45cEIia_ug_OT9ouCwi';
+
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'GET') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
   try {
-    const supabase = createPagesServerClient({ req, res });
+    const supabase = createPagesServerClient({ req, res }, { supabaseUrl, supabaseKey });
     
     const { data: { user }, error: userError } = await supabase.auth.getUser();
     if (userError || !user) throw new Error('Unauthorized');
