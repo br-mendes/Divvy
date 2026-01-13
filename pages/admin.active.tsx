@@ -11,7 +11,7 @@ import toast from 'react-hot-toast';
 import { 
   ShieldCheck, Users, Megaphone, Activity, MessageSquare, 
   ExternalLink, Search, Trash2, LayoutDashboard, CheckCircle, Mail,
-  Layers, Ban, Check, Lock
+  Layers, Ban, Check, Lock, Loader2
 } from 'lucide-react';
 
 type AdminTab = 'overview' | 'users' | 'groups' | 'tickets' | 'broadcast';
@@ -23,6 +23,7 @@ export default function AdminPage() {
   // State Global
   const [activeTab, setActiveTab] = useState<AdminTab>('overview');
   const [isAdmin, setIsAdmin] = useState(false);
+  const [checkingPermission, setCheckingPermission] = useState(true);
   
   // Data States
   const [stats, setStats] = useState<any>(null);
@@ -41,46 +42,6 @@ export default function AdminPage() {
   const [body, setBody] = useState('');
   const [target, setTarget] = useState<'all' | 'active' | 'inactive30'>('all');
   const [sending, setSending] = useState(false);
-
-  // Security Check
-  useEffect(() => {
-    if (!loading) {
-      const checkAdmin = async () => {
-        if (!user) {
-            router.push('/');
-            return;
-        }
-
-        // Check 1: Email Hardcoded (Fallback/Bootstrap)
-        if (user.email === 'falecomdivvy@gmail.com') {
-            setIsAdmin(true);
-            fetchData(activeTab);
-            return;
-        }
-
-        // Check 2: Database Flag
-        const { data } = await supabase
-            .from('userprofiles')
-            .select('is_super_admin')
-            .eq('id', user.id)
-            .single();
-        
-        if (data?.is_super_admin) {
-            setIsAdmin(true);
-            fetchData(activeTab);
-        } else {
-            router.push('/');
-        }
-      };
-      
-      checkAdmin();
-    }
-  }, [user, loading, router]); // removido activeTab do deps para evitar loop, chamado explicitamente
-
-  // Refetch when tab changes if already admin
-  useEffect(() => {
-      if(isAdmin) fetchData(activeTab);
-  }, [activeTab, isAdmin]);
 
   const fetchData = useCallback(async (tab: AdminTab) => {
     setLoadingData(true);
@@ -111,6 +72,55 @@ export default function AdminPage() {
       setLoadingData(false);
     }
   }, []);
+
+  // Security Check
+  useEffect(() => {
+    if (!loading) {
+      const checkAdmin = async () => {
+        if (!user) {
+            router.push('/');
+            return;
+        }
+
+        // Check 1: Email Hardcoded (Bootstrap)
+        if (user.email === 'falecomdivvy@gmail.com') {
+            setIsAdmin(true);
+            setCheckingPermission(false);
+            return;
+        }
+
+        // Check 2: Database Flag
+        try {
+            const { data, error } = await supabase
+                .from('userprofiles')
+                .select('is_super_admin')
+                .eq('id', user.id)
+                .single();
+            
+            if (!error && data?.is_super_admin) {
+                setIsAdmin(true);
+            } else {
+                toast.error("Acesso negado.");
+                router.push('/dashboard');
+            }
+        } catch (e) {
+            console.error(e);
+            router.push('/dashboard');
+        } finally {
+            setCheckingPermission(false);
+        }
+      };
+      
+      checkAdmin();
+    }
+  }, [user, loading, router]);
+
+  // Initial Fetch upon Admin confirmation
+  useEffect(() => {
+      if(isAdmin && !checkingPermission) {
+          fetchData(activeTab);
+      }
+  }, [activeTab, isAdmin, checkingPermission, fetchData]);
 
   const handleBroadcast = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -191,17 +201,24 @@ export default function AdminPage() {
   };
 
   const filteredUsers = usersList.filter(u => 
-    u.email.toLowerCase().includes(userSearch.toLowerCase()) ||
-    (u.fullname && u.fullname.toLowerCase().includes(userSearch.toLowerCase()))
+    (u.email || '').toLowerCase().includes(userSearch.toLowerCase()) ||
+    (u.fullname || '').toLowerCase().includes(userSearch.toLowerCase())
   );
 
   const filteredGroups = groupsList.filter(g =>
-    g.name.toLowerCase().includes(groupSearch.toLowerCase())
+    (g.name || '').toLowerCase().includes(groupSearch.toLowerCase())
   );
 
-  if (loading || !isAdmin) {
-     return <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-dark-950 text-gray-500">Verificando permissões...</div>;
+  if (loading || checkingPermission) {
+     return (
+        <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50 dark:bg-dark-950 text-gray-500 gap-4">
+            <Loader2 className="animate-spin text-brand-600" size={40} />
+            <p>Verificando permissões administrativas...</p>
+        </div>
+     );
   }
+
+  if (!isAdmin) return null; // Redirecionamento acontece no useEffect
 
   return (
     <ProtectedRoute>
@@ -221,7 +238,7 @@ export default function AdminPage() {
                 </div>
                 <div className="flex items-center gap-2 text-sm bg-white dark:bg-dark-900 py-2 px-4 rounded-full border border-gray-200 dark:border-dark-800 shadow-sm text-green-600 dark:text-green-400">
                     <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
-                    Admin Conectado
+                    Admin Conectado: {user?.email}
                 </div>
             </div>
 

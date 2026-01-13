@@ -16,7 +16,8 @@ import {
   Moon,
   Sun,
   User,
-  Bell
+  Bell,
+  ShieldCheck
 } from 'lucide-react';
 
 export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -26,6 +27,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   
   const [liveProfile, setLiveProfile] = useState<any>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
 
   const isActive = (path: string) => router.pathname === path;
 
@@ -39,11 +41,18 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
         // Fetch fresh data from userprofiles table
         const { data } = await supabase
             .from('userprofiles')
-            .select('avatarurl, fullname, displayname')
+            .select('avatarurl, fullname, displayname, is_super_admin')
             .eq('id', user.id)
             .single();
             
-        if (mounted && data) setLiveProfile(data);
+        if (mounted && data) {
+            setLiveProfile(data);
+            if (data.is_super_admin || user.email === 'falecomdivvy@gmail.com') {
+                setIsAdmin(true);
+            }
+        } else if (user.email === 'falecomdivvy@gmail.com') {
+            if (mounted) setIsAdmin(true);
+        }
     };
     fetchLiveProfile();
     return () => { mounted = false; };
@@ -71,6 +80,12 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
           <Link href="/profile" className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${isActive('/profile') ? 'bg-brand-50 dark:bg-brand-900/20 text-brand-600 dark:text-brand-400' : 'text-gray-500 hover:bg-gray-50 dark:hover:bg-dark-800'}`}>
             <User size={20} /> <span className="font-medium">Meu Perfil</span>
           </Link>
+          
+          {isAdmin && (
+            <Link href="/admin" className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${isActive('/admin') ? 'bg-brand-50 dark:bg-brand-900/20 text-brand-600 dark:text-brand-400' : 'text-gray-500 hover:bg-gray-50 dark:hover:bg-dark-800'}`}>
+                <ShieldCheck size={20} /> <span className="font-medium">Admin</span>
+            </Link>
+          )}
         </nav>
 
         <div className="p-4 mt-auto border-t border-gray-100 dark:border-dark-700">
@@ -108,6 +123,11 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
             <Link href="/profile" onClick={() => setIsMobileMenuOpen(false)} className={`flex items-center gap-4 p-4 rounded-2xl text-lg font-bold ${isActive('/profile') ? 'bg-brand-50 dark:bg-brand-900/20 text-brand-600' : 'text-gray-600 dark:text-gray-400'}`}>
                <User size={24} /> Perfil
             </Link>
+            {isAdmin && (
+                <Link href="/admin" onClick={() => setIsMobileMenuOpen(false)} className={`flex items-center gap-4 p-4 rounded-2xl text-lg font-bold ${isActive('/admin') ? 'bg-brand-50 dark:bg-brand-900/20 text-brand-600' : 'text-gray-600 dark:text-gray-400'}`}>
+                    <ShieldCheck size={24} /> Painel Admin
+                </Link>
+            )}
             <button onClick={toggleTheme} className="flex items-center gap-4 p-4 rounded-2xl text-lg font-bold text-gray-600 dark:text-gray-400">
                {theme === 'light' ? <Moon size={24} /> : <Sun size={24} />} Tema {theme === 'light' ? 'Escuro' : 'Claro'}
             </button>

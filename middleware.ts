@@ -24,13 +24,6 @@ export async function middleware(req: NextRequest) {
     return NextResponse.redirect(redirectUrl);
   }
 
-  // Proteção específica para rota de Admin
-  if (req.nextUrl.pathname.startsWith('/admin')) {
-    if (session?.user?.email !== 'falecomdivvy@gmail.com') {
-      return NextResponse.redirect(new URL('/dashboard', req.url));
-    }
-  }
-
   // Redirecionar usuário logado para fora das páginas de auth
   if (session && (
     req.nextUrl.pathname === '/login' ||
