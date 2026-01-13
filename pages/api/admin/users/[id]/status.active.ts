@@ -1,7 +1,6 @@
 
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { createServerSupabaseClient } from '../../../../../lib/supabaseServer';
-import { authorizeUser } from '../../../../../lib/serverAuth';
+import { createPagesServerClient } from '@supabase/auth-helpers-nextjs';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') {
@@ -16,8 +15,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   try {
-    const user = await authorizeUser(req, res);
-    const supabase = createServerSupabaseClient();
+    const supabase = createPagesServerClient({ req, res });
+    
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    if (userError || !user) throw new Error('Unauthorized');
 
     // Check Admin Permissions
     const { data: profile } = await supabase.from('userprofiles').select('is_super_admin').eq('id', user.id).single();
