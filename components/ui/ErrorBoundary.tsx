@@ -16,23 +16,23 @@ class ErrorBoundary extends React.Component<Props, State> {
     error: null,
   };
 
-  static getDerivedStateFromError(error: Error): State {
+  public static getDerivedStateFromError(error: Error): State {
     return { hasError: true, error };
   }
 
-  componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+  public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     console.error('Uncaught error:', error, errorInfo);
   }
 
-  handleReload = () => {
+  public handleReload = () => {
     window.location.reload();
   };
 
-  handleGoHome = () => {
+  public handleGoHome = () => {
     window.location.href = '/';
   };
 
-  render() {
+  public render() {
     if (this.state.hasError) {
       return (
         <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50 dark:bg-gray-950 px-4 text-center">

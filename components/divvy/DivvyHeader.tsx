@@ -20,14 +20,16 @@ const typeEmoji: Record<string, string> = {
   trip: '✈️',
   roommate: '🏠',
   event: '🎉',
-  general: '💰',
+  other: '💰',
+  general: '💰', // Fallback
 };
 
 const typeLabel: Record<string, string> = {
   trip: 'Viagem',
   roommate: 'República',
   event: 'Evento',
-  general: 'Geral',
+  other: 'Geral',
+  general: 'Geral', // Fallback
 };
 
 export default function DivvyHeader({ divvy, onUpdate }: DivvyHeaderProps) {
@@ -36,7 +38,6 @@ export default function DivvyHeader({ divvy, onUpdate }: DivvyHeaderProps) {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
 
-  // Proteção máxima contra objeto nulo ou indefinido
   if (!divvy || !divvy.id) return null;
 
   const isCreator = user?.id === divvy.creatorid;
@@ -69,7 +70,6 @@ export default function DivvyHeader({ divvy, onUpdate }: DivvyHeaderProps) {
 
      setActionLoading(true);
      try {
-       // Se for para arquivar, use a API Route para garantir que 'endedat' e 'archivesuggested' sejam atualizados corretamente
        if (newStatus) {
          const res = await fetch('/api/groups/archive', {
             method: 'POST',
@@ -82,7 +82,6 @@ export default function DivvyHeader({ divvy, onUpdate }: DivvyHeaderProps) {
              throw new Error(errData.error || 'Erro ao arquivar grupo');
          }
        } else {
-         // Para desarquivar, pode ser direto ou via API. Vamos manter direto para simplificar, mas limpando 'endedat'
          const { error } = await supabase
             .from('divvies')
             .update({ isarchived: false, endedat: null })
@@ -117,6 +116,8 @@ export default function DivvyHeader({ divvy, onUpdate }: DivvyHeaderProps) {
     }
   };
 
+  const typeKey = (divvy.type as string) === 'general' ? 'other' : divvy.type;
+
   return (
     <>
       <div className={`border-b -mx-4 md:-mx-8 -mt-4 md:-mt-8 mb-8 transition-colors duration-200 
@@ -128,7 +129,7 @@ export default function DivvyHeader({ divvy, onUpdate }: DivvyHeaderProps) {
         <div className="max-w-5xl mx-auto px-4 py-6 md:px-8">
           <div className="flex flex-col md:flex-row md:items-start justify-between gap-4 mb-4">
             <div className="flex items-center gap-3">
-              <span className="text-4xl filter grayscale-[.5]">{typeEmoji[divvy.type] || '💰'}</span>
+              <span className="text-4xl filter grayscale-[.5]">{typeEmoji[typeKey] || '💰'}</span>
               <div>
                 <h1 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
                   {divvy.name}
@@ -139,7 +140,7 @@ export default function DivvyHeader({ divvy, onUpdate }: DivvyHeaderProps) {
                   )}
                 </h1>
                 <div className="text-sm text-gray-500 dark:text-gray-400 flex flex-wrap items-center gap-2 mt-1">
-                  <span>{typeLabel[divvy.type]}</span>
+                  <span>{typeLabel[typeKey] || typeLabel['other']}</span>
                   <span>•</span>
                   <span>Criado em {new Date(divvy.createdat).toLocaleDateString('pt-BR')}</span>
                   

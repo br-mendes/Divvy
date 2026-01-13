@@ -16,7 +16,7 @@ const divvyTypes = [
   { value: 'trip', label: '✈️ Viagem' },
   { value: 'roommate', label: '🏠 República' },
   { value: 'event', label: '🎉 Evento' },
-  { value: 'general', label: '💰 Geral' },
+  { value: 'other', label: '💰 Geral' }, // Alterado de 'general' para 'other' para passar na validação do banco
 ];
 
 export default function DivvyForm({ onSuccess, initialData }: DivvyFormProps) {
@@ -32,8 +32,8 @@ export default function DivvyForm({ onSuccess, initialData }: DivvyFormProps) {
     if (initialData) {
       setName(initialData.name);
       setDescription(initialData.description || '');
-      setType(initialData.type);
-      // Map createdat to start date for editing, as Divvy doesn't have start_date column
+      // Mapeia legacy 'general' para 'other' se existir
+      setType((initialData.type as string) === 'general' ? 'other' : initialData.type);
       setStartDate(initialData.createdat ? initialData.createdat.split('T')[0] : '');
       setEndDate(initialData.endedat ? initialData.endedat.split('T')[0] : '');
     }
@@ -51,7 +51,6 @@ export default function DivvyForm({ onSuccess, initialData }: DivvyFormProps) {
         name,
         description,
         type,
-        // createdat: startDate ? new Date(startDate).toISOString() : undefined, // Optional: Update createdat if desired, otherwise leave as default
         endedat: endDate ? new Date(endDate).toISOString() : null,
       };
 
@@ -70,7 +69,6 @@ export default function DivvyForm({ onSuccess, initialData }: DivvyFormProps) {
         if (divvyError) throw divvyError;
 
         // 2. CRÍTICO: Adicionar o criador como membro
-        // Sem isso, o RLS bloqueia a visualização do próprio grupo criado
         if (newDivvy) {
           const { error: memberError } = await supabase.from('divvymembers').insert({
             divvyid: newDivvy.id,
@@ -86,6 +84,7 @@ export default function DivvyForm({ onSuccess, initialData }: DivvyFormProps) {
       
       onSuccess();
     } catch (err: any) {
+      console.error(err);
       toast.error(err.message || 'Erro ao salvar grupo');
     } finally {
       setLoading(false);
@@ -119,7 +118,6 @@ export default function DivvyForm({ onSuccess, initialData }: DivvyFormProps) {
       </div>
 
       <div className="grid grid-cols-2 gap-4">
-        {/* Note: Start Date maps to createdat in this implementation as schema lacks start_date */}
         <Input type="date" label="Data Início (Criação)" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
         <Input type="date" label="Data Fim" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
       </div>

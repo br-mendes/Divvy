@@ -8,8 +8,10 @@ const API_KEY = process.env.RESEND_API_KEY || 're_D4Q38wCF_DkLPPDbmZMYR7fLbCDvYB
 
 const resend = new Resend(API_KEY);
 
-// Remetente padrão
-const FROM_EMAIL = 'nao-responda@divvyapp.online';
+// CONFIGURAÇÃO CRÍTICA DE DNS:
+// Baseado nos seus registros DNS (MX "send" e TXT "send"), você configurou o subdomínio 'send'.
+// Portanto, o email DEVE sair de @send.divvyapp.online para ser assinado corretamente pelo DKIM/SPF.
+const FROM_EMAIL = process.env.NEXT_PUBLIC_RESEND_FROM_EMAIL || 'nao-responda@send.divvyapp.online';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') {
@@ -37,9 +39,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     if (data.error) {
         console.error('Resend API Error Payload:', data.error);
-        if (data.error.message?.includes('domain') || data.error.name === 'validation_error') {
-             throw new Error(`Erro de verificação de domínio no Resend. Certifique-se que '${FROM_EMAIL.split('@')[1]}' está verificado e as chaves DNS estão propagadas.`);
-        }
         throw new Error(data.error.message);
     }
 
@@ -48,7 +47,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     console.error('Falha no envio de email:', error);
     return res.status(500).json({ 
       error: error.message || 'Falha ao enviar email',
-      details: 'Verifique se o domínio divvyapp.online está com status "Verified" no painel do Resend.'
+      details: 'Verifique se o domínio send.divvyapp.online está com status "Verified" no painel do Resend.'
     });
   }
 }

@@ -1,7 +1,6 @@
 
 import React from 'react';
 import { ProtectedRoute } from '../components/ProtectedRoute';
-import { useAuth } from '../context/AuthContext';
 import ProfileForm from '../components/settings/ProfileForm';
 import Security2FAForm from '../components/settings/Security2FAForm';
 import PaymentMethodsForm from '../components/settings/PaymentMethodsForm';
@@ -9,11 +8,6 @@ import ChangePasswordForm from '../components/settings/ChangePasswordForm';
 import DangerZone from '../components/settings/DangerZone';
 
 function ProfileContent() {
-  const { user } = useAuth();
-  
-  // Verifica se o provedor de login é email (senha). Se for google, github, etc., não mostra alterar senha.
-  const isEmailProvider = user?.app_metadata?.provider === 'email';
-
   return (
     <div className="max-w-4xl mx-auto space-y-8 pb-12 animate-fade-in-up">
       <div className="mb-8">
@@ -25,7 +19,7 @@ function ProfileContent() {
       
       <PaymentMethodsForm />
       
-      {isEmailProvider && <ChangePasswordForm />}
+      <ChangePasswordForm />
       
       <Security2FAForm />
 

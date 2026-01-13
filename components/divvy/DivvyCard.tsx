@@ -2,13 +2,14 @@
 import React from 'react';
 import Link from 'next/link';
 import { Divvy } from '../../types';
-import { Button } from '../ui/Button';
 import { Users, ChevronRight, CalendarClock, Lock } from 'lucide-react';
 
 const typeConfig: Record<string, { emoji: string, label: string, color: string }> = {
   trip: { emoji: '✈️', label: 'Viagem', color: 'bg-blue-50 text-blue-600 dark:bg-blue-900/20 dark:text-blue-400' },
   roommate: { emoji: '🏠', label: 'República', color: 'bg-purple-50 text-purple-600 dark:bg-purple-900/20 dark:text-purple-400' },
   event: { emoji: '🎉', label: 'Evento', color: 'bg-pink-50 text-pink-600 dark:bg-pink-900/20 dark:text-pink-400' },
+  other: { emoji: '💰', label: 'Geral', color: 'bg-emerald-50 text-emerald-600 dark:bg-emerald-900/20 dark:text-emerald-400' }, 
+  // Suporte legado
   general: { emoji: '💰', label: 'Geral', color: 'bg-emerald-50 text-emerald-600 dark:bg-emerald-900/20 dark:text-emerald-400' },
 };
 
@@ -19,11 +20,10 @@ interface DivvyCardProps {
 
 const DivvyCard: React.FC<DivvyCardProps> = ({ divvy }) => {
   const date = new Date(divvy.createdat).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' });
-  const config = typeConfig[divvy.type] || typeConfig.general;
+  const typeKey = (divvy.type as string) === 'general' ? 'other' : divvy.type;
+  const config = typeConfig[typeKey] || typeConfig.other;
   
-  // Lógica para visualização de membros
   const members = divvy.members || [];
-  // Fallback: se member_count for 0 mas o card existe, o usuário logado é pelo menos 1 membro
   const memberCount = Math.max(divvy.member_count || members.length, 1);
   
   const previewMembers = members.slice(0, 3);
@@ -33,7 +33,6 @@ const DivvyCard: React.FC<DivvyCardProps> = ({ divvy }) => {
     <Link href={`/divvy/${divvy.id}`} className="block h-full group">
       <div className="relative h-full bg-white dark:bg-dark-900 border border-gray-100 dark:border-dark-800 rounded-3xl p-6 flex flex-col transition-all duration-300 hover:shadow-xl hover:shadow-brand-500/5 hover:border-brand-200 dark:hover:border-brand-800 hover:-translate-y-1">
         
-        {/* Type Badge & Date */}
         <div className="flex justify-between items-start mb-6">
           <div className={`w-14 h-14 rounded-2xl flex items-center justify-center text-2xl shadow-sm transition-transform group-hover:scale-110 ${config.color}`}>
             {config.emoji}
@@ -51,7 +50,6 @@ const DivvyCard: React.FC<DivvyCardProps> = ({ divvy }) => {
           </div>
         </div>
 
-        {/* Content */}
         <div className="flex-1 mb-6">
           <div className="mb-2">
               <span className={`text-[10px] font-bold uppercase tracking-widest px-2 py-0.5 rounded ${config.color.replace('bg-', 'bg-opacity-20 ')}`}>
@@ -70,11 +68,9 @@ const DivvyCard: React.FC<DivvyCardProps> = ({ divvy }) => {
           )}
         </div>
 
-        {/* Footer */}
         <div className="pt-5 border-t border-gray-100 dark:border-dark-800 flex items-center justify-between mt-auto">
           <div className="flex items-center gap-3">
             <div className="flex -space-x-2">
-               {/* Avatares reais dos membros */}
                {previewMembers.length > 0 ? (
                  previewMembers.map((member) => (
                     <div 
@@ -96,13 +92,11 @@ const DivvyCard: React.FC<DivvyCardProps> = ({ divvy }) => {
                     </div>
                  ))
                ) : (
-                 // Fallback visual caso os membros ainda não tenham carregado
                  <div className="w-8 h-8 rounded-full bg-gray-200 dark:bg-dark-700 border-2 border-white dark:border-dark-900 flex items-center justify-center">
                     <Users size={12} className="text-gray-400" />
                  </div>
                )}
                
-               {/* Contador de membros restantes */}
                {remainingCount > 0 && (
                  <div className="w-8 h-8 rounded-full border-2 border-white dark:border-dark-900 bg-brand-50 dark:bg-brand-900/30 flex items-center justify-center">
                     <span className="text-[10px] font-bold text-brand-600 dark:text-brand-400">+{remainingCount}</span>

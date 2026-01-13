@@ -6,9 +6,8 @@ import { Input } from '../ui/Input';
 import { Modal } from '../ui/Modal';
 import SuccessCheck from '../ui/SuccessCheck';
 import toast from 'react-hot-toast';
-import { Copy, Share2, Send, AlertTriangle } from 'lucide-react';
+import { Copy, Share2 } from 'lucide-react';
 import QRCode from 'qrcode';
-import { supabase } from '../../lib/supabase';
 
 interface InviteModalProps {
   divvyId: string;
@@ -29,7 +28,6 @@ export default function InviteModal({
   const [inviteLink, setInviteLink] = useState('');
   const [qrCodeUrl, setQrCodeUrl] = useState('');
   const [copiedToClipboard, setCopiedToClipboard] = useState(false);
-  const [emailWarning, setEmailWarning] = useState<string | null>(null);
 
   // Reset state when modal opens/closes
   useEffect(() => {
@@ -38,12 +36,11 @@ export default function InviteModal({
             setInviteLink('');
             setQrCodeUrl('');
             setEmail('');
-            setEmailWarning(null);
         }, 300);
     }
   }, [isOpen]);
 
-  // Generate QR Code locally for display when invite link is available
+  // Generate QR Code when invite link is available
   useEffect(() => {
     if (inviteLink) {
         QRCode.toDataURL(inviteLink)
@@ -55,51 +52,28 @@ export default function InviteModal({
   async function handleSendInvite(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
-    setEmailWarning(null);
     try {
       if (!user) throw new Error('Usuário não autenticado');
 
-      // Obter token atual para enviar no header (Fallback crítico para cookies)
-      const { data: { session } } = await supabase.auth.getSession();
-      const token = session?.access_token;
-
+      // Chamada para a API Route Segura
       const response = await fetch('/api/invite/send', {
         method: 'POST',
-        headers: { 
-            'Content-Type': 'application/json',
-            ...(token ? { 'Authorization': `Bearer ${token}` } : {})
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           divvyId,
+          invitedByUserId: user.id,
           email
         })
       });
 
-      // Verificação de segurança: O retorno é JSON?
-      const contentType = response.headers.get("content-type");
-      let data;
-      
-      if (contentType && contentType.indexOf("application/json") !== -1) {
-        data = await response.json();
-      } else {
-        const text = await response.text();
-        console.error("Resposta inválida do servidor:", text);
-        throw new Error(`Erro de servidor (${response.status}). Tente novamente mais tarde.`);
-      }
+      const data = await response.json();
 
       if (!response.ok) {
         throw new Error(data.error || 'Erro ao enviar convite');
       }
 
       setInviteLink(data.inviteLink);
-      
-      if (data.warning) {
-          setEmailWarning(data.warning);
-          toast(data.warning, { icon: '⚠️', duration: 5000 });
-      } else {
-          toast.success('Convite enviado com sucesso!');
-      }
-
+      toast.success('Convite enviado com sucesso!');
     } catch (err: any) {
       console.error(err);
       toast.error(err.message || 'Erro ao enviar convite');
@@ -124,16 +98,11 @@ export default function InviteModal({
     window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
   };
 
-  const handleTelegram = () => {
-    const text = `Venha participar do grupo "${divvyName}" no Divvy!`;
-    window.open(`https://t.me/share/url?url=${encodeURIComponent(inviteLink)}&text=${encodeURIComponent(text)}`, '_blank');
-  };
-
   return (
     <Modal
       isOpen={isOpen}
       onClose={handleClose}
-      title={inviteLink ? 'Convite Gerado!' : `Convidar membro para ${divvyName}`}
+      title={inviteLink ? '' : `Convidar membro para ${divvyName}`}
     >
       {!inviteLink ? (
         <form onSubmit={handleSendInvite} className="space-y-4">
@@ -145,9 +114,6 @@ export default function InviteModal({
             placeholder="usuario@email.com"
             required
           />
-          <p className="text-xs text-gray-500 dark:text-gray-400">
-            Enviaremos um email com o link de acesso. Se já houver um convite pendente, ele será reenviado.
-          </p>
           <div className="flex gap-3 mt-4">
             <Button
               type="button"
@@ -172,18 +138,10 @@ export default function InviteModal({
           <div className="flex flex-col items-center justify-center">
             <SuccessCheck />
             <p className="text-lg font-bold text-gray-900 dark:text-white mt-2">Convite Criado!</p>
-            
-            {emailWarning ? (
-                <div className="mt-3 p-3 bg-yellow-50 text-yellow-800 text-sm rounded-lg flex items-start gap-2 text-left w-full">
-                    <AlertTriangle className="shrink-0 mt-0.5" size={16} />
-                    <p>{emailWarning}</p>
-                </div>
-            ) : (
-                <p className="text-sm text-gray-500 text-center mb-4">Um email foi enviado para {email}.</p>
-            )}
+            <p className="text-sm text-gray-500 text-center mb-4">Um email foi enviado para {email}.</p>
             
             {qrCodeUrl && (
-                <div className="p-3 bg-white rounded-xl border border-gray-200 shadow-sm mb-4 mt-4">
+                <div className="p-3 bg-white rounded-xl border border-gray-200 shadow-sm mb-4">
                     <img src={qrCodeUrl} alt="QR Code do Convite" className="w-40 h-40" />
                 </div>
             )}
@@ -215,12 +173,6 @@ export default function InviteModal({
               className="flex items-center justify-center gap-2 p-3 rounded-lg bg-green-50 hover:bg-green-100 text-green-700 transition-colors border border-green-200 font-semibold"
             >
               <Share2 size={18} /> Compartilhar no WhatsApp
-            </button>
-            <button
-              onClick={handleTelegram}
-              className="flex items-center justify-center gap-2 p-3 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-600 transition-colors border border-blue-200 font-semibold"
-            >
-              <Send size={18} /> Compartilhar no Telegram
             </button>
           </div>
 
