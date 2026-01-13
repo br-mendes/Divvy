@@ -9,8 +9,8 @@ const resend = new Resend(API_KEY);
 
 const SUPPORT_EMAIL = process.env.SUPPORT_EMAIL || 'falecomdivvy@gmail.com';
 
-// Domínio verificado no DNS (send.divvyapp.online)
-const FROM_EMAIL = 'suporte@send.divvyapp.online';
+// Domínio verificado no DNS (divvyapp.online)
+const FROM_EMAIL = 'suporte@divvyapp.online';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') {
@@ -40,7 +40,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // 2. Enviar notificação por email para o suporte
     // Usamos reply_to para que ao clicar em "Responder", vá para o email do usuário
     if (API_KEY) {
-      await resend.emails.send({
+      const data = await resend.emails.send({
         from: `Divvy Support <${FROM_EMAIL}>`, 
         to: SUPPORT_EMAIL,
         reply_to: email, 
@@ -59,6 +59,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           </div>
         `
       });
+
+      if (data.error) {
+        console.error("Resend Support Email Error:", data.error);
+        // Não falhamos a request inteira se o email falhar, pois o ticket foi salvo no banco,
+        // mas logamos o erro crítico de domínio se houver.
+      }
     }
 
     return res.status(200).json({ success: true });
