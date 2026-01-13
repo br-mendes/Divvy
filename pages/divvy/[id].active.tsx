@@ -24,7 +24,7 @@ import toast from 'react-hot-toast';
 const DivvyDetailContent: React.FC = () => {
   const router = useRouter();
   const { id } = router.query;
-  const { user } = useAuth();
+  const { user, session } = useAuth();
   const divvyId = typeof id === 'string' ? id : '';
   
   const [divvy, setDivvy] = useState<Divvy | null>(null);
@@ -50,92 +50,54 @@ const DivvyDetailContent: React.FC = () => {
   const [filterCategory, setFilterCategory] = useState<string>('all');
   const [filterPayer, setFilterPayer] = useState<string>('all');
 
-  // Fetch Logic
-  const fetchDivvyData = useCallback(async () => {
-    if (!divvyId || !user) return;
+  // Fetch Logic via Secure API
+  const fetchDivvyData = useCallback(async (silent = false) => {
+    if (!divvyId || !user || !session?.access_token) return;
+    
+    if (!silent) setLoading(true);
     
     try {
-      const { data: divvyData, error: dErr } = await supabase.from('divvies').select('*').eq('id', divvyId).single();
-      if (dErr || !divvyData) { 
-        console.error("Group fetch error:", dErr);
-        setDivvy(null);
-        setLoading(false); 
-        return; 
-      }
-      setDivvy(divvyData);
-
-      // Robust Members Fetching
-      let processedMembers: DivvyMember[] = [];
-      const { data: membersData, error: mErr } = await supabase
-        .from('divvymembers')
-        .select(`*, userprofiles (*)`)
-        .eq('divvyid', divvyId);
-
-      if (!mErr && membersData) {
-        processedMembers = membersData.map((m: any) => ({
-            id: m.id,
-            divvyid: m.divvyid,
-            userid: m.userid,
-            email: m.email,
-            role: m.role,
-            joinedat: m.joinedat,
-            userprofiles: Array.isArray(m.userprofiles) ? m.userprofiles[0] : m.userprofiles
-        }));
-      } else {
-        // Fallback
-        console.warn("Detail relationship error, using fallback.", mErr?.message);
-        const { data: rawMembers, error: rawErr } = await supabase
-            .from('divvymembers')
-            .select('*')
-            .eq('divvyid', divvyId);
-        
-        if (rawErr) throw rawErr;
-
-        const userIds = Array.from(new Set((rawMembers || []).map((m: any) => m.userid)));
-        let profiles: any[] = [];
-        if (userIds.length > 0) {
-            const { data: pData } = await supabase.from('userprofiles').select('*').in('id', userIds);
-            profiles = pData || [];
+      const response = await fetch(`/api/groups/${divvyId}/details`, {
+        headers: {
+            'Authorization': `Bearer ${session.access_token}`
         }
-        
-        const profilesMap = new Map(profiles.map((p: any) => [p.id, p]));
-        processedMembers = (rawMembers || []).map((m: any) => ({
-            ...m,
-            userprofiles: profilesMap.get(m.userid) || null
-        }));
+      });
+
+      if (!response.ok) {
+          if (response.status === 403) {
+             setDivvy(null); // Access denied
+          }
+          throw new Error('Falha ao carregar dados');
       }
 
-      setMembers(processedMembers);
+      const data = await response.json();
+      
+      setDivvy(data.divvy);
+      setMembers(data.members || []);
+      setExpenses(data.expenses || []);
+      setTransactions(data.transactions || []);
+      setAllSplits(data.splits || []);
 
-      const [expensesRes, transactionsRes] = await Promise.all([
-        supabase.from('expenses').select('*').eq('divvyid', divvyId).order('date', { ascending: false }),
-        supabase.from('transactions').select('*').eq('divvyid', divvyId).order('createdat', { ascending: false })
-      ]);
-
-      setExpenses(expensesRes.data || []);
-      setTransactions(transactionsRes.data || []);
-
-      if (expensesRes.data && expensesRes.data.length > 0) {
-        const { data: splitData } = await supabase.from('expensesplits').select('*').in('expenseid', expensesRes.data.map(e => e.id));
-        setAllSplits(splitData || []);
-      }
     } catch (error) { 
         console.error("Erro geral no fetch:", error); 
-        toast.error("Erro ao sincronizar dados.");
+        // Se já temos dados, não mostramos toast de erro para não incomodar no realtime
+        if (!silent) toast.error("Erro ao sincronizar dados.");
     } finally { 
         setLoading(false); 
     }
-  }, [divvyId, user]);
+  }, [divvyId, user, session]);
 
   useEffect(() => {
     fetchDivvyData();
 
     // REALTIME SUBSCRIPTION
+    // Mesmo com RLS bloqueando leituras diretas, os eventos de mudança geralmente chegam.
+    // Usamos o evento para disparar um novo fetch na API Segura.
     const channel = supabase.channel(`divvy_room_${divvyId}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'expenses', filter: `divvyid=eq.${divvyId}` }, () => fetchDivvyData())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'transactions', filter: `divvyid=eq.${divvyId}` }, () => fetchDivvyData())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'divvymembers', filter: `divvyid=eq.${divvyId}` }, () => fetchDivvyData())
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'divvies', filter: `id=eq.${divvyId}` }, () => fetchDivvyData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'expenses', filter: `divvyid=eq.${divvyId}` }, () => fetchDivvyData(true))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'transactions', filter: `divvyid=eq.${divvyId}` }, () => fetchDivvyData(true))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'divvymembers', filter: `divvyid=eq.${divvyId}` }, () => fetchDivvyData(true))
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'divvies', filter: `id=eq.${divvyId}` }, () => fetchDivvyData(true))
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
@@ -174,7 +136,7 @@ const DivvyDetailContent: React.FC = () => {
         if (!response.ok) throw new Error(data.error || 'Erro ao processar');
 
         toast.success(`Pagamento ${newStatus === 'confirmed' ? 'confirmado' : 'rejeitado'}.`, { id: toastId });
-        fetchDivvyData();
+        fetchDivvyData(true);
     } catch (e: any) { 
         toast.error(e.message, { id: toastId }); 
     }
@@ -198,7 +160,7 @@ const DivvyDetailContent: React.FC = () => {
       if (!response.ok) throw new Error(data.error || 'Erro ao registrar');
 
       toast.success('Pagamento registrado! Credor notificado.', { id: toastId });
-      fetchDivvyData();
+      fetchDivvyData(true);
     } catch (e: any) { 
       toast.error(e.message, { id: toastId }); 
     }
@@ -221,7 +183,7 @@ const DivvyDetailContent: React.FC = () => {
           
           toast.success("Despesa desbloqueada.", { id: toastId });
           setIsViewModalOpen(false);
-          fetchDivvyData();
+          fetchDivvyData(true);
       } catch(e: any) { 
           toast.error(e.message, { id: toastId }); 
       }
@@ -240,7 +202,7 @@ const DivvyDetailContent: React.FC = () => {
           toast.success("Despesa excluída.", { id: toastId });
           setIsViewModalOpen(false);
           setViewingExpense(null);
-          fetchDivvyData();
+          fetchDivvyData(true);
       } catch(e: any) {
           toast.error(e.message, { id: toastId });
       }
@@ -261,6 +223,7 @@ const DivvyDetailContent: React.FC = () => {
           });
           if (!res.ok) throw new Error('Erro ao arquivar');
           toast.success("Grupo arquivado.");
+          fetchDivvyData(true);
       } catch(e: any) { toast.error(e.message); }
   };
 
@@ -274,6 +237,7 @@ const DivvyDetailContent: React.FC = () => {
         });
         if (!res.ok) throw new Error('Erro ao ocultar');
         toast.success("Sugestão ocultada."); 
+        fetchDivvyData(true);
     } 
     catch(e: any) { toast.error(e.message); }
   };
@@ -291,6 +255,8 @@ const DivvyDetailContent: React.FC = () => {
         const { error } = await supabase.from('divvymembers').delete().eq('divvyid', divvyId).eq('userid', memberUserId);
         if (error) throw error;
         toast.success(`${memberName} removido.`, { id: toastId });
+        // O realtime deve atualizar, mas garantimos:
+        fetchDivvyData(true);
     } catch (e: any) {
         toast.error("Erro ao remover: " + e.message, { id: toastId });
     }
@@ -377,7 +343,7 @@ const DivvyDetailContent: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      <DivvyHeader divvy={divvy} onUpdate={fetchDivvyData} />
+      <DivvyHeader divvy={divvy} onUpdate={() => fetchDivvyData(true)} />
 
       {(divvy.archivesuggested && !divvy.isarchived) && (
         <div className="bg-blue-50 border border-blue-200 p-4 rounded-xl flex flex-col md:flex-row justify-between items-center animate-fade-in-down gap-4">
@@ -639,7 +605,7 @@ const DivvyDetailContent: React.FC = () => {
         <ExpenseForm 
             divvyId={divvyId} 
             members={members} 
-            onSuccess={() => { setIsExpenseModalOpen(false); setViewingExpense(null); }} 
+            onSuccess={() => { setIsExpenseModalOpen(false); setViewingExpense(null); fetchDivvyData(true); }} 
             onCancel={() => setIsExpenseModalOpen(false)}
             initialData={isEditingExpense && viewingExpense ? viewingExpense : undefined}
         />
