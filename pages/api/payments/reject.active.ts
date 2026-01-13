@@ -20,6 +20,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     if (txError || !transaction) throw new Error('Transação não encontrada');
 
+    if (transaction.status !== 'pending' && transaction.status !== 'paymentsent') {
+        return res.status(400).json({ error: 'Apenas transações pendentes ou enviadas podem ser recusadas.' });
+    }
+
     if (transaction.touserid !== userId) {
         return res.status(403).json({ error: 'Apenas o recebedor pode rejeitar.' });
     }

@@ -21,6 +21,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     if (txError || !transaction) throw new Error('Transação não encontrada');
 
+    if (transaction.status !== 'paymentsent') {
+        return res.status(400).json({ error: 'A transação precisa estar marcada como enviada antes da confirmação.' });
+    }
+
     // Validar que quem confirma é o credor (touserid)
     // Nota: Em produção, verificaríamos o JWT do req para garantir que 'userId' é quem diz ser.
     if (transaction.touserid !== userId) {
