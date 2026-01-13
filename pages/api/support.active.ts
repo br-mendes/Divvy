@@ -2,8 +2,6 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { createServerSupabaseClient } from '../../lib/supabaseServer';
 import { Resend } from 'resend';
-
-const resend = new Resend(process.env.RESEND_API_KEY);
 const SUPPORT_EMAIL = process.env.SUPPORT_EMAIL || 'falecomdivvy@gmail.com';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -33,6 +31,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     // 2. Enviar notificação por email para o suporte (Opcional, mas recomendado)
     if (process.env.RESEND_API_KEY) {
+      const resend = new Resend(process.env.RESEND_API_KEY);
       await resend.emails.send({
         from: 'Divvy Support <onboarding@resend.dev>', // Use seu domínio verificado em produção
         to: SUPPORT_EMAIL,

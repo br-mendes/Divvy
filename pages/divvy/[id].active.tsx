@@ -15,7 +15,7 @@ import LoadingSpinner from '../../components/ui/LoadingSpinner';
 import EmptyState from '../../components/ui/EmptyState';
 import ImageViewerModal from '../../components/ui/ImageViewerModal';
 import { 
-  Plus, UserPlus, Receipt, PieChart, Users, Lock, LockOpen, 
+  Plus, UserPlus, Receipt, PieChart, Users, Lock, Unlock, 
   Wallet, Archive, LucideIcon, Trash2, Shield, Calendar, Download, LogOut, Maximize2, RefreshCw
 } from 'lucide-react';
 import { ProtectedRoute } from '../../components/ProtectedRoute';
@@ -580,7 +580,7 @@ const DivvyDetailContent: React.FC = () => {
             <div className="flex gap-3 pt-2">
               {(isLocked(viewingExpense) && user?.id === divvy?.creatorid) ? (
                   <Button fullWidth variant="outline" onClick={() => handleUnlockExpense(viewingExpense)}>
-                      <LockOpen size={16} className="mr-2" /> Desbloquear (Criador)
+                      <Unlock size={16} className="mr-2" /> Desbloquear (Criador)
                   </Button>
               ) : (
                 <>
