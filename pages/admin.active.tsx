@@ -48,26 +48,31 @@ export default function AdminPage() {
     try {
       if (tab === 'overview') {
         const res = await fetch('/api/admin/stats');
-        if (res.ok) setStats(await res.json());
+        if (!res.ok) throw new Error((await res.json()).error || 'Falha ao carregar estatísticas');
+        setStats(await res.json());
       } 
       else if (tab === 'users') {
         const res = await fetch('/api/admin/users');
-        if (res.ok) setUsersList(await res.json());
+        if (!res.ok) throw new Error((await res.json()).error || 'Falha ao carregar usuários (Verifique .active.ts)');
+        setUsersList(await res.json());
       }
       else if (tab === 'groups') {
         const res = await fetch('/api/admin/groups');
-        if (res.ok) setGroupsList(await res.json());
+        if (!res.ok) throw new Error((await res.json()).error || 'Falha ao carregar grupos (Verifique .active.ts)');
+        setGroupsList(await res.json());
       }
       else if (tab === 'tickets') {
         const { data, error } = await supabase
           .from('supporttickets')
           .select('*')
           .order('createdat', { ascending: false });
-        if (!error && data) setTickets(data);
+        
+        if (error) throw error;
+        setTickets(data || []);
       }
-    } catch (e) {
+    } catch (e: any) {
       console.error(e);
-      toast.error("Erro ao carregar dados");
+      toast.error(e.message || "Erro ao carregar dados");
     } finally {
       setLoadingData(false);
     }
@@ -132,7 +137,10 @@ export default function AdminPage() {
         body: JSON.stringify({ title, body, target }),
       });
 
-      if (!res.ok) throw new Error('Erro ao enviar broadcast');
+      if (!res.ok) {
+          const err = await res.json();
+          throw new Error(err.error || 'Erro ao enviar broadcast');
+      }
 
       toast.success('Mensagem enviada com sucesso!');
       setBroadcastModal(false);
@@ -276,7 +284,7 @@ export default function AdminPage() {
                         <div className="bg-white dark:bg-dark-900 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-dark-800 flex items-center justify-between relative overflow-hidden group">
                             <div className="relative z-10">
                                 <p className="text-sm text-gray-500 dark:text-gray-400 font-bold uppercase tracking-wider">Usuários Totais</p>
-                                <p className="text-4xl font-black text-gray-900 dark:text-white mt-2">{loadingData ? '...' : stats?.totalUsers}</p>
+                                <p className="text-4xl font-black text-gray-900 dark:text-white mt-2">{loadingData ? '...' : (stats?.totalUsers || 0)}</p>
                             </div>
                             <div className="w-16 h-16 bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-2xl flex items-center justify-center group-hover:scale-110 transition-transform">
                                 <Users size={32} />
@@ -286,7 +294,7 @@ export default function AdminPage() {
                         <div className="bg-white dark:bg-dark-900 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-dark-800 flex items-center justify-between group">
                             <div>
                                 <p className="text-sm text-gray-500 dark:text-gray-400 font-bold uppercase tracking-wider">Grupos Totais</p>
-                                <p className="text-4xl font-black text-gray-900 dark:text-white mt-2">{loadingData ? '...' : stats?.totalDivvies}</p>
+                                <p className="text-4xl font-black text-gray-900 dark:text-white mt-2">{loadingData ? '...' : (stats?.totalDivvies || 0)}</p>
                             </div>
                             <div className="w-16 h-16 bg-purple-50 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400 rounded-2xl flex items-center justify-center group-hover:scale-110 transition-transform">
                                 <Activity size={32} />
@@ -296,7 +304,7 @@ export default function AdminPage() {
                         <div className="bg-white dark:bg-dark-900 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-dark-800 flex items-center justify-between group">
                             <div>
                                 <p className="text-sm text-gray-500 dark:text-gray-400 font-bold uppercase tracking-wider">Grupos Ativos</p>
-                                <p className="text-4xl font-black text-green-600 dark:text-green-400 mt-2">{loadingData ? '...' : stats?.activeGroups}</p>
+                                <p className="text-4xl font-black text-green-600 dark:text-green-400 mt-2">{loadingData ? '...' : (stats?.activeGroups || 0)}</p>
                             </div>
                             <div className="w-16 h-16 bg-green-50 dark:bg-green-900/30 text-green-600 dark:text-green-400 rounded-2xl flex items-center justify-center group-hover:scale-110 transition-transform">
                                 <Activity size={32} />
