@@ -2,13 +2,17 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { createServerSupabaseClient } from '../../../lib/supabaseServer';
 import { authorizeUser } from '../../../lib/serverAuth';
-import { sendInviteEmail } from '../../../lib/email';
 import { v4 as uuidv4 } from 'uuid';
 import QRCode from 'qrcode';
 import { getURL } from '../../../lib/getURL';
+import { Resend } from 'resend';
+
+// Inicializar Resend diretamente aqui para evitar loops de requisição HTTP
+const RESEND_API_KEY = process.env.RESEND_API_KEY || 're_D4Q38wCF_DkLPPDbmZMYR7fLbCDvYBLhG';
+const resend = new Resend(RESEND_API_KEY);
+const FROM_EMAIL = 'nao-responda@divvyapp.online';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  // Configuração para garantir JSON mesmo em erros
   res.setHeader('Content-Type', 'application/json');
 
   if (req.method !== 'POST') {
@@ -16,18 +20,17 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   try {
-    // 1. Autenticação Segura
-    // Se falhar, authorizeUser lança erro, que é pego pelo catch abaixo
+    // 1. Autenticação
     const user = await authorizeUser(req, res);
     const supabase = createServerSupabaseClient();
     
     const { divvyId, email } = req.body;
 
     if (!divvyId || !email) {
-      return res.status(400).json({ error: 'Campos obrigatórios faltando (divvyId, email).' });
+      return res.status(400).json({ error: 'Campos obrigatórios faltando.' });
     }
 
-    // 2. Validar se quem convidou é membro
+    // 2. Permissão
     const { data: membership, error: memberError } = await supabase
       .from('divvymembers')
       .select('id')
@@ -36,10 +39,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       .single();
 
     if (memberError || !membership) {
-      return res.status(403).json({ error: 'Você não tem permissão para convidar para este grupo.' });
+      return res.status(403).json({ error: 'Permissão negada.' });
     }
 
-    // 3. Verificar se convite já existe (apenas pendentes)
+    // 3. Gerar/Atualizar Token
     const { data: existing } = await supabase
       .from('divvyinvites')
       .select('*')
@@ -52,19 +55,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(); 
 
     if (existing) {
-      // Reenvio
       inviteToken = existing.id;
-      const { error: updateError } = await supabase
+      await supabase
         .from('divvyinvites')
-        .update({ 
-            expiresat: expiresAt,
-            createdat: new Date().toISOString()
-        })
+        .update({ expiresat: expiresAt, createdat: new Date().toISOString() })
         .eq('id', inviteToken);
-
-      if (updateError) throw updateError;
     } else {
-      // Novo
       inviteToken = uuidv4();
       const { error: insertError } = await supabase.from('divvyinvites').insert({
         id: inviteToken,
@@ -74,42 +70,78 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         status: 'pending',
         expiresat: expiresAt,
       });
-
       if (insertError) throw insertError;
     }
 
-    // 4. Preparar dados
+    // 4. Dados para o Email
     const { data: divvy } = await supabase.from('divvies').select('name').eq('id', divvyId).single();
     const { data: inviterProfile } = await supabase.from('userprofiles').select('fullname, displayname').eq('id', user.id).single();
     
     const inviterName = inviterProfile?.displayname || inviterProfile?.fullname || user.email || 'Um amigo';
     const divvyName = divvy?.name || 'Grupo de Despesas';
-
-    const baseUrl = getURL();
-    const inviteLink = `${baseUrl}/join/${inviteToken}`;
+    const inviteLink = `${getURL()}/join/${inviteToken}`;
     
-    let qrCode = '';
-    try {
-        qrCode = await QRCode.toDataURL(inviteLink);
-    } catch (qrErr) {
-        console.error("Erro ao gerar QR Code:", qrErr);
-    }
+    let qrCodeDataUrl = '';
+    try { qrCodeDataUrl = await QRCode.toDataURL(inviteLink); } catch (e) {}
 
-    // 5. Enviar Email
+    // 5. Enviar Email DIRETAMENTE (Sem fetch interno)
+    const htmlContent = `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <meta charset="utf-8" />
+          <style>
+            body { font-family: sans-serif; line-height: 1.6; color: #333; background-color: #f9fafb; margin: 0; padding: 0; }
+            .container { max-width: 600px; margin: 20px auto; background: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
+            .header { background: #7c3aed; color: white; padding: 30px 20px; text-align: center; }
+            .header h1 { margin: 0; font-size: 24px; }
+            .content { padding: 40px 30px; text-align: center; }
+            .button { display: inline-block; padding: 14px 28px; background: #7c3aed; color: white !important; text-decoration: none; border-radius: 8px; font-weight: bold; margin-top: 20px;}
+            .footer { background: #f3f4f6; padding: 20px; text-align: center; font-size: 12px; color: #9ca3af; }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <div class="header"><h1>Convite para o Divvy!</h1></div>
+            <div class="content">
+              <p>Olá!</p>
+              <p><strong>${inviterName}</strong> convidou você para o grupo <strong>"${divvyName}"</strong>.</p>
+              <a href="${inviteLink}" class="button">Aceitar Convite</a>
+              ${qrCodeDataUrl ? `<div style="margin-top:20px;"><p>Ou escaneie:</p><img src="${qrCodeDataUrl}" width="150" /></div>` : ''}
+            </div>
+            <div class="footer"><p>© 2026 Divvy</p></div>
+          </div>
+        </body>
+      </html>
+    `;
+
     try {
-        await sendInviteEmail(email, divvyName, inviterName, inviteLink, qrCode);
+        const emailData = await resend.emails.send({
+            from: `Divvy <${FROM_EMAIL}>`,
+            to: email,
+            subject: `${inviterName} convidou você para ${divvyName}`,
+            html: htmlContent,
+        });
+
+        if (emailData.error) {
+            console.error("Resend Error:", emailData.error);
+            // Retornar sucesso com aviso, pois o link foi gerado
+            return res.status(200).json({ 
+                success: true, 
+                inviteLink, 
+                warning: 'Convite criado, mas falha ao enviar email. Use o link manual.' 
+            });
+        }
     } catch (emailErr) {
-        console.error("Erro no envio de email, mas convite criado:", emailErr);
-        // Não falhamos a requisição se o email falhar, retornamos o link
+        console.error("Email Exception:", emailErr);
+        // Não falhar o request todo se o email falhar
     }
 
     return res.status(200).json({ success: true, inviteLink });
 
   } catch (error: any) {
     console.error('Invite API Error:', error);
-    const message = error.message === 'Unauthorized' ? 'Sessão expirada. Faça login novamente.' : (error.message || 'Erro interno do servidor');
     const status = error.message === 'Unauthorized' ? 401 : 500;
-    
-    return res.status(status).json({ error: message });
+    return res.status(status).json({ error: error.message || 'Erro interno.' });
   }
 }
