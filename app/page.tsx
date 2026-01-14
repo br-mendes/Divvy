@@ -4,7 +4,7 @@
 import { useEffect, useState } from 'react'; 
 import { useRouter } from 'next/navigation'; 
 import { supabase } from '@/lib/supabase'; 
-import Button from '@/components/common/Button'; 
+import { Button } from '@/components/common/Button'; 
 import LogoAnimated from '@/components/common/LogoAnimated'; 
 import Link from 'next/link'; 
 
