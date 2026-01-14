@@ -32,6 +32,23 @@ export async function middleware(req: NextRequest) {
     return NextResponse.redirect(new URL('/dashboard', req.url));
   }
 
+  // Proteção adicional para rotas de admin
+  if (session && req.nextUrl.pathname.startsWith('/admin')) {
+    const adminEmails = ['brunoafonso.mendes@gmail.com', 'falecomdivvy@gmail.com'];
+    const isEmailAdmin = adminEmails.includes(session.user.email || '');
+    if (!isEmailAdmin) {
+      const { data: profile } = await supabase
+        .from('userprofiles')
+        .select('is_super_admin')
+        .eq('id', session.user.id)
+        .single();
+
+      if (!profile?.is_super_admin) {
+        return NextResponse.redirect(new URL('/', req.url));
+      }
+    }
+  }
+
   return res;
 }
 

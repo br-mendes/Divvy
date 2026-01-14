@@ -1,7 +1,7 @@
 
 import React from 'react';
 import { Expense } from '../../types';
-import { FileText, Lock } from 'lucide-react';
+import { Lock } from 'lucide-react';
 
 interface ExpenseCardProps {
   expense: Expense;
@@ -34,9 +34,6 @@ const ExpenseCard: React.FC<ExpenseCardProps> = ({ expense, payerName, onClick, 
           <p className="font-bold flex items-center gap-2 text-gray-900 dark:text-white truncate pr-2">
             <span className="truncate">{expense.description || expense.category}</span>
             <span className="flex-shrink-0 flex gap-1">
-              {expense.receiptphotourl && (
-                <span title="Com comprovante"><FileText size={14} className="text-gray-400" /></span>
-              )}
               {expense.locked && (
                 <span title="Bloqueado"><Lock size={14} className="text-red-500" /></span>
               )}

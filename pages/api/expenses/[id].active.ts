@@ -36,7 +36,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         category, 
         description, 
         date, 
-        receiptPhotoUrl, 
         splits 
     } = req.body;
 
@@ -57,7 +56,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           category,
           description,
           date,
-          receiptphotourl: receiptPhotoUrl,
           updatedat: new Date().toISOString()
         })
         .eq('id', expenseId);

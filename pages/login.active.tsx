@@ -7,7 +7,7 @@ import DivvyLogo from '../components/branding/DivvyLogo';
 import toast from 'react-hot-toast';
 import Link from 'next/link';
 import { getURL } from '../lib/getURL';
-import { ShieldCheck } from 'lucide-react';
+import { Eye, EyeOff, ShieldCheck } from 'lucide-react';
 
 export default function Login() {
   const router = useRouter();
@@ -15,6 +15,7 @@ export default function Login() {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   // 2FA State
   const [showMfaInput, setShowMfaInput] = useState(false);
@@ -129,8 +130,17 @@ export default function Login() {
 
   if (showMfaInput) {
      return (
-        <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
-           <div className="w-full max-w-md bg-white p-8 rounded-lg shadow-md border border-gray-100 text-center">
+        <div className="min-h-screen bg-gray-50">
+           <header className="sticky top-0 z-10 border-b border-gray-200 bg-white">
+             <div className="max-w-7xl mx-auto px-4 py-4">
+               <Link href="/" className="inline-flex items-center gap-2">
+                 <DivvyLogo className="w-8 h-8" />
+                 <span className="text-xl font-bold text-gray-900">Divvy</span>
+               </Link>
+             </div>
+           </header>
+           <div className="flex items-center justify-center px-4 py-10">
+             <div className="w-full max-w-md bg-white p-8 rounded-lg shadow-md border border-gray-100 text-center">
               <div className="mx-auto w-16 h-16 bg-brand-100 text-brand-600 rounded-full flex items-center justify-center mb-6">
                   <ShieldCheck size={32} />
               </div>
@@ -153,14 +163,24 @@ export default function Login() {
               <button onClick={() => setShowMfaInput(false)} className="mt-4 text-sm text-gray-400 hover:text-gray-600 underline">
                  Voltar para login
               </button>
+             </div>
            </div>
         </div>
      );
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
-      <div className="w-full max-w-md bg-white p-8 rounded-lg shadow-md border border-gray-100">
+    <div className="min-h-screen bg-gray-50">
+      <header className="sticky top-0 z-10 border-b border-gray-200 bg-white">
+        <div className="max-w-7xl mx-auto px-4 py-4">
+          <Link href="/" className="inline-flex items-center gap-2">
+            <DivvyLogo className="w-8 h-8" />
+            <span className="text-xl font-bold text-gray-900">Divvy</span>
+          </Link>
+        </div>
+      </header>
+      <div className="flex items-center justify-center px-4 py-10">
+        <div className="w-full max-w-md bg-white p-8 rounded-lg shadow-md border border-gray-100">
         <div className="text-center mb-8">
           <DivvyLogo className="mx-auto w-16 h-16" />
           <h1 className="text-2xl font-bold mt-4 text-gray-900">Bem-vindo de volta</h1>
@@ -170,7 +190,25 @@ export default function Login() {
         <form onSubmit={handleLogin} className="space-y-4">
           <Input label="Email" type="email" value={email} onChange={e => setEmail(e.target.value)} required placeholder="seu@email.com" />
           <div className="space-y-1">
-            <Input label="Senha" type="password" value={password} onChange={e => setPassword(e.target.value)} required placeholder="••••••••" />
+            <label className="block text-sm font-medium text-gray-700">Senha</label>
+            <div className="relative">
+              <input
+                type={showPassword ? 'text' : 'password'}
+                value={password}
+                onChange={e => setPassword(e.target.value)}
+                required
+                placeholder="••••••••"
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-gray-900 placeholder-gray-400 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 pr-10"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword((prev) => !prev)}
+                className="absolute inset-y-0 right-0 px-3 text-gray-500 hover:text-gray-700"
+                aria-label={showPassword ? 'Ocultar senha' : 'Mostrar senha'}
+              >
+                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+              </button>
+            </div>
             <div className="flex justify-end">
               <Link href="/auth/reset" className="text-xs text-brand-600 hover:underline">
                 Esqueceu a senha?
@@ -223,6 +261,7 @@ export default function Login() {
         <p className="mt-6 text-center text-sm text-gray-600">
           Ainda não tem conta? <Link href={`/signup${router.query.redirect ? `?redirect=${router.query.redirect}` : ''}`} className="text-brand-600 font-bold hover:underline">Cadastre-se grátis</Link>
         </p>
+        </div>
       </div>
     </div>
   );

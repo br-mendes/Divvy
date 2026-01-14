@@ -7,20 +7,32 @@ import toast from 'react-hot-toast';
 import Link from 'next/link';
 import DivvyLogo from '../components/branding/DivvyLogo';
 import { getURL } from '../lib/getURL';
+import { Eye, EyeOff } from 'lucide-react';
 
 export default function Signup() {
   const router = useRouter();
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
+  const [acceptedPrivacy, setAcceptedPrivacy] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   // Validação de senha: Min 8 chars, 1 Maiúscula, 1 Minúscula, 1 Número, 1 Especial
-  const validatePassword = (pwd: string) => {
-    const regex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/;
-    return regex.test(pwd);
+  const passwordChecks = {
+    length: password.length >= 8,
+    uppercase: /[A-Z]/.test(password),
+    lowercase: /[a-z]/.test(password),
+    number: /[0-9]/.test(password),
+    special: /[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?]/.test(password),
   };
+  const passwordPassed = Object.values(passwordChecks).filter(Boolean).length;
+  const passwordStrength =
+    passwordPassed <= 2 ? 'weak' : passwordPassed <= 4 ? 'medium' : 'strong';
 
   async function handleSignup(e: React.FormEvent) {
     e.preventDefault();
@@ -30,7 +42,17 @@ export default function Signup() {
       return;
     }
 
-    if (!validatePassword(password)) {
+    if (!acceptedTerms || !acceptedPrivacy) {
+      toast.error('Você deve aceitar os termos e a política de privacidade.');
+      return;
+    }
+
+    if (password !== confirmPassword) {
+      toast.error('As senhas não coincidem.');
+      return;
+    }
+
+    if (passwordPassed !== 5) {
       toast.error('A senha deve ter no mínimo 8 caracteres, incluir maiúscula, minúscula, número e caractere especial.');
       return;
     }
@@ -88,8 +110,18 @@ export default function Signup() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
-      <div className="w-full max-w-md bg-white p-8 rounded-lg shadow-md">
+    <div className="min-h-screen bg-gray-50">
+      <header className="sticky top-0 z-10 border-b border-gray-200 bg-white">
+        <div className="max-w-7xl mx-auto px-4 py-4">
+          <Link href="/" className="inline-flex items-center gap-2">
+            <DivvyLogo className="w-8 h-8" />
+            <span className="text-xl font-bold text-gray-900">Divvy</span>
+          </Link>
+        </div>
+      </header>
+
+      <div className="flex items-center justify-center px-4 py-10">
+        <div className="w-full max-w-md bg-white p-8 rounded-lg shadow-md">
         <div className="text-center mb-8">
           <DivvyLogo className="mx-auto w-16 h-16" />
           <h1 className="text-2xl font-bold mt-4">Criar Conta</h1>
@@ -112,18 +144,88 @@ export default function Signup() {
             required 
             placeholder="seu@email.com"
           />
-          <div className="space-y-1">
-            <Input 
-              label="Senha" 
-              type="password" 
-              value={password} 
-              onChange={e => setPassword(e.target.value)} 
-              required 
-              placeholder="••••••••"
-            />
-            <p className="text-xs text-gray-500">
-              Mínimo 8 caracteres, maiúscula, minúscula, número e especial.
-            </p>
+          <div className="space-y-2">
+            <label className="block text-sm font-medium text-gray-700">Senha</label>
+            <div className="relative">
+              <input
+                type={showPassword ? 'text' : 'password'}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+                placeholder="••••••••"
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-gray-900 placeholder-gray-400 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 pr-10"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword((prev) => !prev)}
+                className="absolute inset-y-0 right-0 px-3 text-gray-500 hover:text-gray-700"
+                aria-label={showPassword ? 'Ocultar senha' : 'Mostrar senha'}
+              >
+                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+              </button>
+            </div>
+            <label className="block text-sm font-medium text-gray-700">Confirmar senha</label>
+            <div className="relative">
+              <input
+                type={showConfirmPassword ? 'text' : 'password'}
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                required
+                placeholder="••••••••"
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-gray-900 placeholder-gray-400 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 pr-10"
+              />
+              <button
+                type="button"
+                onClick={() => setShowConfirmPassword((prev) => !prev)}
+                className="absolute inset-y-0 right-0 px-3 text-gray-500 hover:text-gray-700"
+                aria-label={showConfirmPassword ? 'Ocultar confirmação' : 'Mostrar confirmação'}
+              >
+                {showConfirmPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+              </button>
+            </div>
+            <div className="space-y-1 text-xs text-gray-500">
+              <p className={passwordChecks.length ? 'text-green-600' : ''}>8+ caracteres</p>
+              <p className={passwordChecks.uppercase ? 'text-green-600' : ''}>1 maiúscula</p>
+              <p className={passwordChecks.lowercase ? 'text-green-600' : ''}>1 minúscula</p>
+              <p className={passwordChecks.number ? 'text-green-600' : ''}>1 número</p>
+              <p className={passwordChecks.special ? 'text-green-600' : ''}>1 caractere especial</p>
+            </div>
+            <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
+              <div
+                className={`h-full transition-all ${
+                  passwordStrength === 'weak'
+                    ? 'bg-red-500 w-1/3'
+                    : passwordStrength === 'medium'
+                    ? 'bg-yellow-500 w-2/3'
+                    : 'bg-green-500 w-full'
+                }`}
+              />
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            <label className="flex items-start gap-2 text-sm text-gray-600">
+              <input
+                type="checkbox"
+                checked={acceptedTerms}
+                onChange={(e) => setAcceptedTerms(e.target.checked)}
+                className="mt-1 h-4 w-4 rounded border-gray-300 text-brand-600 focus:ring-brand-500"
+              />
+              <span>
+                Aceito os <Link href="/terms" className="text-brand-600 font-semibold hover:underline">Termos de Serviço</Link>
+              </span>
+            </label>
+            <label className="flex items-start gap-2 text-sm text-gray-600">
+              <input
+                type="checkbox"
+                checked={acceptedPrivacy}
+                onChange={(e) => setAcceptedPrivacy(e.target.checked)}
+                className="mt-1 h-4 w-4 rounded border-gray-300 text-brand-600 focus:ring-brand-500"
+              />
+              <span>
+                Aceito a <Link href="/privacy" className="text-brand-600 font-semibold hover:underline">Política de Privacidade</Link>
+              </span>
+            </label>
           </div>
           <Button type="submit" fullWidth isLoading={loading}>Cadastrar</Button>
         </form>
@@ -171,6 +273,7 @@ export default function Signup() {
         <p className="mt-6 text-center text-sm text-gray-600">
           Já tem conta? <Link href={`/login${router.query.redirect ? `?redirect=${router.query.redirect}` : ''}`} className="text-brand-600 font-bold hover:underline">Fazer login</Link>
         </p>
+        </div>
       </div>
     </div>
   );

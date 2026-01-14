@@ -16,7 +16,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     category, 
     description, 
     date, 
-    receiptPhotoUrl, 
     splits // Array of { participantuserid, amountowed }
   } = req.body;
 
@@ -51,7 +50,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         category,
         description,
         date,
-        receiptphotourl: receiptPhotoUrl,
         locked: false
       })
       .select()
