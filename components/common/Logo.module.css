@@ -1,0 +1,57 @@
+.logo {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.icon {
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: 9999px;
+  background: linear-gradient(135deg, var(--primary), var(--secondary));
+}
+
+.text {
+  font-weight: 700;
+  color: var(--primary);
+}
+
+.sm .icon {
+  width: 1.25rem;
+  height: 1.25rem;
+}
+
+.md .icon {
+  width: 1.5rem;
+  height: 1.5rem;
+}
+
+.lg .icon {
+  width: 2rem;
+  height: 2rem;
+}
+
+.sm .text {
+  font-size: 0.875rem;
+}
+
+.md .text {
+  font-size: 1rem;
+}
+
+.lg .text {
+  font-size: 1.25rem;
+}
+
+.animated .icon {
+  animation: logoPulse 2s ease-in-out infinite;
+}
+
+@keyframes logoPulse {
+  0%, 100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.08);
+  }
+}
