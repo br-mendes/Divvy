@@ -14,7 +14,9 @@ export const Logo: React.FC<LogoProps> = ({ size = 'md', animated = true }) => {
 
   return (
     <div className={`${styles.logo} ${sizeClass} ${animatedClass}`}>
-      <div className={styles.icon}></div> 
+      <div className={styles.icon} aria-hidden="true">
+        <span className={styles.emoji}>💸</span>
+      </div>
       <span className={styles.text}>Divvy</span>
     </div>
   );

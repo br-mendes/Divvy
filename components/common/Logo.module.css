@@ -32,6 +32,10 @@
   font-size: 1.2em;
 }
 
+.emoji {
+  line-height: 1;
+}
+
 .animated .icon {
   animation: bounce 2s ease-in-out infinite;
 }
