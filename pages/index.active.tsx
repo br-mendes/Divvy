@@ -1,19 +1,12 @@
-
-import React, { useEffect, useState } from 'react';
-import { useRouter } from 'next/router';
+import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
-import { useTheme } from '../context/ThemeContext';
 import Button from '../components/common/Button';
-import AnimatedTagline from '../components/home/AnimatedTagline';
+import LogoAnimated from '../components/common/LogoAnimated';
 import Link from 'next/link';
-import DivvyLogo from '../components/branding/DivvyLogo';
-import { Moon, Sun, Menu, X, ArrowRight, ShieldCheck, PieChart, Users, DollarSign, Calculator, Send, CheckCircle } from 'lucide-react';
 
 export default function HomePage() {
-  const router = useRouter();
-  const { theme, toggleTheme } = useTheme();
+  const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   useEffect(() => {
     checkUser();
@@ -22,9 +15,7 @@ export default function HomePage() {
   async function checkUser() {
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      if (session?.user) {
-        router.push('/dashboard');
-      }
+      setUser(session?.user ?? null);
     } catch (err) {
       console.error('Erro ao verificar usuário:', err);
     } finally {
@@ -34,195 +25,232 @@ export default function HomePage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-white dark:bg-dark-950 transition-colors">
-        <div className="h-10 w-10 border-4 border-brand-200 border-t-brand-600 rounded-full animate-spin"></div>
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <div className="text-4xl mb-4"></div>
+          <p className="text-gray-600">Carregando...</p>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-white dark:bg-dark-950 text-gray-900 dark:text-gray-100 transition-colors duration-500 font-sans selection:bg-brand-500/30">
-      {/* Navbar Otimizada */}
-      <header className="sticky top-0 z-50 border-b border-gray-100 dark:border-dark-700 bg-white/80 dark:bg-dark-950/80 backdrop-blur-md transition-all">
-        <div className="max-w-7xl mx-auto px-4 py-3 flex justify-between items-center h-16 sm:h-20">
-          <Link href="/" className="flex items-center gap-2 group">
-            <DivvyLogo className="w-8 h-8 group-hover:scale-110 transition-transform" animated={false} />
-            <span className="text-xl font-bold tracking-tight">Divvy</span>
-          </Link>
-          
-          <nav className="hidden md:flex items-center gap-8">
-            <Link href="#features" className="text-sm font-medium text-gray-500 hover:text-brand-600 dark:hover:text-brand-400 transition-colors">Recursos</Link>
-            <Link href="/login" className="text-sm font-medium text-gray-500 hover:text-brand-600 dark:hover:text-brand-400 transition-colors">Entrar</Link>
-            <button onClick={toggleTheme} className="p-2 text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-dark-800 rounded-full transition-all">
-              {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
-            </button>
-            <Link href="/signup">
-              <Button variant="primary" className="bg-brand-600 hover:bg-brand-700 shadow-lg shadow-brand-500/30 px-6">
-                Começar agora
-              </Button>
-            </Link>
-          </nav>
+    <div className="min-h-screen bg-gradient-to-br from-purple-50 via-white to-blue-50">
+      {/* Header */}
+      <header className="sticky top-0 z-40 border-b border-gray-200 bg-white/80 backdrop-blur-sm">
+        <div className="max-w-7xl mx-auto px-4 py-4 flex justify-between items-center">
+          <LogoAnimated />
 
-          <div className="flex items-center gap-2 md:hidden">
-            <button onClick={toggleTheme} className="p-2 text-gray-500 dark:text-gray-400 rounded-full">
-              {theme === 'dark' ? <Sun size={20} /> : <Moon size={20} />}
-            </button>
-            <button
-              className="p-2 text-gray-600 dark:text-gray-300"
-              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-            >
-              {mobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
-            </button>
+          <div className="flex items-center gap-3 flex-nowrap">
+            {user ? (
+              <Link href="/dashboard">
+                <Button variant="primary" className="whitespace-nowrap h-11">Ir ao Dashboard</Button>
+              </Link>
+            ) : (
+              <>
+                <Link href="/auth/login">
+                  <Button variant="outline" className="whitespace-nowrap h-11">Entrar</Button>
+                </Link>
+                <Link href="/auth/signup">
+                  <Button variant="primary" className="whitespace-nowrap h-11">Criar Conta</Button>
+                </Link>
+              </>
+            )}
           </div>
         </div>
-
-        {/* Menu Mobile */}
-        {mobileMenuOpen && (
-          <div className="md:hidden border-t border-gray-100 dark:border-dark-700 p-6 bg-white dark:bg-dark-900 flex flex-col gap-4 animate-fade-in-down shadow-xl">
-            <Link href="/login" onClick={() => setMobileMenuOpen(false)}><Button variant="outline" fullWidth>Entrar</Button></Link>
-            <Link href="/signup" onClick={() => setMobileMenuOpen(false)}>
-              <Button variant="primary" fullWidth className="bg-brand-600 hover:bg-brand-700 shadow-lg shadow-brand-500/30">
-                Começar agora
-              </Button>
-            </Link>
-          </div>
-        )}
       </header>
 
       {/* Hero Section */}
-      <section className="max-w-7xl mx-auto px-4 pt-16 pb-24 sm:pt-28 sm:pb-32">
-        <div className="grid lg:grid-cols-2 gap-16 items-center">
-          <div className="space-y-8 text-center lg:text-left">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-brand-50 dark:bg-brand-900/30 border border-brand-100 dark:border-brand-800 text-brand-600 dark:text-brand-400 text-xs font-bold uppercase tracking-wider">
-              ✨ Gestão inteligente de despesas
+      <section className="max-w-7xl mx-auto px-4 py-12 md:py-20">
+        <div className="grid md:grid-cols-2 gap-8 md:gap-12 items-center">
+          <div className="space-y-6">
+            <div className="inline-block bg-[#208085]/10 px-4 py-2 rounded-full">
+              <span className="text-[#208085] font-semibold text-sm">
+                 Divisão de Gastos Facilitada
+              </span>
             </div>
-            <h1 className="text-4xl sm:text-6xl lg:text-7xl font-extrabold tracking-tight leading-[1.1]">
-              <AnimatedTagline />
+
+            {/* TÍTULO EM 1 LINHA - RESPONSIVO */}
+            <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl lg:whitespace-nowrap font-bold text-gray-900 leading-tight">
+              Despesas em grupo <span className="text-[#208085]">sem drama</span>
             </h1>
-            <p className="text-lg sm:text-xl text-gray-600 dark:text-gray-400 leading-relaxed max-w-xl mx-auto lg:mx-0">
-              Organize despesas compartilhadas com amigos, família ou república. Calcule automaticamente quem deve quem, sem burocracia.
+
+            <p className="text-lg md:text-xl text-gray-600 leading-relaxed">
+              Organize despesas compartilhadas com amigos, família ou república.
+              Calcule automaticamente quem deve quem. Sem burocracia.
             </p>
-            <div className="flex flex-col sm:flex-row gap-4 pt-4 justify-center lg:justify-start">
-              <Link href="/signup" className="w-full sm:w-auto">
-                <Button variant="primary" size="lg" className="w-full sm:px-12 group bg-brand-600 hover:bg-brand-700 shadow-xl shadow-brand-500/30 hover:scale-[1.02] transition-transform">
-                  <span className="inline-flex items-center gap-3">
-                    <span className="font-semibold tracking-tight">Comece agora</span>
-                    <span className="inline-flex items-center justify-center w-9 h-9 rounded-full bg-white/20 group-hover:bg-white/30 transition-colors">
-                      <ArrowRight size={18} className="text-white group-hover:translate-x-0.5 transition-transform" />
-                    </span>
-                  </span>
+
+            {/* BOTÕES NA MESMA LINHA */}
+            <div className="flex flex-wrap gap-4 pt-4">
+              <Link href={user ? '/dashboard' : '/auth/signup'}>
+                <Button variant="primary" size="lg" className="whitespace-nowrap">
+                  {user ? 'Começar Agora' : 'Criar Conta Grátis'} →
                 </Button>
               </Link>
-              <Link href="#features" className="w-full sm:w-auto">
-                <Button variant="outline" size="lg" className="w-full sm:px-12 dark:bg-dark-800/50">Saiba Mais</Button>
-              </Link>
+              <a href="#features">
+                <Button variant="outline" size="lg" className="whitespace-nowrap">
+                  Saiba Mais
+                </Button>
+              </a>
             </div>
           </div>
-          
-          <div className="hidden lg:flex justify-center relative">
-            <div className="absolute -inset-10 bg-brand-500/10 blur-[120px] rounded-full animate-pulse"></div>
-            <div className="relative bg-white dark:bg-dark-800 p-20 rounded-[64px] shadow-2xl border border-gray-100 dark:border-dark-700 animate-float transition-colors duration-500">
-              <DivvyLogo className="w-64 h-64 relative z-10" />
+
+          <div className="hidden md:flex justify-center">
+            <div className="bg-gradient-to-br from-[#208085]/20 to-purple-200/20 rounded-3xl w-full h-96 flex items-center justify-center">
+              <div className="text-8xl"></div>
             </div>
           </div>
         </div>
       </section>
 
-      {/* Feature Pillars */}
-      <section id="features" className="bg-gray-50/50 dark:bg-dark-900/40 py-24 border-y border-gray-100 dark:border-dark-700 transition-colors">
+      {/* Features Section */}
+      <section id="features" className="bg-white py-16 md:py-20">
         <div className="max-w-7xl mx-auto px-4">
-          <div className="text-center max-w-2xl mx-auto mb-20">
-            <h2 className="text-3xl sm:text-4xl font-bold mb-6">Tudo que você precisa</h2>
-            <p className="text-gray-600 dark:text-gray-400 text-lg">
-              Ferramentas poderosas e simples para gerenciar despesas.
+          <div className="text-center mb-12 md:mb-16">
+            <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-4">
+              Tudo que você precisa
+            </h2>
+            <p className="text-lg md:text-xl text-gray-600">
+              Ferramentas poderosas e simples para gerenciar despesas
             </p>
           </div>
-          
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-            <FeatureCard 
-              icon={<DollarSign size={28} />}
-              title="Registre Despesas"
-              desc="Adicione despesas com categoria, data e descrição. Automático e rápido."
-            />
-            <FeatureCard 
-              icon={<Calculator size={28} />}
-              title="Calcule Saldos"
-              desc="Saiba automaticamente quem deve a quem. Sem matemática confusa."
-            />
-             <FeatureCard 
-              icon={<Send size={28} />}
-              title="Convide Membros"
-              desc="Compartilhe com link ou QR code. Eles recebem e-mail com convite."
-            />
-             <FeatureCard 
-              icon={<PieChart size={28} />}
-              title="Visualize Gráficos"
-              desc="Veja despesas por categoria e por pessoa com gráficos intuitivos."
-            />
-            <FeatureCard 
-              icon={<Users size={28} />}
-              title="Divisão Flexível"
-              desc="Divida igualmente, por porcentagens ou valores customizados."
-            />
-             <FeatureCard 
-              icon={<CheckCircle size={28} />}
-              title="Marque Pagamentos"
-              desc="Registre quando alguém pagou. Acompanhe histórico completo."
-            />
+
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6 md:gap-8">
+            {[
+              {
+                icon: '',
+                title: 'Registre Despesas',
+                description: 'Adicione despesas com categoria, data e descrição. Automático e rápido.',
+              },
+              {
+                icon: '',
+                title: 'Calcule Saldos',
+                description: 'Saiba automaticamente quem deve quem. Sem matemática confusa.',
+              },
+              {
+                icon: '',
+                title: 'Convide Membros',
+                description: 'Compartilhe com link ou QR code. Eles recebem email com convite.',
+              },
+              {
+                icon: '',
+                title: 'Visualize Gráficos',
+                description: 'Veja despesas por categoria e por pessoa com gráficos intuitivos.',
+              },
+              {
+                icon: '',
+                title: 'Divida Flexível',
+                description: 'Divida igualmente, por shares ou valores customizados.',
+              },
+              {
+                icon: '',
+                title: 'Marque Pagamentos',
+                description: 'Registre quando alguém pagou. Acompanhe histórico completo.',
+              },
+            ].map((feature, idx) => (
+              <div
+                key={idx}
+                className="p-6 bg-gray-50 rounded-xl border border-gray-200 hover:shadow-lg transition"
+              >
+                <div className="text-4xl mb-4">{feature.icon}</div>
+                <h3 className="text-xl font-semibold text-gray-900 mb-2">
+                  {feature.title}
+                </h3>
+                <p className="text-gray-600">{feature.description}</p>
+              </div>
+            ))}
           </div>
         </div>
       </section>
 
-      {/* Use Cases */}
-      <section className="py-24">
+      {/* Use Cases Section - 4 CARDS */}
+      <section className="py-16 md:py-20">
         <div className="max-w-7xl mx-auto px-4">
-           <div className="grid md:grid-cols-4 gap-6">
-              {[
-                { emoji: '✈️', title: 'Viagens', desc: 'Hotel, carro, refeições' },
-                { emoji: '🏠', title: 'República', desc: 'Aluguel, contas, compras' },
-                { emoji: '👫', title: 'Casal', desc: 'Refeições, eventos' },
-                { emoji: '🎉', title: 'Eventos', desc: 'Festas, encontros' },
-              ].map((item, idx) => (
-                <div key={idx} className="p-6 bg-gradient-to-br from-gray-50 dark:from-dark-800 to-white dark:to-dark-900 rounded-2xl border border-gray-100 dark:border-dark-700 text-center">
-                   <div className="text-5xl mb-4">{item.emoji}</div>
-                   <h3 className="font-bold text-lg mb-2">{item.title}</h3>
-                   <p className="text-sm text-gray-500">{item.desc}</p>
-                </div>
-              ))}
-           </div>
+          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
+            {[
+              { emoji: '', title: 'Viagens', desc: 'Hotel, carro, refeições' },
+              { emoji: '', title: 'República', desc: 'Aluguel, contas, compras' },
+              { emoji: '', title: 'Casal', desc: 'Refeições, eventos' },
+              { emoji: '', title: 'Eventos', desc: 'Festas, encontros' },
+            ].map((useCase, idx) => (
+              <div
+                key={idx}
+                className="p-6 bg-gradient-to-br from-gray-50 to-white rounded-xl border border-gray-200 text-center"
+              >
+                <div className="text-5xl mb-3">{useCase.emoji}</div>
+                <h3 className="font-semibold text-gray-900">{useCase.title}</h3>
+                <p className="text-sm text-gray-600 mt-2">{useCase.desc}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* CTA Final */}
+      <section className="bg-gradient-to-r from-[#208085] to-purple-600 text-white py-16 md:py-20">
+        <div className="max-w-4xl mx-auto px-4 text-center">
+          <h2 className="text-3xl md:text-4xl font-bold mb-6">Pronto para começar?</h2>
+          <p className="text-lg md:text-xl mb-8 opacity-90">
+            Grátis. Sem cartão de crédito. Sem complicações.
+          </p>
+          <Link href={user ? '/dashboard' : '/auth/signup'}>
+            <Button variant="primary" size="lg" className="bg-white text-[#208085] hover:bg-gray-100">
+              {user ? 'Ir ao Dashboard' : 'Criar Conta Agora'} →
+            </Button>
+          </Link>
         </div>
       </section>
 
       {/* Footer */}
-      <footer className="py-16 border-t border-gray-100 dark:border-dark-700 bg-white dark:bg-dark-950 transition-colors">
-        <div className="max-w-7xl mx-auto px-4 flex flex-col items-center">
-          <div className="flex items-center gap-2 mb-6">
-            <DivvyLogo className="w-6 h-6" animated={false} />
-            <span className="font-bold text-lg">Divvy</span>
+      <footer className="bg-gray-900 text-white py-12">
+        <div className="max-w-7xl mx-auto px-4">
+          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-8 mb-8">
+            <div>
+              <div className="flex items-center gap-2 mb-4">
+                <span className="text-2xl"></span>
+                <span className="font-bold">Divvy</span>
+              </div>
+              <p className="text-gray-400 text-sm">
+                Despesas em grupo sem drama
+              </p>
+            </div>
+
+            <div>
+              <h4 className="font-semibold mb-4">Produto</h4>
+              <ul className="space-y-2 text-sm text-gray-400">
+                <li>
+                  <a href="#features" className="hover:text-white">Features</a>
+                </li>
+              </ul>
+            </div>
+
+            <div>
+              <h4 className="font-semibold mb-4">Empresa</h4>
+              <ul className="space-y-2 text-sm text-gray-400">
+                <li>
+                  <Link href="/about" className="hover:text-white">Sobre</Link>
+                </li>
+              </ul>
+            </div>
+
+            <div>
+              <h4 className="font-semibold mb-4">Legal</h4>
+              <ul className="space-y-2 text-sm text-gray-400">
+                <li>
+                  <Link href="/privacy" className="hover:text-white">Privacidade</Link>
+                </li>
+                <li>
+                  <Link href="/terms" className="hover:text-white">Termos</Link>
+                </li>
+              </ul>
+            </div>
           </div>
-          <p className="text-gray-500 dark:text-gray-400 text-sm mb-8">Gestão inteligente de despesas para roommates, viagens e grupos.</p>
-          <div className="flex gap-6 text-sm text-gray-400 font-medium">
-             <Link href="#" className="hover:text-brand-600 transition-colors">Termos</Link>
-             <Link href="#" className="hover:text-brand-600 transition-colors">Privacidade</Link>
-             <Link href="#" className="hover:text-brand-600 transition-colors">Contato</Link>
+
+          <div className="border-t border-gray-700 pt-8 text-center text-gray-400 text-sm">
+            <p>© 2026 Divvy. Todos os direitos reservados.</p>
           </div>
-          <p className="mt-12 text-xs text-gray-400">© 2026 Divvy. Todos os direitos reservados.</p>
         </div>
       </footer>
-    </div>
-  );
-}
-
-function FeatureCard({ icon, title, desc }: { icon: React.ReactNode, title: string, desc: string }) {
-  return (
-    <div className="group p-8 bg-white dark:bg-dark-800 rounded-3xl border border-gray-100 dark:border-dark-700 shadow-sm hover:shadow-xl hover:border-brand-200 dark:hover:border-brand-800 transition-all duration-300">
-      <div className="w-14 h-14 bg-brand-50 dark:bg-brand-900/20 rounded-2xl flex items-center justify-center text-brand-600 dark:text-brand-400 mb-6 group-hover:scale-110 transition-transform">
-        {icon}
-      </div>
-      <h3 className="text-xl font-bold mb-3 text-gray-900 dark:text-white">{title}</h3>
-      <p className="text-gray-500 dark:text-gray-400 leading-relaxed text-sm">
-        {desc}
-      </p>
     </div>
   );
 }
