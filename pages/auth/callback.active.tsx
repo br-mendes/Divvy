@@ -14,7 +14,7 @@ export default function AuthCallback() {
       if (error) {
         console.error('Error during auth callback:', error.message);
         toast.error('Erro na autenticação.');
-        router.push('/login');
+        router.push('/auth/login');
         return;
       }
 
@@ -79,7 +79,7 @@ export default function AuthCallback() {
         // Timeout de segurança
         const timeout = setTimeout(() => {
           subscription.unsubscribe();
-          if (!session) router.push('/login');
+          if (!session) router.push('/auth/login');
         }, 5000);
 
         return () => {

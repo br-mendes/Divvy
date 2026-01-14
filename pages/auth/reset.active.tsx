@@ -76,7 +76,7 @@ export default function ResetPassword() {
         )}
 
         <div className="mt-6 text-center">
-          <Link href="/login" className="text-sm text-brand-600 font-bold hover:underline">
+          <Link href="/auth/login" className="text-sm text-brand-600 font-bold hover:underline">
             Voltar para o Login
           </Link>
         </div>

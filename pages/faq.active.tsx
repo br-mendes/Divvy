@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { Layout } from '../components/Layout';
+import StaticPageLayout from '../components/layout/StaticPageLayout';
 import { ChevronDown, ChevronUp, HelpCircle } from 'lucide-react';
 
 const faqs = [
@@ -42,9 +42,9 @@ export default function FAQPage() {
   const [openIndex, setOpenIndex] = useState<number | null>(null);
 
   return (
-    <Layout>
-      <div className="max-w-3xl mx-auto py-8">
-        <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2 flex items-center gap-3">
+    <StaticPageLayout>
+      <div className="max-w-3xl mx-auto">
+        <h1 className="text-3xl sm:text-4xl font-display font-bold text-gray-900 dark:text-white mb-2 flex items-center gap-3">
           <HelpCircle className="text-brand-600" />
           Perguntas Frequentes
         </h1>
@@ -82,15 +82,15 @@ export default function FAQPage() {
         </div>
 
         <div className="mt-12 bg-brand-50 dark:bg-brand-900/20 rounded-xl p-8 text-center border border-brand-100 dark:border-brand-800">
-          <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-2">Ainda tem dúvidas?</h3>
+          <h3 className="text-lg font-display font-bold text-gray-900 dark:text-white mb-2">Ainda tem dúvidas?</h3>
           <p className="text-gray-600 dark:text-gray-300 mb-6">
             Nossa equipe de suporte está pronta para ajudar você.
           </p>
-          <a href="/support" className="inline-flex items-center justify-center px-6 py-3 border border-transparent text-base font-medium rounded-md text-white bg-brand-600 hover:bg-brand-700 transition-colors">
+          <a href="/contact" className="inline-flex items-center justify-center px-6 py-3 border border-transparent text-base font-medium rounded-md text-white bg-brand-600 hover:bg-brand-700 transition-colors">
             Fale com o Suporte
           </a>
         </div>
       </div>
-    </Layout>
+    </StaticPageLayout>
   );
 }

@@ -19,33 +19,26 @@ export async function middleware(req: NextRequest) {
     req.nextUrl.pathname.startsWith('/admin') ||
     req.nextUrl.pathname.startsWith('/join')
   )) {
-    const redirectUrl = new URL('/login', req.url);
+    const redirectUrl = new URL('/auth/login', req.url);
     redirectUrl.searchParams.set('redirect', req.nextUrl.pathname);
     return NextResponse.redirect(redirectUrl);
   }
 
   // Redirecionar usuário logado para fora das páginas de auth
-  if (session && (
-    req.nextUrl.pathname === '/login' ||
-    req.nextUrl.pathname === '/signup'
-  )) {
+  if (session && req.nextUrl.pathname.startsWith('/auth/')) {
     return NextResponse.redirect(new URL('/dashboard', req.url));
   }
 
   // Proteção adicional para rotas de admin
   if (session && req.nextUrl.pathname.startsWith('/admin')) {
-    const adminEmails = ['brunoafonso.mendes@gmail.com', 'falecomdivvy@gmail.com'];
-    const isEmailAdmin = adminEmails.includes(session.user.email || '');
-    if (!isEmailAdmin) {
-      const { data: profile } = await supabase
-        .from('userprofiles')
-        .select('is_super_admin')
-        .eq('id', session.user.id)
-        .single();
+    const { data: admin } = await supabase
+      .from('admin_users')
+      .select('id')
+      .or(`id.eq.${session.user.id},email.eq.${session.user.email}`)
+      .maybeSingle();
 
-      if (!profile?.is_super_admin) {
-        return NextResponse.redirect(new URL('/', req.url));
-      }
+    if (!admin) {
+      return NextResponse.redirect(new URL('/', req.url));
     }
   }
 
@@ -60,6 +53,7 @@ export const config = {
     '/admin/:path*',
     '/join/:path*',
     '/login',
-    '/signup'
+    '/signup',
+    '/auth/:path*'
   ],
 };

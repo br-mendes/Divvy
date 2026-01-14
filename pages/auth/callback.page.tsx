@@ -23,7 +23,7 @@ export default function AuthCallback() {
            router.push('/dashboard');
         } catch (error: any) {
            toast.error(error.message);
-           router.push('/login');
+           router.push('/auth/login');
         }
         return;
       }
@@ -35,7 +35,7 @@ export default function AuthCallback() {
          if (!error && data.session) {
             router.push('/dashboard');
          } else {
-            router.push('/login');
+            router.push('/auth/login');
          }
       } else {
          // Just check if we have a session
@@ -44,7 +44,7 @@ export default function AuthCallback() {
             router.push('/dashboard');
          } else if (router.isReady && !code) {
             // Only redirect if router is ready and really no code found
-             router.push('/login');
+            router.push('/auth/login');
          }
       }
     };

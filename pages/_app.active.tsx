@@ -1,6 +1,7 @@
 
 import React from 'react';
 import type { AppProps } from 'next/app';
+import Head from 'next/head';
 import { AuthProvider } from '../context/AuthContext';
 import { ThemeProvider } from '../context/ThemeContext';
 import ErrorBoundary from '../components/ui/ErrorBoundary';
@@ -12,6 +13,9 @@ export default function App({ Component, pageProps }: AppProps) {
     <ErrorBoundary>
       <AuthProvider>
         <ThemeProvider>
+          <Head>
+            <title>Divvy</title>
+          </Head>
           <Toaster 
             position="top-right" 
             toastOptions={{

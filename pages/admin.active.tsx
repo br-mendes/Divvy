@@ -104,26 +104,18 @@ export default function AdminPage() {
             return;
         }
 
-        // Check 1: Email Hardcoded (Bootstrap)
-        if (user.email === 'falecomdivvy@gmail.com') {
-            setIsAdmin(true);
-            setCheckingPermission(false);
-            return;
-        }
-
-        // Check 2: Database Flag
+        // Check admin via admin_users (server verified)
         try {
-            const { data, error } = await supabase
-                .from('userprofiles')
-                .select('is_super_admin')
-                .eq('id', user.id)
-                .single();
-            
-            if (!error && data?.is_super_admin) {
-                setIsAdmin(true);
+            const res = await fetch('/api/user/me', {
+              headers: { 'Authorization': `Bearer ${session?.access_token}` }
+            });
+            const data = await res.json();
+
+            if (res.ok && data?.is_admin) {
+              setIsAdmin(true);
             } else {
-                toast.error("Acesso negado.");
-                router.push('/dashboard');
+              toast.error("Acesso negado.");
+              router.push('/dashboard');
             }
         } catch (e) {
             console.error(e);

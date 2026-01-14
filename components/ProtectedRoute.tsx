@@ -10,7 +10,7 @@ export const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ childr
 
   useEffect(() => {
     if (!loading && !user) {
-      router.push(`/login?redirect=${encodeURIComponent(router.asPath)}`);
+      router.push(`/auth/login?redirect=${encodeURIComponent(router.asPath)}`);
     }
   }, [user, loading, router]);
 

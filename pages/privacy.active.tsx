@@ -1,12 +1,12 @@
 
 import React from 'react';
-import { Layout } from '../components/Layout';
+import StaticPageLayout from '../components/layout/StaticPageLayout';
 
 export default function PrivacyPage() {
   return (
-    <Layout>
-      <article className="max-w-4xl mx-auto py-8 px-4 prose prose-gray dark:prose-invert">
-        <h1>Política de Privacidade do Divvy</h1>
+    <StaticPageLayout>
+      <article className="max-w-4xl mx-auto prose prose-gray dark:prose-invert">
+        <h1 className="font-display">Política de Privacidade do Divvy</h1>
         <p className="lead text-lg text-gray-600 dark:text-gray-400">
           Data de Vigência: 12 de janeiro de 2026
         </p>
@@ -72,6 +72,6 @@ export default function PrivacyPage() {
           Se tiver dúvidas sobre esta Política de Privacidade, entre em contato em: <strong>falecomdivvy@gmail.com</strong>
         </p>
       </article>
-    </Layout>
+    </StaticPageLayout>
   );
 }

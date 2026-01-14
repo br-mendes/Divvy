@@ -139,12 +139,12 @@ export default function JoinDivvy() {
             <p className="text-sm text-gray-500 mb-4">
               Faça login ou crie uma conta para aceitar.
             </p>
-            <Link href={`/login?redirect=${encodeURIComponent(`/join/${token}`)}`}>
+            <Link href={`/auth/login?redirect=${encodeURIComponent(`/join/${token}`)}`}>
               <Button variant="primary" fullWidth>
                 Fazer Login
               </Button>
             </Link>
-            <Link href={`/signup?redirect=${encodeURIComponent(`/join/${token}`)}`}>
+            <Link href={`/auth/signup?redirect=${encodeURIComponent(`/join/${token}`)}`}>
               <Button variant="outline" fullWidth>
                 Criar Conta
               </Button>

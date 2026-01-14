@@ -2,6 +2,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { createServerSupabaseClient } from '@/lib/supabaseServer';
 import { authorizeUser } from '@/lib/serverAuth';
+import { isAdminUser } from '@/lib/adminAuth';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'GET') {
@@ -13,10 +14,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const supabase = createServerSupabaseClient();
 
     // Check Admin Permissions
-    const { data: profile } = await supabase.from('userprofiles').select('is_super_admin').eq('id', user.id).single();
-    const isHardcodedAdmin = user.email === 'falecomdivvy@gmail.com';
-    
-    if (!isHardcodedAdmin && !profile?.is_super_admin) {
+    const isAdmin = await isAdminUser(supabase, user.id, user.email);
+
+    if (!isAdmin) {
         return res.status(403).json({ error: 'Forbidden' });
     }
 
