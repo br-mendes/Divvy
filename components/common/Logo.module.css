@@ -1,57 +1,53 @@
+/* components/common/Logo.module.css */
+
 .logo {
-  display: inline-flex;
+  display: flex;
   align-items: center;
   gap: var(--spacing-sm);
-}
-
-.icon {
-  width: 1.5rem;
-  height: 1.5rem;
-  border-radius: 9999px;
-  background: linear-gradient(135deg, var(--primary), var(--secondary));
-}
-
-.text {
   font-weight: 700;
   color: var(--primary);
+  cursor: pointer;
 }
 
-.sm .icon {
-  width: 1.25rem;
-  height: 1.25rem;
-}
-
-.md .icon {
-  width: 1.5rem;
-  height: 1.5rem;
-}
-
-.lg .icon {
-  width: 2rem;
-  height: 2rem;
-}
-
-.sm .text {
-  font-size: 0.875rem;
-}
-
-.md .text {
+.sm {
   font-size: 1rem;
 }
 
-.lg .text {
-  font-size: 1.25rem;
+.md {
+  font-size: 1.5rem;
+}
+
+.lg {
+  font-size: 2rem;
+}
+
+.icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2em;
+  height: 2em;
+  background: linear-gradient(135deg, var(--primary), var(--secondary));
+  border-radius: var(--radius-lg);
+  font-size: 1.2em;
 }
 
 .animated .icon {
-  animation: logoPulse 2s ease-in-out infinite;
+  animation: bounce 2s ease-in-out infinite;
 }
 
-@keyframes logoPulse {
+@keyframes bounce {
   0%, 100% {
-    transform: scale(1);
+    transform: translateY(0);
   }
   50% {
-    transform: scale(1.08);
+    transform: translateY(-8px);
   }
+}
+
+.text {
+  background: linear-gradient(135deg, var(--primary), var(--secondary));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
 }
