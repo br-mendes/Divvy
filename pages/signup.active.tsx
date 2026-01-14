@@ -91,7 +91,9 @@ export default function Signup() {
     <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
       <div className="w-full max-w-md bg-white p-8 rounded-lg shadow-md">
         <div className="text-center mb-8">
-          <DivvyLogo className="mx-auto w-16 h-16" />
+          <Link href="/" aria-label="Voltar para a home">
+            <DivvyLogo className="mx-auto w-16 h-16" />
+          </Link>
           <h1 className="text-2xl font-bold mt-4">Criar Conta</h1>
         </div>
         

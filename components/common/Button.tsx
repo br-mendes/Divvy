@@ -1,53 +1,48 @@
+// components/common/Button.tsx
+
 import React from 'react';
+import styles from './Button.module.css';
 
-interface ButtonProps
-  extends React.ButtonHTMLAttributes<HTMLButtonElement> {
-  variant?: 'primary' | 'secondary' | 'outline' | 'danger';
+interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
+  variant?: 'primary' | 'secondary' | 'outline' | 'ghost' | 'danger';
   size?: 'sm' | 'md' | 'lg';
+  loading?: boolean;
+  icon?: React.ReactNode;
   fullWidth?: boolean;
-  href?: string;
-  children?: React.ReactNode;
-  className?: string;
-  disabled?: boolean;
+  children: React.ReactNode;
 }
 
-export default function Button({
-  variant = 'primary',
-  size = 'md',
-  fullWidth = false,
-  disabled = false,
-  className = '',
-  children,
-  ...props
-}: ButtonProps) {
-  const baseStyles =
-    'font-medium rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed';
+export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
+  ({
+    variant = 'primary',
+    size = 'md',
+    loading = false,
+    icon,
+    fullWidth = false,
+    className = '',
+    disabled,
+    children,
+    ...props
+  }, ref) => {
+    const baseClass = styles.button;
+    const variantClass = styles[variant];
+    const sizeClass = styles[size];
+    const fullWidthClass = fullWidth ? styles.fullWidth : '';
+    const loadingClass = loading ? styles.loading : '';
 
-  const variants = {
-    primary:
-      'bg-primary text-white hover:bg-primary/90 focus:ring-primary/50',
-    secondary:
-      'bg-gray-200 text-dark hover:bg-gray-300 focus:ring-gray-200/50',
-    outline:
-      'border border-gray-300 text-dark hover:bg-gray-50 focus:ring-gray-300/50',
-    danger: 'bg-red-500 text-white hover:bg-red-600 focus:ring-red-500/50',
-  };
+    return (
+      <button
+        ref={ref}
+        className={`${baseClass} ${variantClass} ${sizeClass} ${fullWidthClass} ${loadingClass} ${className}`}
+        disabled={disabled || loading}
+        {...props}
+      >
+        {loading && <span className={styles.spinner} />}
+        {icon && <span className={styles.icon}>{icon}</span>}
+        <span>{children}</span>
+      </button>
+    );
+  }
+);
 
-  const sizes = {
-    sm: 'px-3 py-1.5 text-sm',
-    md: 'px-4 py-2 text-base',
-    lg: 'px-6 py-3 text-lg',
-  };
-
-  const widthClass = fullWidth ? 'w-full' : '';
-
-  return (
-    <button
-      className={`${baseStyles} ${variants[variant]} ${sizes[size]} ${widthClass} ${className}`}
-      disabled={disabled}
-      {...props}
-    >
-      {children}
-    </button>
-  );
-}
+Button.displayName = 'Button';

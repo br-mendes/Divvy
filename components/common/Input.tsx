@@ -1,53 +1,71 @@
-import React from 'react';
+// components/common/Input.tsx
 
-interface InputProps {
+import React, { useState } from 'react';
+import styles from './Input.module.css';
+
+interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
   label?: string;
   error?: string;
-  type?: string;
-  placeholder?: string;
-  required?: boolean;
-  disabled?: boolean;
-  className?: string;
-  [key: string]: any;
+  helperText?: string;
+  icon?: React.ReactNode;
+  showPasswordToggle?: boolean;
 }
 
-export default function Input({
-  label,
-  error,
-  type = 'text',
-  placeholder,
-  required = false,
-  disabled = false,
-  className = '',
-  ...props
-}: InputProps) {
-  return (
-    <div className={className}>
-      {label && (
-        <label className="block text-sm font-medium text-dark mb-2">
-          {label}
-          {required && <span className="text-red-500 ml-1">*</span>}
-        </label>
-      )}
+export const Input = React.forwardRef<HTMLInputElement, InputProps>(
+  ({
+    label,
+    error,
+    helperText,
+    icon,
+    showPasswordToggle = false,
+    type = 'text',
+    className = '',
+    ...props
+  }, ref) => {
+    const [showPassword, setShowPassword] = useState(false);
 
-      <input
-        type={type}
-        placeholder={placeholder}
-        disabled={disabled}
-        required={required}
-        className={`w-full px-4 py-2 border rounded-lg font-base transition-colors
-          ${
-            error
-              ? 'border-red-500 bg-red-50 focus:ring-red-500'
-              : 'border-gray-200 bg-white focus:ring-primary'
-          }
-          focus:outline-none focus:ring-2 focus:ring-offset-0
-          disabled:bg-gray-100 disabled:cursor-not-allowed
-        `}
-        {...props}
-      />
+    const inputType = showPasswordToggle && showPassword ? 'text' : type;
+    const hasError = !!error;
 
-      {error && <p className="text-sm text-red-500 mt-1">{error}</p>}
-    </div>
-  );
-}
+    return (
+      <div className={`${styles.wrapper} ${className}`}>
+        {label && (
+          <label className={styles.label}>
+            {label}
+            {props.required && <span className={styles.required}>*</span>}
+          </label>
+        )}
+        <div className={styles.inputWrapper}>
+          {icon && <span className={styles.icon}>{icon}</span>}
+          <input
+            ref={ref}
+            type={inputType}
+            className={`${styles.input} ${hasError ? styles.error : ''} ${icon ? styles.withIcon : ''}`}
+            aria-describedby={error ? `${props.id}-error` : undefined}
+            {...props}
+          />
+          {showPasswordToggle && type === 'password' && (
+            <button
+              type="button"
+              className={styles.togglePassword}
+              onClick={() => setShowPassword(!showPassword)}
+              tabIndex={-1}
+            >
+              {showPassword ? '' : ''} 
+            </button>
+          )}
+        </div>
+        {(error || helperText) && (
+          <div
+            className={`${styles.helperText} ${error ? styles.errorText : ''}`}
+            id={`${props.id}-error`}
+          >
+            {error || helperText}
+          </div>
+        )}
+      </div>
+    );
+  }
+);
+
+Input.displayName = 'Input';
