@@ -1,208 +1,245 @@
+/* app/dashboard/balances/page.module.css */
+
 .container {
-  min-height: 100vh;
-  background: #f8fafc;
-  padding: 32px 24px 64px;
   display: flex;
   flex-direction: column;
-  gap: 32px;
+  gap: var(--spacing-xl);
 }
 
 .header {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  gap: 16px;
+  justify-content: space-between;
+  padding-bottom: var(--spacing-lg);
+  border-bottom: 2px solid var(--border);
 }
 
 .header h1 {
-  font-size: 28px;
-  font-weight: 600;
-  color: #0f172a;
+  margin: 0;
+  font-size: 2rem;
+  color: var(--text-primary);
 }
 
 .select {
-  padding: 10px 14px;
-  border-radius: 12px;
-  border: 1px solid #e2e8f0;
-  background: #ffffff;
-  color: #0f172a;
+  padding: 0.625rem 1rem;
+  border: 2px solid var(--border);
+  border-radius: var(--radius-md);
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  font-size: 0.875rem;
+  cursor: pointer;
 }
 
+/* Summary Cards */
 .summaryGrid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 20px;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: var(--spacing-lg);
 }
 
 .summaryCard {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--spacing-md);
 }
 
 .summaryCard h3 {
-  color: #64748b;
-  font-weight: 500;
+  margin: 0;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
 }
 
 .amount {
-  font-size: 24px;
-  font-weight: 600;
-  color: #0f172a;
+  margin: 0;
+  font-size: 2rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
 }
 
-.receive {
-  color: #16a34a;
+.amount.receive {
+  color: var(--secondary);
 }
 
-.owe {
-  color: #dc2626;
+.amount.owe {
+  color: var(--danger);
 }
 
 .status {
-  color: #64748b;
-  font-size: 14px;
+  margin: 0;
+  font-size: 0.875rem;
+  color: var(--text-secondary);
 }
 
+/* Transactions */
 .transactionsSection {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: var(--spacing-lg);
 }
 
 .transactionsSection h2 {
-  font-size: 20px;
-  font-weight: 600;
-  color: #0f172a;
+  margin: 0;
+  font-size: 1.5rem;
+  color: var(--text-primary);
 }
 
 .transactionsList {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: var(--spacing-md);
 }
 
 .transactionCard {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  padding: 20px;
-  border-radius: 16px;
-  background: #ffffff;
-  border: 1px solid #e2e8f0;
-  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.05);
+  justify-content: space-between;
+  gap: var(--spacing-lg);
+  padding: var(--spacing-lg);
+  background-color: var(--bg-primary);
+  border: 2px solid var(--border);
+  border-radius: var(--radius-lg);
+  transition: all var(--transition-normal);
+}
+
+.transactionCard:hover {
+  border-color: var(--primary);
+  box-shadow: var(--shadow-md);
 }
 
 .transactionInfo {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+  flex: 1;
+  min-width: 0;
 }
 
 .transactionHeader {
   display: flex;
   align-items: flex-start;
-  gap: 12px;
+  gap: var(--spacing-md);
 }
 
 .direction {
-  font-size: 12px;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: #94a3b8;
-  font-weight: 600;
+  font-size: 1.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 40px;
 }
 
 .transactionDetails {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--spacing-xs);
 }
 
 .transactionText {
-  font-weight: 600;
-  color: #0f172a;
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 500;
+  color: var(--text-primary);
 }
 
 .transactionSubtext {
-  color: #64748b;
-  font-size: 14px;
+  margin: 0;
+  font-size: 0.875rem;
+  color: var(--text-secondary);
 }
 
 .transactionActions {
   display: flex;
-  align-items: center;
-  gap: 12px;
+  gap: var(--spacing-sm);
+  flex-shrink: 0;
 }
 
+.transactionActions button {
+  white-space: nowrap;
+}
+
+/* Empty State */
 .emptyState {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-md);
+  padding: var(--spacing-xl);
   text-align: center;
-  padding: 32px 16px;
-  font-weight: 500;
-  color: #16a34a;
+}
+
+.emptyState p {
+  margin: 0;
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: var(--secondary);
 }
 
 .emptySubtext {
-  color: #64748b;
-  font-size: 14px;
-  margin-top: 8px;
+  font-size: 0.875rem !important;
+  color: var(--text-secondary) !important;
+  font-weight: normal !important;
 }
 
+/* Completed Transactions */
 .completedSection {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: var(--spacing-lg);
+  padding: var(--spacing-lg);
+  background-color: var(--bg-secondary);
+  border-radius: var(--radius-lg);
 }
 
 .completedSection h3 {
-  font-size: 18px;
-  font-weight: 600;
-  color: #0f172a;
+  margin: 0;
+  font-size: 1rem;
+  color: var(--text-primary);
 }
 
 .completedList {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: var(--spacing-md);
 }
 
 .completedItem {
   display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 14px 16px;
-  border-radius: 14px;
-  background: #ffffff;
-  border: 1px solid #e2e8f0;
+  align-items: flex-start;
+  gap: var(--spacing-md);
+  padding: var(--spacing-md);
+  background-color: var(--bg-primary);
+  border-radius: var(--radius-md);
+  border-left: 4px solid var(--secondary);
 }
 
 .completedIcon {
-  display: inline-flex;
+  font-size: 1.25rem;
+  display: flex;
   align-items: center;
   justify-content: center;
-  width: 24px;
-  height: 24px;
-  border-radius: 50%;
-  background: #16a34a;
-  color: #ffffff;
-  font-size: 14px;
-  font-weight: 600;
+  color: var(--secondary);
+  font-weight: 700;
 }
 
 .completedText {
-  color: #334155;
+  margin: 0;
+  font-size: 0.875rem;
+  color: var(--text-secondary);
 }
 
-@media (max-width: 1024px) {
-  .summaryGrid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-
+/* Responsive */
 @media (max-width: 768px) {
   .header {
     flex-direction: column;
     align-items: flex-start;
+    gap: var(--spacing-md);
+  }
+
+  .header h1 {
+    font-size: 1.5rem;
   }
 
   .summaryGrid {
@@ -212,6 +249,14 @@
   .transactionCard {
     flex-direction: column;
     align-items: flex-start;
-    gap: 16px;
+  }
+
+  .transactionActions {
+    width: 100%;
+    flex-direction: column;
+  }
+
+  .transactionActions button {
+    width: 100%;
   }
 }
