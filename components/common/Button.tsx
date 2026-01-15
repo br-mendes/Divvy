@@ -5,16 +5,18 @@ interface ButtonProps
   variant?: 'primary' | 'secondary' | 'outline' | 'danger';
   size?: 'sm' | 'md' | 'lg';
   fullWidth?: boolean;
+  loading?: boolean;
   href?: string;
   children?: React.ReactNode;
   className?: string;
   disabled?: boolean;
 }
 
-export default function Button({
+export function Button({
   variant = 'primary',
   size = 'md',
   fullWidth = false,
+  loading = false,
   disabled = false,
   className = '',
   children,
@@ -40,14 +42,18 @@ export default function Button({
   };
 
   const widthClass = fullWidth ? 'w-full' : '';
+  const isDisabled = disabled || loading;
 
   return (
     <button
       className={`${baseStyles} ${variants[variant]} ${sizes[size]} ${widthClass} ${className}`}
-      disabled={disabled}
+      disabled={isDisabled}
+      aria-busy={loading}
       {...props}
     >
       {children}
     </button>
   );
 }
+
+export default Button;

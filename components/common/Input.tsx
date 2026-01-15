@@ -11,7 +11,7 @@ interface InputProps {
   [key: string]: any;
 }
 
-export default function Input({
+export function Input({
   label,
   error,
   type = 'text',
@@ -51,3 +51,5 @@ export default function Input({
     </div>
   );
 }
+
+export default Input;
