@@ -1,0 +1,86 @@
+.container {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.filters {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.select {
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid #d1d5db;
+}
+
+.emptyState {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 32px;
+  text-align: center;
+}
+
+.emptyIcon {
+  font-size: 2rem;
+}
+
+.expensesList {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.expenseCard {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  justify-content: space-between;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 16px;
+}
+
+.expenseIcon {
+  font-size: 1.5rem;
+}
+
+.expenseDetails {
+  flex: 1;
+}
+
+.expenseHeader {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.amount {
+  font-weight: 600;
+}
+
+.expenseMeta {
+  margin: 4px 0;
+  color: #6b7280;
+}
+
+.participants {
+  margin: 0;
+  color: #6b7280;
+}
+
+.expenseActions {
+  display: flex;
+  gap: 8px;
+}
