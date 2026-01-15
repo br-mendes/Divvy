@@ -1,49 +1,58 @@
+/* components/common/CategorySelect.module.css */
+
 .container {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--spacing-md);
 }
 
 .label {
-  font-size: 0.9rem;
+  display: block;
   font-weight: 600;
-  color: #374151;
+  font-size: 0.875rem;
+  color: var(--text-primary);
 }
 
 .grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-  gap: 8px;
+  grid-template-columns: repeat(auto-fit, minmax(90px, 1fr));
+  gap: var(--spacing-sm);
 }
 
 .categoryButton {
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 6px;
-  padding: 10px 12px;
-  border: 1px solid #e5e7eb;
-  border-radius: 10px;
-  background: #ffffff;
-  color: #111827;
-  font-size: 0.9rem;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-md);
+  border: 2px solid var(--border);
+  border-radius: var(--radius-md);
+  background-color: var(--bg-primary);
   cursor: pointer;
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  transition: all var(--transition-fast);
+  color: var(--text-secondary);
 }
 
 .categoryButton:hover {
-  border-color: #9ca3af;
+  border-color: var(--primary);
+  background-color: var(--bg-secondary);
 }
 
-.selected {
-  border-color: #2563eb;
-  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.15);
+.categoryButton.selected {
+  border-color: var(--primary);
+  background-color: rgba(99, 102, 241, 0.1);
+  color: var(--primary);
+  font-weight: 600;
 }
 
 .emoji {
-  font-size: 1rem;
+  font-size: 1.5rem;
+  display: block;
 }
 
 .name {
+  font-size: 0.75rem;
   font-weight: 500;
+  text-align: center;
 }
