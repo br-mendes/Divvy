@@ -3,24 +3,26 @@
 .container {
   display: flex;
   justify-content: center;
-  padding: var(--spacing-xl) 0;
+  padding: var(--spacing-xl);
 }
 
 .formContainer {
-  width: min(720px, 100%);
-  background: var(--bg-primary);
+  background-color: var(--bg-primary);
   border: 2px solid var(--border);
-  border-radius: var(--radius-xl);
+  border-radius: var(--radius-lg);
   padding: var(--spacing-xl);
-  box-shadow: var(--shadow-sm);
+  width: 100%;
+  max-width: 600px;
+  box-shadow: var(--shadow-md);
 }
 
 .header {
+  text-align: center;
   margin-bottom: var(--spacing-xl);
 }
 
 .header h1 {
-  margin: 0 0 var(--spacing-xs) 0;
+  margin: 0 0 var(--spacing-sm) 0;
   font-size: 2rem;
   color: var(--text-primary);
 }
@@ -38,9 +40,10 @@
 
 .label {
   display: block;
-  margin-bottom: var(--spacing-xs);
   font-weight: 600;
+  font-size: 0.875rem;
   color: var(--text-primary);
+  margin-bottom: var(--spacing-sm);
 }
 
 .select {
@@ -51,42 +54,57 @@
   background-color: var(--bg-primary);
   color: var(--text-primary);
   font-size: 0.875rem;
+  cursor: pointer;
+  transition: all var(--transition-fast);
 }
 
+.select:focus {
+  border-color: var(--primary);
+  outline: none;
+}
+
+/* Split Type */
 .splitTypeButtons {
   display: flex;
-  gap: var(--spacing-sm);
+  gap: var(--spacing-md);
 }
 
 .splitButton {
   flex: 1;
-  padding: 0.75rem 1rem;
+  padding: 0.625rem 1rem;
   border: 2px solid var(--border);
   border-radius: var(--radius-md);
-  background: var(--bg-secondary);
-  color: var(--text-primary);
+  background-color: var(--bg-secondary);
+  color: var(--text-secondary);
   cursor: pointer;
+  font-weight: 500;
   transition: all var(--transition-fast);
 }
 
 .splitButton:hover {
   border-color: var(--primary);
+  background-color: var(--bg-primary);
 }
 
-.active {
-  background: var(--primary);
-  color: var(--white);
+.splitButton.active {
   border-color: var(--primary);
+  background-color: var(--primary);
+  color: white;
 }
 
+/* Participants */
 .participantsSection {
-  border-top: 1px solid var(--border);
-  padding-top: var(--spacing-lg);
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-lg);
+  padding: var(--spacing-lg);
+  background-color: var(--bg-secondary);
+  border-radius: var(--radius-lg);
 }
 
 .participantsSection h3 {
-  margin: 0 0 var(--spacing-md) 0;
-  font-size: 1.125rem;
+  margin: 0;
+  font-size: 1rem;
   color: var(--text-primary);
 }
 
@@ -102,92 +120,128 @@
   justify-content: space-between;
   gap: var(--spacing-md);
   padding: var(--spacing-md);
-  border: 1px solid var(--border);
+  background-color: var(--bg-primary);
   border-radius: var(--radius-md);
-  background: var(--bg-secondary);
+  border: 1px solid var(--border);
 }
 
 .participantInfo {
-  min-width: 0;
+  flex: 1;
 }
 
 .participantName {
   margin: 0;
-  font-weight: 600;
+  font-size: 0.95rem;
+  font-weight: 500;
   color: var(--text-primary);
 }
 
 .participantEmail {
   margin: 0;
-  font-size: 0.875rem;
+  font-size: 0.75rem;
   color: var(--text-secondary);
 }
 
 .participantShare {
   display: flex;
   align-items: center;
-  gap: var(--spacing-xs);
+  gap: var(--spacing-sm);
 }
 
 .shareInput {
-  width: 120px;
-  padding: 0.5rem 0.75rem;
-  border: 2px solid var(--border);
-  border-radius: var(--radius-md);
-  background: var(--bg-primary);
+  width: 100px;
+  padding: 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  font-size: 0.875rem;
   text-align: right;
+}
+
+.shareInput:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.shareInput:focus {
+  border-color: var(--primary);
+  outline: none;
 }
 
 .shareLabel {
   font-size: 0.875rem;
   color: var(--text-secondary);
+  min-width: 20px;
 }
 
-.error {
-  margin: var(--spacing-sm) 0 0 0;
-  color: var(--danger, #dc2626);
-  font-size: 0.875rem;
-}
-
+/* Split Summary */
 .splitSummary {
-  margin-top: var(--spacing-lg);
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
   padding: var(--spacing-md);
-  border: 1px dashed var(--border);
+  background-color: var(--bg-primary);
   border-radius: var(--radius-md);
-  background: var(--bg-secondary);
+  border: 1px solid var(--border);
 }
 
 .summaryItem {
   display: flex;
   justify-content: space-between;
-  margin-bottom: var(--spacing-xs);
-  color: var(--text-primary);
+  align-items: center;
+  font-size: 0.95rem;
+  color: var(--text-secondary);
 }
 
 .summaryItem strong {
-  font-weight: 700;
+  color: var(--text-primary);
+  font-size: 1.125rem;
 }
 
-.balanced {
-  color: var(--success, #16a34a);
+.summaryItem strong.balanced {
+  color: var(--secondary);
 }
 
-.unbalanced {
-  color: var(--danger, #dc2626);
+.summaryItem strong.unbalanced {
+  color: var(--danger);
 }
 
 .unbalancedWarning {
-  margin: var(--spacing-sm) 0 0 0;
+  margin: 0;
+  padding: var(--spacing-sm);
+  background-color: rgba(239, 68, 68, 0.1);
+  border-left: 3px solid var(--danger);
+  color: var(--danger);
   font-size: 0.875rem;
-  color: var(--danger, #dc2626);
+  font-weight: 500;
 }
 
+.error {
+  margin: 0;
+  padding: var(--spacing-md);
+  background-color: rgba(239, 68, 68, 0.1);
+  border: 2px solid var(--danger);
+  border-radius: var(--radius-md);
+  color: var(--danger);
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+/* Buttons */
 .buttons {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  display: flex;
   gap: var(--spacing-md);
+  padding-top: var(--spacing-lg);
+  border-top: 2px solid var(--border);
 }
 
+.buttons a,
+.buttons button {
+  flex: 1;
+}
+
+/* Responsive */
 @media (max-width: 768px) {
   .formContainer {
     padding: var(--spacing-lg);
@@ -197,6 +251,10 @@
     font-size: 1.5rem;
   }
 
+  .splitTypeButtons {
+    flex-direction: column;
+  }
+
   .participantItem {
     flex-direction: column;
     align-items: flex-start;
@@ -204,10 +262,10 @@
 
   .participantShare {
     width: 100%;
+    justify-content: flex-end;
   }
 
-  .shareInput {
-    flex: 1;
-    width: 100%;
+  .buttons {
+    flex-direction: column;
   }
 }
