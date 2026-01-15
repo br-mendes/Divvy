@@ -1,74 +1,112 @@
+/* components/common/Stepper.module.css */
+
 .stepper {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 16px;
-  width: 100%;
+  margin-bottom: var(--spacing-xl);
+  position: relative;
 }
 
 .stepperWrapper {
-  position: relative;
   display: flex;
-  flex: 1;
   flex-direction: column;
   align-items: center;
-  text-align: center;
+  flex: 1;
+  position: relative;
 }
 
 .step {
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  border: 2px solid transparent;
-  font-weight: 600;
-  font-size: 14px;
+  font-weight: 700;
+  font-size: 1rem;
+  transition: all var(--transition-normal);
+  cursor: default;
+  border: 3px solid var(--border);
+  background-color: var(--bg-primary);
+  color: var(--text-secondary);
+  z-index: 2;
+}
+
+.step.active {
+  border-color: var(--primary);
+  background-color: var(--primary);
+  color: white;
+  box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.1);
+}
+
+.step.completed {
+  border-color: var(--secondary);
+  background-color: var(--secondary);
+  color: white;
   cursor: pointer;
-  transition: background-color 0.2s ease, border-color 0.2s ease,
-    color 0.2s ease;
-  z-index: 1;
+}
+
+.step.completed:hover {
+  transform: scale(1.05);
+}
+
+.step.inactive {
+  border-color: var(--border);
+  background-color: var(--bg-secondary);
 }
 
 .stepIcon {
-  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
-.active {
-  background-color: #1f2937;
-  border-color: #1f2937;
-  color: #ffffff;
+.stepLabel {
+  margin-top: var(--spacing-sm);
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-align: center;
+  max-width: 80px;
+  word-break: break-word;
 }
 
-.completed {
-  background-color: #10b981;
-  border-color: #10b981;
-  color: #ffffff;
-}
-
-.inactive {
-  background-color: #e5e7eb;
-  border-color: #e5e7eb;
-  color: #6b7280;
-  cursor: default;
+.step.active ~ .stepLabel {
+  color: var(--primary);
 }
 
 .stepLine {
   position: absolute;
-  top: 15px;
-  left: calc(50% + 16px);
-  width: calc(100% - 32px);
-  height: 2px;
-  background-color: #e5e7eb;
+  top: 1.25rem;
+  left: 50%;
+  width: 100%;
+  height: 3px;
+  background-color: var(--border);
+  transform: translateX(-50%);
+  z-index: 1;
+  margin: 0 -50%;
 }
 
-.completedLine {
-  background-color: #10b981;
+.stepLine.completedLine {
+  background-color: var(--secondary);
 }
 
-.stepLabel {
-  margin-top: 8px;
-  font-size: 12px;
-  color: #4b5563;
+/* Responsive */
+@media (max-width: 768px) {
+  .stepper {
+    margin-bottom: var(--spacing-lg);
+  }
+
+  .step {
+    width: 2rem;
+    height: 2rem;
+    font-size: 0.875rem;
+    border-width: 2px;
+  }
+
+  .stepLabel {
+    font-size: 0.65rem;
+    max-width: 60px;
+  }
 }
