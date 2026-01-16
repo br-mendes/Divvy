@@ -1,3 +1,5 @@
+// app/dashboard/create-divvy/page.tsx
+
 'use client';
 
 import { useState } from 'react';
