@@ -1,33 +1,46 @@
-'use client';
 import React from 'react';
+import styles from './Button.module.css';
 
 interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
-  variant?: 'primary' | 'outline' | 'danger';
+  variant?: 'primary' | 'secondary' | 'outline' | 'ghost' | 'danger';
   size?: 'sm' | 'md' | 'lg';
+  loading?: boolean;
+  icon?: React.ReactNode;
   fullWidth?: boolean;
+  children: React.ReactNode;
 }
 
-export default function Button({ variant='primary', size='md', fullWidth, className='', children, ...props }: ButtonProps) {
-  const base = "inline-flex items-center justify-center rounded-lg font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50";
+export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
+  ({
+    variant = 'primary',
+    size = 'md',
+    loading = false,
+    icon,
+    fullWidth = false,
+    className = '',
+    disabled,
+    children,
+    ...props
+  }, ref) => {
+    const baseClass = styles.button;
+    const variantClass = styles[variant];
+    const sizeClass = styles[size];
+    const fullWidthClass = fullWidth ? styles.fullWidth : '';
+    const loadingClass = loading ? styles.loading : '';
 
-  const variants = {
-    primary: "bg-[#6366f1] text-white hover:bg-[#4f46e5] focus:ring-[#6366f1]",
-    outline: "border-2 border-[#6366f1] text-[#6366f1] hover:bg-purple-50",
-    danger: "bg-red-600 text-white hover:bg-red-700"
-  };
+    return (
+      <button
+        ref={ref}
+        className={`${baseClass} ${variantClass} ${sizeClass} ${fullWidthClass} ${loadingClass} ${className}`}
+        disabled={disabled || loading}
+        {...props}
+      >
+        {loading && <span className={styles.spinner} />}
+        {icon && <span className={styles.icon}>{icon}</span>}
+        <span>{children}</span>
+      </button>
+    );
+  }
+);
 
-  const sizes = {
-    sm: "px-3 py-1.5 text-sm",
-    md: "px-4 py-2 text-base",
-    lg: "px-6 py-3 text-lg"
-  };
-
-  return (
-    <button 
-      className={`${base} ${variants[variant]} ${sizes[size]} ${fullWidth ? 'w-full' : ''} ${className}`}
-      {...props}
-    >
-      {children}
-    </button>
-  );
-}
+Button.displayName = 'Button';
