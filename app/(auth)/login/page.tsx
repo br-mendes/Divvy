@@ -2,102 +2,123 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { supabase } from '@/lib/supabase';
-import Button from '@/components/common/Button';
-import Input from '@/components/common/Input';
-import LogoAnimated from '@/components/common/LogoAnimated';
 import Link from 'next/link';
-import toast from 'react-hot-toast';
+import { Button } from '@/components/common/Button';
+import { Input } from '@/components/common/Input';
+import { Logo } from '@/components/common/Logo';
+import { useAuth } from '@/hooks/useAuth';
+import styles from './page.module.css';
 
 export default function LoginPage() {
   const router = useRouter();
+  const { login, loading } = useAuth();
+
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
+  const [submitError, setSubmitError] = useState('');
 
-  async function handleLogin(e: React.FormEvent) {
+  const validateForm = (): boolean => {
+    const newErrors: typeof errors = {};
+
+    if (!email) {
+      newErrors.email = 'Email é obrigatório';
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      newErrors.email = 'Email inválido';
+    }
+
+    if (!password) {
+      newErrors.password = 'Senha é obrigatória';
+    } else if (password.length < 8) {
+      newErrors.password = 'Senha deve ter no mínimo 8 caracteres';
+    }
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
+    setSubmitError('');
+
+    if (!validateForm()) {
+      return;
+    }
 
     try {
-      const { error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
-
-      if (error) throw error;
-
-      toast.success('Login realizado com sucesso!');
+      await login(email, password);
       router.push('/dashboard');
-    } catch (err) {
-      const message = (err as Error).message;
-      toast.error(message);
-    } finally {
-      setLoading(false);
+    } catch (error) {
+      setSubmitError(
+        error instanceof Error
+          ? error.message
+          : 'Erro ao fazer login. Tente novamente.'
+      );
     }
-  }
+  };
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header com Logo */}
-      <header className="border-b border-gray-200 bg-white">
-        <div className="max-w-7xl mx-auto px-4 py-4">
-          <LogoAnimated />
+    <div className={styles.container}>
+      <div className={styles.formWrapper}>
+        <div className={styles.header}>
+          <Logo size="lg" animated={true} />
+          <h1>Login</h1>
+          <p>Acesse sua conta Divvy</p>
         </div>
-      </header>
 
-      {/* Conteúdo */}
-      <div className="flex items-center justify-center px-4 py-12">
-        <div className="w-full max-w-md bg-white p-8 rounded-lg border border-gray-200 shadow-md">
-          <h1 className="text-2xl font-bold text-gray-900 mb-2">
-            Bem-vindo ao Divvy
-          </h1>
-          <p className="text-gray-600 mb-6">
-            Faça login para acessar suas despesas
-          </p>
+        {submitError && (
+          <div className={styles.errorAlert}>
+            <span></span>
+            <p>{submitError}</p>
+          </div>
+        )}
 
-          <form onSubmit={handleLogin} className="space-y-4">
-            <Input
-              label="Email"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="seu@email.com"
-              required
-            />
+        <form onSubmit={handleSubmit} className={styles.form}>
+          <Input
+            label="Email"
+            type="email"
+            placeholder="seu@email.com"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            error={errors.email}
+            required
+          />
 
-            <Input
-              label="Senha"
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="••••••••"
-              showPasswordToggle
-              required
-            />
+          <Input
+            label="Senha"
+            type="password"
+            placeholder="••••••••"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            error={errors.password}
+            showPasswordToggle
+            required
+          />
 
-            <Button
-              type="submit"
-              variant="primary"
-              fullWidth
-              loading={loading}
-            >
-              Fazer login
-            </Button>
-          </form>
+          <Button
+            type="submit"
+            variant="primary"
+            fullWidth
+            size="lg"
+            loading={loading}
+            disabled={loading}
+          >
+            {loading ? 'Entrando...' : 'Entrar'}
+          </Button>
+        </form>
 
-          <div className="mt-6 text-center text-gray-600">
+        <div className={styles.footer}>
+          <p>
             Não tem conta?{' '}
-            <Link href="/auth/signup" className="text-[#208085] font-semibold hover:underline">
-              Criar conta
+            <Link href="/signup" className={styles.link}>
+              Cadastre-se aqui
             </Link>
-          </div>
-
-          <div className="mt-4 text-center text-sm text-gray-500">
-            <Link href="/auth/reset" className="text-[#208085] hover:underline">
-              Esqueceu a senha?
+          </p>
+          <p>
+            <Link href="/" className={styles.link}>
+              Voltar para home
             </Link>
-          </div>
+          </p>
         </div>
       </div>
     </div>
