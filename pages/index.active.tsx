@@ -3,7 +3,7 @@ import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/router';
 import { supabase } from '../lib/supabase';
 import { useTheme } from '../context/ThemeContext';
-import Button from '../components/common/Button';
+import { Button } from '../components/common/Button';
 import AnimatedTagline from '../components/home/AnimatedTagline';
 import Link from 'next/link';
 import DivvyLogo from '../components/branding/DivvyLogo';

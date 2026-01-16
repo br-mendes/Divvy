@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
-import Button from '@/components/common/Button';
+import { Button } from '@/components/common/Button';
 import LogoAnimated from '@/components/common/LogoAnimated';
 
 export default function HomePage() {
