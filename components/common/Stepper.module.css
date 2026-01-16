@@ -1,0 +1,112 @@
+/* components/common/Stepper.module.css */
+
+.stepper {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: var(--spacing-xl);
+  position: relative;
+}
+
+.stepperWrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex: 1;
+  position: relative;
+}
+
+.step {
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 1rem;
+  transition: all var(--transition-normal);
+  cursor: default;
+  border: 3px solid var(--border);
+  background-color: var(--bg-primary);
+  color: var(--text-secondary);
+  z-index: 2;
+}
+
+.step.active {
+  border-color: var(--primary);
+  background-color: var(--primary);
+  color: white;
+  box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.1);
+}
+
+.step.completed {
+  border-color: var(--secondary);
+  background-color: var(--secondary);
+  color: white;
+  cursor: pointer;
+}
+
+.step.completed:hover {
+  transform: scale(1.05);
+}
+
+.step.inactive {
+  border-color: var(--border);
+  background-color: var(--bg-secondary);
+}
+
+.stepIcon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.stepLabel {
+  margin-top: var(--spacing-sm);
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-align: center;
+  max-width: 80px;
+  word-break: break-word;
+}
+
+.step.active ~ .stepLabel {
+  color: var(--primary);
+}
+
+.stepLine {
+  position: absolute;
+  top: 1.25rem;
+  left: 50%;
+  width: 100%;
+  height: 3px;
+  background-color: var(--border);
+  transform: translateX(-50%);
+  z-index: 1;
+  margin: 0 -50%;
+}
+
+.stepLine.completedLine {
+  background-color: var(--secondary);
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .stepper {
+    margin-bottom: var(--spacing-lg);
+  }
+
+  .step {
+    width: 2rem;
+    height: 2rem;
+    font-size: 0.875rem;
+    border-width: 2px;
+  }
+
+  .stepLabel {
+    font-size: 0.65rem;
+    max-width: 60px;
+  }
+}
