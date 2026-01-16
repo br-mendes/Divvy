@@ -1,0 +1,220 @@
+/* app/(auth)/signup/page.module.css */
+
+.container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.05), rgba(16, 185, 129, 0.05));
+  padding: var(--spacing-md);
+}
+
+.formWrapper {
+  background-color: var(--bg-primary);
+  border: 2px solid var(--border);
+  border-radius: var(--radius-xl);
+  padding: var(--spacing-xl);
+  width: 100%;
+  max-width: 500px;
+  box-shadow: var(--shadow-lg);
+  max-height: 90vh;
+  overflow-y: auto;
+}
+
+.header {
+  text-align: center;
+  margin-bottom: var(--spacing-xl);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--spacing-md);
+}
+
+.header h1 {
+  margin: 0;
+  font-size: 2rem;
+  color: var(--text-primary);
+}
+
+.header p {
+  margin: 0;
+  font-size: 0.95rem;
+  color: var(--text-secondary);
+}
+
+.errorAlert {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-md);
+  background-color: rgba(239, 68, 68, 0.1);
+  border: 2px solid var(--danger);
+  border-radius: var(--radius-md);
+  margin-bottom: var(--spacing-lg);
+  font-size: 0.875rem;
+  color: var(--danger);
+}
+
+.errorAlert span {
+  font-size: 1.25rem;
+  flex-shrink: 0;
+}
+
+.errorAlert p {
+  margin: 0;
+  font-weight: 500;
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-lg);
+  margin-bottom: var(--spacing-lg);
+}
+
+.passwordStrength {
+  margin-top: var(--spacing-md);
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+}
+
+.strengthBar {
+  height: 4px;
+  background-color: var(--bg-secondary);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.strengthFill {
+  height: 100%;
+  transition: all var(--transition-normal);
+  border-radius: var(--radius-sm);
+}
+
+.strength-0 {
+  width: 0%;
+  background-color: var(--danger);
+}
+
+.strength-1,
+.strength-2 {
+  width: 40%;
+  background-color: var(--warning);
+}
+
+.strength-3,
+.strength-4 {
+  width: 70%;
+  background-color: var(--info);
+}
+
+.strength-5 {
+  width: 100%;
+  background-color: var(--secondary);
+}
+
+.requirementsList {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+}
+
+.requirementsList li {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  padding: 2px 0;
+}
+
+.requirementsList span {
+  font-weight: 700;
+  color: var(--text-tertiary);
+}
+
+.requirementsList li.met {
+  color: var(--secondary);
+}
+
+.requirementsList li.met span {
+  color: var(--secondary);
+}
+
+.checkboxGroup {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+}
+
+.checkbox {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--spacing-sm);
+}
+
+.checkbox input[type='checkbox'] {
+  margin-top: 4px;
+  cursor: pointer;
+  accent-color: var(--primary);
+}
+
+.checkbox label {
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.checkbox label a {
+  color: var(--primary);
+  text-decoration: none;
+  font-weight: 600;
+  transition: color var(--transition-fast);
+}
+
+.checkbox label a:hover {
+  color: var(--primary-dark);
+  text-decoration: underline;
+}
+
+.checkboxError {
+  font-size: 0.75rem;
+  color: var(--danger);
+  margin: 0;
+  font-weight: 500;
+}
+
+.footer {
+  text-align: center;
+  border-top: 2px solid var(--border);
+  padding-top: var(--spacing-lg);
+}
+
+.footer p {
+  margin: 0;
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+}
+
+.link {
+  color: var(--primary);
+  text-decoration: none;
+  font-weight: 600;
+  transition: color var(--transition-fast);
+}
+
+.link:hover {
+  color: var(--primary-dark);
+  text-decoration: underline;
+}
+
+@media (max-width: 480px) {
+  .formWrapper {
+    padding: var(--spacing-lg);
+  }
+
+  .header h1 {
+    font-size: 1.5rem;
+  }
+}
