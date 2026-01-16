@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useId, useState } from 'react';
 import styles from './Input.module.css';
 
 interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
@@ -21,6 +21,9 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
     ...props
   }, ref) => {
     const [showPassword, setShowPassword] = useState(false);
+    const generatedId = useId();
+    const { id: providedId, ...inputProps } = props;
+    const inputId = providedId ?? generatedId;
 
     const inputType = showPasswordToggle && showPassword ? 'text' : type;
     const hasError = !!error;
@@ -28,9 +31,9 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
     return (
       <div className={`${styles.wrapper} ${className}`}>
         {label && (
-          <label className={styles.label}>
+          <label className={styles.label} htmlFor={inputId}>
             {label}
-            {props.required && <span className={styles.required}>*</span>}
+            {inputProps.required && <span className={styles.required}>*</span>}
           </label>
         )}
         <div className={styles.inputWrapper}>
@@ -39,8 +42,9 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
             ref={ref}
             type={inputType}
             className={`${styles.input} ${hasError ? styles.error : ''} ${icon ? styles.withIcon : ''}`}
-            aria-describedby={error ? `${props.id}-error` : undefined}
-            {...props}
+            id={inputId}
+            aria-describedby={error ? `${inputId}-error` : undefined}
+            {...inputProps}
           />
           {showPasswordToggle && type === 'password' && (
             <button
@@ -56,7 +60,7 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
         {(error || helperText) && (
           <div
             className={`${styles.helperText} ${error ? styles.errorText : ''}`}
-            id={`${props.id}-error`}
+            id={`${inputId}-error`}
           >
             {error || helperText}
           </div>
