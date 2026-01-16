@@ -2,239 +2,256 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { supabase } from '@/lib/supabase';
-import Button from '@/components/common/Button';
-import Input from '@/components/common/Input';
-import LogoAnimated from '@/components/common/LogoAnimated';
 import Link from 'next/link';
-import toast from 'react-hot-toast';
-import { validatePassword, validateEmail } from '@/utils/validation';
+import { Button } from '@/components/common/Button';
+import { Input } from '@/components/common/Input';
+import { Logo } from '@/components/common/Logo';
+import { useAuth } from '@/hooks/useAuth';
+import styles from './page.module.css';
+
+interface ValidationErrors {
+  fullName?: string;
+  email?: string;
+  password?: string;
+  confirmPassword?: string;
+  terms?: string;
+}
+
+const passwordRequirements = [
+  { regex: /.{8,}/, label: 'Mínimo 8 caracteres' },
+  { regex: /[A-Z]/, label: 'Uma letra maiúscula' },
+  { regex: /[a-z]/, label: 'Uma letra minúscula' },
+  { regex: /[0-9]/, label: 'Um número' },
+  { regex: /[!@#$%^&*]/, label: 'Um caractere especial (!@#$%^&*)' },
+];
 
 export default function SignupPage() {
   const router = useRouter();
-  const [fullName, setFullName] = useState('');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-  const [acceptedTerms, setAcceptedTerms] = useState(false);
-  const [acceptedPrivacy, setAcceptedPrivacy] = useState(false);
-  const [loading, setLoading] = useState(false);
+  const { signup, loading } = useAuth();
 
-  const passwordValidation = validatePassword(password);
+  const [formData, setFormData] = useState({
+    fullName: '',
+    email: '',
+    password: '',
+    confirmPassword: '',
+    acceptTerms: false,
+    acceptPrivacy: false,
+  });
 
-  async function handleSignup(e: React.FormEvent) {
+  const [errors, setErrors] = useState<ValidationErrors>({});
+  const [submitError, setSubmitError] = useState('');
+  const [passwordStrength, setPasswordStrength] = useState(0);
+
+  const calculatePasswordStrength = (pwd: string): number => {
+    let strength = 0;
+    for (const req of passwordRequirements) {
+      if (req.regex.test(pwd)) {
+        strength++;
+      }
+    }
+    return strength;
+  };
+
+  const handlePasswordChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const password = e.target.value;
+    setFormData({ ...formData, password });
+    setPasswordStrength(calculatePasswordStrength(password));
+  };
+
+  const validateForm = (): boolean => {
+    const newErrors: ValidationErrors = {};
+
+    if (!formData.fullName.trim()) {
+      newErrors.fullName = 'Nome completo é obrigatório';
+    }
+
+    if (!formData.email) {
+      newErrors.email = 'Email é obrigatório';
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
+      newErrors.email = 'Email inválido';
+    }
+
+    if (!formData.password) {
+      newErrors.password = 'Senha é obrigatória';
+    } else if (passwordStrength < 5) {
+      newErrors.password = 'Senha não atende todos os requisitos';
+    }
+
+    if (formData.password !== formData.confirmPassword) {
+      newErrors.confirmPassword = 'Senhas não correspondem';
+    }
+
+    if (!formData.acceptTerms) {
+      newErrors.terms = 'Você deve aceitar os Termos de Serviço';
+    }
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
+    setSubmitError('');
+
+    if (!validateForm()) {
+      return;
+    }
 
     try {
-      // Validações
-      if (!fullName.trim()) {
-        throw new Error('Nome é obrigatório');
-      }
-
-      if (!validateEmail(email)) {
-        throw new Error('Email inválido');
-      }
-
-      if (password !== confirmPassword) {
-        throw new Error('As senhas não conferem');
-      }
-
-      if (!passwordValidation.isValid) {
-        throw new Error('Senha não atende aos requisitos mínimos');
-      }
-
-      if (!acceptedTerms || !acceptedPrivacy) {
-        throw new Error('Você deve aceitar os termos para criar conta');
-      }
-
-      // Criar conta
-      const { data, error: signupError } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          data: {
-            full_name: fullName,
-          },
-        },
-      });
-
-      if (signupError) throw signupError;
-
-      // Criar perfil
-      if (data.user) {
-        const { error: profileError } = await supabase
-          .from('user_profiles')
-          .insert({
-            id: data.user.id,
-            email: data.user.email,
-            full_name: fullName,
-          });
-
-        if (profileError) throw profileError;
-      }
-
-      toast.success('Conta criada com sucesso! Verifique seu email.');
-      router.push('/auth/login');
-    } catch (err) {
-      const message = (err as Error).message;
-      toast.error(message);
-    } finally {
-      setLoading(false);
+      await signup(formData.email, formData.password, formData.fullName);
+      router.push('/dashboard');
+    } catch (error) {
+      setSubmitError(
+        error instanceof Error
+          ? error.message
+          : 'Erro ao fazer cadastro. Tente novamente.'
+      );
     }
-  }
+  };
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header com Logo */}
-      <header className="border-b border-gray-200 bg-white">
-        <div className="max-w-7xl mx-auto px-4 py-4">
-          <LogoAnimated />
+    <div className={styles.container}>
+      <div className={styles.formWrapper}>
+        <div className={styles.header}>
+          <Logo size="lg" animated={true} />
+          <h1>Cadastro</h1>
+          <p>Crie sua conta Divvy em 2 minutos</p>
         </div>
-      </header>
 
-      {/* Conteúdo */}
-      <div className="flex items-center justify-center px-4 py-12">
-        <div className="w-full max-w-md bg-white p-8 rounded-lg border border-gray-200 shadow-md">
-          <h1 className="text-2xl font-bold text-gray-900 mb-2">
-            Criar conta no Divvy
-          </h1>
-          <p className="text-gray-600 mb-6">
-            Comece a organizar suas despesas em grupo
-          </p>
+        {submitError && (
+          <div className={styles.errorAlert}>
+            <span>⚠️</span>
+            <p>{submitError}</p>
+          </div>
+        )}
 
-          <form onSubmit={handleSignup} className="space-y-4">
+        <form onSubmit={handleSubmit} className={styles.form}>
+          <Input
+            label="Nome Completo"
+            type="text"
+            placeholder="João Silva"
+            value={formData.fullName}
+            onChange={(e) => setFormData({ ...formData, fullName: e.target.value })}
+            error={errors.fullName}
+            required
+          />
+
+          <Input
+            label="Email"
+            type="email"
+            placeholder="seu@email.com"
+            value={formData.email}
+            onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+            error={errors.email}
+            required
+          />
+
+          <div>
             <Input
-              label="Nome completo"
-              type="text"
-              value={fullName}
-              onChange={(e) => setFullName(e.target.value)}
-              placeholder="Seu nome"
-              required
-            />
-
-            <Input
-              label="Email"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="seu@email.com"
-              required
-            />
-
-            <div>
-              <Input
-                label="Senha"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••"
-                showPasswordToggle
-                required
-              />
-
-              {/* Indicador de força da senha */}
-              {password && (
-                <div className="mt-2">
-                  <div className="flex gap-2 mb-2">
-                    {[1, 2, 3, 4, 5].map((level) => (
-                      <div
-                        key={level}
-                        className={`h-1 flex-1 rounded-full ${
-                          Object.values(passwordValidation.checks).filter(Boolean).length >= level
-                            ? passwordValidation.strength === 'strong'
-                              ? 'bg-green-500'
-                              : passwordValidation.strength === 'medium'
-                              ? 'bg-yellow-500'
-                              : 'bg-red-500'
-                            : 'bg-gray-200'
-                        }`}
-                      />
-                    ))}
-                  </div>
-                  <div className="text-xs space-y-1 text-gray-600">
-                    <p className={passwordValidation.checks.length ? 'text-green-600' : ''}>
-                      {passwordValidation.checks.length ? '✓' : '○'} Mínimo 8 caracteres
-                    </p>
-                    <p className={passwordValidation.checks.uppercase ? 'text-green-600' : ''}>
-                      {passwordValidation.checks.uppercase ? '✓' : '○'} 1 letra maiúscula
-                    </p>
-                    <p className={passwordValidation.checks.lowercase ? 'text-green-600' : ''}>
-                      {passwordValidation.checks.lowercase ? '✓' : '○'} 1 letra minúscula
-                    </p>
-                    <p className={passwordValidation.checks.number ? 'text-green-600' : ''}>
-                      {passwordValidation.checks.number ? '✓' : '○'} 1 número
-                    </p>
-                    <p className={passwordValidation.checks.special ? 'text-green-600' : ''}>
-                      {passwordValidation.checks.special ? '✓' : '○'} 1 caractere especial (!@#$%...)
-                    </p>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            <Input
-              label="Confirmar senha"
+              label="Senha"
               type="password"
-              value={confirmPassword}
-              onChange={(e) => setConfirmPassword(e.target.value)}
               placeholder="••••••••"
+              value={formData.password}
+              onChange={handlePasswordChange}
+              error={errors.password}
               showPasswordToggle
               required
             />
+            {formData.password && (
+              <div className={styles.passwordStrength}>
+                <div className={styles.strengthBar}>
+                  <div
+                    className={`${styles.strengthFill} ${
+                      styles[`strength-${passwordStrength}`]
+                    }`}
+                  />
+                </div>
+                <ul className={styles.requirementsList}>
+                  {passwordRequirements.map((req, idx) => (
+                    <li
+                      key={idx}
+                      className={req.regex.test(formData.password) ? styles.met : ''}
+                    >
+                      <span>{req.regex.test(formData.password) ? '✓' : '✗'}</span>
+                      {req.label}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
 
-            {/* Checkboxes de Termos */}
-            <div className="space-y-3 pt-2">
-              <label className="flex items-start gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={acceptedTerms}
-                  onChange={(e) => setAcceptedTerms(e.target.checked)}
-                  className="mt-1"
-                  required
-                />
-                <span className="text-sm text-gray-600">
-                  Aceito os{' '}
-                  <Link href="/terms" className="text-[#208085] hover:underline">
-                    Termos de Serviço
-                  </Link>
-                </span>
-              </label>
+          <Input
+            label="Confirmar Senha"
+            type="password"
+            placeholder="••••••••"
+            value={formData.confirmPassword}
+            onChange={(e) =>
+              setFormData({ ...formData, confirmPassword: e.target.value })
+            }
+            error={errors.confirmPassword}
+            showPasswordToggle
+            required
+          />
 
-              <label className="flex items-start gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={acceptedPrivacy}
-                  onChange={(e) => setAcceptedPrivacy(e.target.checked)}
-                  className="mt-1"
-                  required
-                />
-                <span className="text-sm text-gray-600">
-                  Aceito a{' '}
-                  <Link href="/privacy" className="text-[#208085] hover:underline">
-                    Política de Privacidade
-                  </Link>
-                </span>
+          <div className={styles.checkboxGroup}>
+            <div className={styles.checkbox}>
+              <input
+                type="checkbox"
+                id="terms"
+                checked={formData.acceptTerms}
+                onChange={(e) =>
+                  setFormData({ ...formData, acceptTerms: e.target.checked })
+                }
+              />
+              <label htmlFor="terms">
+                Aceito os{' '}
+                <Link href="/terms" target="_blank">
+                  Termos de Serviço
+                </Link>
               </label>
             </div>
+            {errors.terms && (
+              <p className={styles.checkboxError}>{errors.terms}</p>
+            )}
 
-            <Button
-              type="submit"
-              variant="primary"
-              fullWidth
-              loading={loading}
-              disabled={!passwordValidation.isValid || !acceptedTerms || !acceptedPrivacy}
-            >
-              Criar conta
-            </Button>
-          </form>
-
-          <div className="mt-6 text-center text-gray-600">
-            Já tem conta?{' '}
-            <Link href="/auth/login" className="text-[#208085] font-semibold hover:underline">
-              Fazer login
-            </Link>
+            <div className={styles.checkbox}>
+              <input
+                type="checkbox"
+                id="privacy"
+                checked={formData.acceptPrivacy}
+                onChange={(e) =>
+                  setFormData({ ...formData, acceptPrivacy: e.target.checked })
+                }
+              />
+              <label htmlFor="privacy">
+                Aceito a{' '}
+                <Link href="/privacy" target="_blank">
+                  Política de Privacidade
+                </Link>
+              </label>
+            </div>
           </div>
+
+          <Button
+            type="submit"
+            variant="primary"
+            fullWidth
+            size="lg"
+            loading={loading}
+            disabled={loading}
+          >
+            {loading ? 'Cadastrando...' : 'Criar Conta'}
+          </Button>
+        </form>
+
+        <div className={styles.footer}>
+          <p>
+            Já tem conta?{' '}
+            <Link href="/login" className={styles.link}>
+              Faça login aqui
+            </Link>
+          </p>
         </div>
       </div>
     </div>
