@@ -1,6 +1,6 @@
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 
-export const supabase = createClientComponentClient();
+export const supabase = createClientComponentClient<any>();
 
 export async function getDivvies(userId: string) {
   const { data, error } = await supabase
