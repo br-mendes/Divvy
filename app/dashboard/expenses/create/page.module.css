@@ -1,0 +1,271 @@
+/* app/dashboard/expenses/create/page.module.css */
+
+.container {
+  display: flex;
+  justify-content: center;
+  padding: var(--spacing-xl);
+}
+
+.formContainer {
+  background-color: var(--bg-primary);
+  border: 2px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: var(--spacing-xl);
+  width: 100%;
+  max-width: 600px;
+  box-shadow: var(--shadow-md);
+}
+
+.header {
+  text-align: center;
+  margin-bottom: var(--spacing-xl);
+}
+
+.header h1 {
+  margin: 0 0 var(--spacing-sm) 0;
+  font-size: 2rem;
+  color: var(--text-primary);
+}
+
+.header p {
+  margin: 0;
+  color: var(--text-secondary);
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-lg);
+}
+
+.label {
+  display: block;
+  font-weight: 600;
+  font-size: 0.875rem;
+  color: var(--text-primary);
+  margin-bottom: var(--spacing-sm);
+}
+
+.select {
+  width: 100%;
+  padding: 0.625rem 1rem;
+  border: 2px solid var(--border);
+  border-radius: var(--radius-md);
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  font-size: 0.875rem;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.select:focus {
+  border-color: var(--primary);
+  outline: none;
+}
+
+/* Split Type */
+.splitTypeButtons {
+  display: flex;
+  gap: var(--spacing-md);
+}
+
+.splitButton {
+  flex: 1;
+  padding: 0.625rem 1rem;
+  border: 2px solid var(--border);
+  border-radius: var(--radius-md);
+  background-color: var(--bg-secondary);
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-weight: 500;
+  transition: all var(--transition-fast);
+}
+
+.splitButton:hover {
+  border-color: var(--primary);
+  background-color: var(--bg-primary);
+}
+
+.splitButton.active {
+  border-color: var(--primary);
+  background-color: var(--primary);
+  color: white;
+}
+
+/* Participants */
+.participantsSection {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-lg);
+  padding: var(--spacing-lg);
+  background-color: var(--bg-secondary);
+  border-radius: var(--radius-lg);
+}
+
+.participantsSection h3 {
+  margin: 0;
+  font-size: 1rem;
+  color: var(--text-primary);
+}
+
+.participantsList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+}
+
+.participantItem {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-md);
+  padding: var(--spacing-md);
+  background-color: var(--bg-primary);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+}
+
+.participantInfo {
+  flex: 1;
+}
+
+.participantName {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.participantEmail {
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+}
+
+.participantShare {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.shareInput {
+  width: 100px;
+  padding: 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  font-size: 0.875rem;
+  text-align: right;
+}
+
+.shareInput:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.shareInput:focus {
+  border-color: var(--primary);
+  outline: none;
+}
+
+.shareLabel {
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+  min-width: 20px;
+}
+
+/* Split Summary */
+.splitSummary {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+  padding: var(--spacing-md);
+  background-color: var(--bg-primary);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+}
+
+.summaryItem {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.95rem;
+  color: var(--text-secondary);
+}
+
+.summaryItem strong {
+  color: var(--text-primary);
+  font-size: 1.125rem;
+}
+
+.summaryItem strong.balanced {
+  color: var(--secondary);
+}
+
+.summaryItem strong.unbalanced {
+  color: var(--danger);
+}
+
+.unbalancedWarning {
+  margin: 0;
+  padding: var(--spacing-sm);
+  background-color: rgba(239, 68, 68, 0.1);
+  border-left: 3px solid var(--danger);
+  color: var(--danger);
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.error {
+  margin: 0;
+  padding: var(--spacing-md);
+  background-color: rgba(239, 68, 68, 0.1);
+  border: 2px solid var(--danger);
+  border-radius: var(--radius-md);
+  color: var(--danger);
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+/* Buttons */
+.buttons {
+  display: flex;
+  gap: var(--spacing-md);
+  padding-top: var(--spacing-lg);
+  border-top: 2px solid var(--border);
+}
+
+.buttons a,
+.buttons button {
+  flex: 1;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .formContainer {
+    padding: var(--spacing-lg);
+  }
+
+  .header h1 {
+    font-size: 1.5rem;
+  }
+
+  .splitTypeButtons {
+    flex-direction: column;
+  }
+
+  .participantItem {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .participantShare {
+    width: 100%;
+    justify-content: flex-end;
+  }
+
+  .buttons {
+    flex-direction: column;
+  }
+}
