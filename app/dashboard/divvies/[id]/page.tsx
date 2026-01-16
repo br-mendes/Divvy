@@ -1,113 +1,97 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
-import { useParams } from 'next/navigation';
 import Button from '@/components/common/Button';
-import Input from '@/components/common/Input';
-import { useAuth } from '@/hooks/useAuth';
+import LogoAnimated from '@/components/common/LogoAnimated';
 
-export default function DivvyDetail() {
-  const { id } = useParams();
-  const { user } = useAuth();
-  const [divvy, setDivvy] = useState<any>(null);
-  const [expenses, setExpenses] = useState<any[]>([]);
-  const [newExpense, setNewExpense] = useState({ description: '', amount: '' });
+export default function HomePage() {
+  const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    loadData();
-
-    // Realtime subscription
-    const channel = supabase
-      .channel('room-1')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'expenses', filter: `divvy_id=eq.${id}` }, 
-        () => loadData()
-      )
-      .subscribe();
-
-    return () => { supabase.removeChannel(channel) };
-  }, [id]);
-
-  async function loadData() {
-    if (!id) return;
-    const [divvyRes, expensesRes] = await Promise.all([
-      supabase.from('divvies').select('*').eq('id', id).single(),
-      supabase.from('expenses').select('*, paid_by:user_profiles(full_name)').eq('divvy_id', id).order('created_at', { ascending: false })
-    ]);
-
-    if (divvyRes.data) setDivvy(divvyRes.data);
-    if (expensesRes.data) setExpenses(expensesRes.data);
-    setLoading(false);
-  }
-
-  async function handleAddExpense(e: React.FormEvent) {
-    e.preventDefault();
-    if (!user || !newExpense.amount) return;
-
-    const { error } = await supabase.from('expenses').insert({
-      divvy_id: id,
-      description: newExpense.description,
-      amount: parseFloat(newExpense.amount),
-      paid_by_user_id: user.id
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUser(session?.user ?? null);
+      setLoading(false);
     });
+  }, []);
 
-    if (!error) setNewExpense({ description: '', amount: '' });
-  }
-
-  if (loading) return <div className="p-6">Carregando...</div>;
-  if (!divvy) return <div className="p-6">Divvy não encontrado.</div>;
+  if (loading) return <div className="h-screen flex items-center justify-center">Loading...</div>;
 
   return (
-    <div className="max-w-4xl mx-auto p-6 space-y-8">
-      {/* Header */}
-      <div className="bg-white p-6 rounded-xl border shadow-sm">
-        <h1 className="text-3xl font-bold text-gray-900">{divvy.name}</h1>
-        <p className="text-gray-500 mt-2">{divvy.description}</p>
-      </div>
+    <div className="min-h-screen bg-gradient-to-br from-purple-50 via-white to-blue-50">
 
-      <div className="grid md:grid-cols-2 gap-8">
-        {/* Lista de Despesas */}
-        <div className="space-y-4">
-          <h2 className="font-semibold text-xl">Despesas</h2>
-          <div className="space-y-3">
-            {expenses.map(exp => (
-              <div key={exp.id} className="bg-white p-4 rounded-lg border flex justify-between items-center">
-                <div>
-                  <p className="font-medium">{exp.description}</p>
-                  <p className="text-sm text-gray-500">Pago por {exp.paid_by?.full_name || 'Alguém'}</p>
-                </div>
-                <span className="font-bold text-red-500">
-                  R$ {exp.amount}
-                </span>
-              </div>
-            ))}
-            {expenses.length === 0 && <p className="text-gray-500 italic">Nenhuma despesa ainda.</p>}
+      {/* HEADER */}
+      <header className="sticky top-0 z-40 bg-white/80 backdrop-blur-sm border-b border-gray-100">
+        <div className="max-w-7xl mx-auto px-4 py-4 flex justify-between items-center">
+          <LogoAnimated />
+          <div className="flex gap-3">
+            {user ? (
+              <Link href="/dashboard">
+                <Button>Dashboard</Button>
+              </Link>
+            ) : (
+              <>
+                <Link href="/auth/login"><Button variant="outline">Entrar</Button></Link>
+                <Link href="/auth/signup"><Button>Criar Conta</Button></Link>
+              </>
+            )}
           </div>
         </div>
+      </header>
 
-        {/* Adicionar Despesa */}
-        <div className="bg-gray-50 p-6 rounded-xl h-fit">
-          <h2 className="font-semibold text-xl mb-4">Adicionar Gasto</h2>
-          <form onSubmit={handleAddExpense} className="space-y-4">
-            <Input 
-              label="Descrição" 
-              value={newExpense.description}
-              onChange={e => setNewExpense({...newExpense, description: e.target.value})}
-              placeholder="Ex: Uber, Jantar..."
-            />
-            <Input 
-              label="Valor (R$)" 
-              type="number" 
-              step="0.01"
-              value={newExpense.amount}
-              onChange={e => setNewExpense({...newExpense, amount: e.target.value})}
-              placeholder="0.00"
-            />
-            <Button fullWidth type="submit">Adicionar</Button>
-          </form>
+      {/* HERO SECTION */}
+      <section className="max-w-7xl mx-auto px-4 py-20">
+        <div className="grid md:grid-cols-2 gap-12 items-center">
+
+          {/* Left Column: Text */}
+          <div className="space-y-6">
+            <div className="inline-block bg-purple-100 px-3 py-1 rounded-full text-purple-700 text-sm font-semibold">
+               Gestão inteligente de despesas
+            </div>
+            <h1 className="text-5xl font-bold text-gray-900 leading-tight">
+              Divida despesas <br/>
+              <span className="text-[#6366f1]">sem perder amigos</span>
+            </h1>
+            <p className="text-xl text-gray-600">
+              Viagens, repúblicas ou jantares. O Divvy calcula quem deve quem para que você não precise se preocupar.
+            </p>
+            <div className="flex gap-4 pt-2">
+              <Link href={user ? "/dashboard" : "/auth/signup"}>
+                <Button size="lg">{user ? 'Ir para Dashboard' : 'Começar Agora'}</Button>
+              </Link>
+              <Button variant="outline" size="lg">Saiba Mais</Button>
+            </div>
+          </div>
+
+          {/* Right Column: Animation Placeholder */}
+          <div className="hidden md:flex justify-center">
+            {/* 
+               AREA DE ANIMAÇÃO SOLICITADA 
+               - Transição: Recibo -> Gráfico
+            */}
+            <div className="relative w-full h-96 bg-gradient-to-br from-indigo-50 to-purple-50 rounded-3xl border-2 border-dashed border-indigo-200 flex flex-col items-center justify-center overflow-hidden">
+               <div className="absolute inset-0 flex items-center justify-center opacity-10">
+                 <span className="text-9xl"></span>
+               </div>
+
+               <div className="z-10 text-center p-6 bg-white/80 rounded-xl backdrop-blur-md shadow-lg transform hover:scale-105 transition duration-500">
+                 <div className="text-5xl mb-2 animate-bounce"> ⟳ </div>
+                 <p className="font-bold text-indigo-600">Processando Divisão...</p>
+                 <p className="text-xs text-gray-500 mt-1">Animação: Recibo rasgando virando gráfico</p>
+               </div>
+            </div>
+          </div>
+
         </div>
-      </div>
+      </section>
+
+      {/* FOOTER SIMPLE */}
+      <footer className="bg-gray-900 text-white py-8 text-center mt-20">
+        <p>© 2026 Divvy. Todos os direitos reservados.</p>
+      </footer>
+
     </div>
   );
 }
