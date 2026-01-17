@@ -1,6 +1,7 @@
 
 import React from 'react';
 import type { AppProps } from 'next/app';
+import Head from 'next/head';
 import { AuthProvider } from '../context/AuthContext';
 import { ThemeProvider } from '../context/ThemeContext';
 import ErrorBoundary from '../components/ui/ErrorBoundary';
@@ -10,6 +11,10 @@ import '../index.css';
 export default function App({ Component, pageProps }: AppProps) {
   return (
     <ErrorBoundary>
+      <Head>
+        <title>Divvy App</title>
+        <link rel="icon" href="https://i.ibb.co/qLBKgSVR/favicon.png" />
+      </Head>
       <AuthProvider>
         <ThemeProvider>
           <Toaster 
