@@ -98,17 +98,14 @@ export default function DashboardPage() {
         ) : (
           <div className={styles.divviesList}>
             {recentDivvies.map((divvy) => (
-              <Card
+              <Link
                 key={divvy.id}
-                title={divvy.name}
-                description={`${divvy.members} membros • R$ ${divvy.totalAmount.toFixed(2)}`}
+                href={`/groups/${divvy.id}`}
+                className="block border rounded p-4 hover:opacity-90"
               >
-                <Link href={`/dashboard/divvies/${divvy.id}`}>
-                  <Button variant="outline" size="sm" fullWidth>
-                    Gerenciar
-                  </Button>
-                </Link>
-              </Card>
+                <div className="font-semibold">{divvy.name}</div>
+                <div className="text-sm opacity-70">{divvy.type}</div>
+              </Link>
             ))}
           </div>
         )}
