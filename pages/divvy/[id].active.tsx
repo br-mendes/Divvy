@@ -13,6 +13,7 @@ import InviteModal from '../../components/invite/InviteModal';
 import BalanceView from '../../components/balance/BalanceView';
 import LoadingSpinner from '../../components/ui/LoadingSpinner';
 import EmptyState from '../../components/ui/EmptyState';
+import { ExpenseAttachments } from '../../components/groups/ExpenseAttachments';
 import ImageViewerModal from '../../components/ui/ImageViewerModal';
 import { 
   Plus, UserPlus, Receipt, PieChart, Users, Lock, LockOpen, 
@@ -540,6 +541,8 @@ const DivvyDetailContent: React.FC = () => {
                 )}
               </div>
             </div>
+
+            <ExpenseAttachments divvyId={divvyId} expenseId={viewingExpense.id} />
 
             {viewingExpense.receiptphotourl && (
                 <div className="rounded-lg overflow-hidden border border-gray-200 dark:border-dark-700 relative group">
