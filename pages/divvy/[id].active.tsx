@@ -48,7 +48,9 @@ const DivvyDetailContent: React.FC = () => {
   // Filters State
   const [searchQuery, setSearchQuery] = useState('');
   const [filterCategory, setFilterCategory] = useState<string>('all');
+  const [filterCategoryId, setFilterCategoryId] = useState<string>('');
   const [filterPayer, setFilterPayer] = useState<string>('all');
+  const [categories, setCategories] = useState<any[]>([]);
 
   // Fetch Logic via Secure API
   const fetchDivvyData = useCallback(async (silent = false) => {
@@ -103,6 +105,25 @@ const DivvyDetailContent: React.FC = () => {
     return () => { supabase.removeChannel(channel); };
   }, [fetchDivvyData, divvyId]);
 
+  useEffect(() => {
+    const fetchCategories = async () => {
+      if (!divvyId) return;
+      const { data, error } = await supabase
+        .from('categories')
+        .select('*')
+        .eq('divvyid', divvyId);
+
+      if (error) {
+        console.error('Erro ao carregar categorias:', error);
+        return;
+      }
+
+      setCategories(data || []);
+    };
+
+    fetchCategories();
+  }, [divvyId]);
+
   const getMemberName = (uid: string) => {
     const m = members.find(m => m.userid === uid);
     if (!m) return 'Membro';
@@ -114,6 +135,10 @@ const DivvyDetailContent: React.FC = () => {
 
   const isLocked = (exp: Expense) => exp.locked;
   const isCreator = user?.id === divvy?.creatorid;
+
+  const visibleExpenses = filterCategoryId
+    ? expenses.filter((e: any) => String(e.categoryid ?? '') === filterCategoryId)
+    : expenses;
 
   // --- ACTIONS WITH API ---
   const handleUpdateTransaction = async (t: Transaction, action: 'confirm' | 'reject') => {
@@ -363,9 +388,33 @@ const DivvyDetailContent: React.FC = () => {
 
       <div className="flex justify-between items-center gap-3 px-1 flex-wrap">
         <div className="flex items-center gap-2">
-           <Button variant="ghost" size="sm" onClick={handleExportCSV} className="text-gray-500 hover:text-brand-600">
-              <Download size={18} className="mr-2" /> Exportar CSV
-           </Button>
+          <select
+            className="border rounded px-3 py-1 text-sm"
+            value={filterCategoryId}
+            onChange={(e) => setFilterCategoryId(e.target.value)}
+            aria-label="Filtrar por categoria"
+          >
+            <option value="">Todas categorias</option>
+            {categories
+              .filter((c: any) => !c.isarchived)
+              .map((c: any) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+          </select>
+          {filterCategoryId && (
+            <button
+              className="border rounded px-3 py-1 text-sm"
+              type="button"
+              onClick={() => setFilterCategoryId('')}
+            >
+              Limpar filtro
+            </button>
+          )}
+          <Button variant="ghost" size="sm" onClick={handleExportCSV} className="text-gray-500 hover:text-brand-600">
+            <Download size={18} className="mr-2" /> Exportar CSV
+          </Button>
         </div>
         <div className="flex items-center gap-2">
             <Button variant="outline" onClick={() => setIsInviteModalOpen(true)}><UserPlus size={18} className="mr-2" /> Convidar</Button>
@@ -394,7 +443,7 @@ const DivvyDetailContent: React.FC = () => {
       <div className="min-h-[400px]">
         {activeTab === 'expenses' && (
           <ExpenseList 
-            expenses={expenses}
+            expenses={visibleExpenses}
             members={members}
             loading={loading}
             onExpenseClick={(exp) => { setViewingExpense(exp); setIsEditingExpense(false); setIsViewModalOpen(true); }}

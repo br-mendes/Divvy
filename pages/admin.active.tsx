@@ -41,6 +41,7 @@ export default function AdminPage() {
   const [broadcastModal, setBroadcastModal] = useState(false);
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
+  const [categoryId, setCategoryId] = useState('');
   const [target, setTarget] = useState<'all' | 'active' | 'inactive30'>('all');
   const [startsAt, setStartsAt] = useState('');
   const [endsAt, setEndsAt] = useState('');
@@ -171,6 +172,7 @@ export default function AdminPage() {
       setBroadcastModal(false);
       setTitle('');
       setBody('');
+      setCategoryId('');
       setStartsAt('');
       setEndsAt('');
       fetchData('broadcast'); // Refresh list

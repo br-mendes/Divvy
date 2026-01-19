@@ -10,7 +10,6 @@ import { ExpenseCharts } from '../../components/Charts';
 import DivvyHeader from '../../components/divvy/DivvyHeader';
 import InviteModal from '../../components/invite/InviteModal';
 import LoadingSpinner from '../../components/ui/LoadingSpinner';
-import EmptyState from '../../components/ui/EmptyState';
 import { Plus, UserPlus, Receipt, PieChart, Users } from 'lucide-react';
 import { ProtectedRoute } from '../../components/ProtectedRoute';
 
@@ -23,6 +22,7 @@ const DivvyDetailContent: React.FC = () => {
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'expenses' | 'charts' | 'members'>('expenses');
+  const [filterCategoryId, setFilterCategoryId] = useState<string>('');
   
   // Modals
   const [isExpenseModalOpen, setIsExpenseModalOpen] = useState(false);
@@ -121,6 +121,10 @@ const DivvyDetailContent: React.FC = () => {
   if (loading) return <div className="flex justify-center p-12"><LoadingSpinner /></div>;
   if (!divvy) return <div className="text-center p-12">Divvy not found</div>;
 
+  const visibleExpenses = filterCategoryId
+    ? expenses.filter((e: any) => String(e.categoryid ?? '') === filterCategoryId)
+    : expenses;
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -181,10 +185,12 @@ const DivvyDetailContent: React.FC = () => {
       <div className="min-h-[400px]">
         {activeTab === 'expenses' && (
           <div className="space-y-4">
-            {expenses.length === 0 ? (
-              <EmptyState />
+            {visibleExpenses.length === 0 ? (
+              <div className="opacity-70">
+                {filterCategoryId ? 'Nenhuma despesa nesta categoria.' : 'Nenhuma despesa ainda.'}
+              </div>
             ) : (
-              expenses.map((exp) => (
+              visibleExpenses.map((exp) => (
                 <div key={exp.id} className="bg-white p-4 rounded-lg shadow-sm border border-gray-100 flex justify-between items-center">
                   <div className="flex items-center gap-4">
                     <div className="h-10 w-10 rounded-full bg-brand-50 flex items-center justify-center text-xl">

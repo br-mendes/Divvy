@@ -18,6 +18,7 @@ export default function AdminPage() {
   const [broadcastModal, setBroadcastModal] = useState(false);
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
+  const [categoryId, setCategoryId] = useState('');
   const [target, setTarget] = useState<'all' | 'active' | 'inactive30'>('all');
   const [sending, setSending] = useState(false);
 
@@ -68,6 +69,7 @@ export default function AdminPage() {
       setBroadcastModal(false);
       setTitle('');
       setBody('');
+      setCategoryId('');
     } catch (e: any) {
       toast.error('Erro ao enviar broadcast: ' + e.message);
     } finally {

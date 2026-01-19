@@ -42,6 +42,7 @@ export default function ExpensesPage() {
 
   const [selectedDivvy, setSelectedDivvy] = useState<string>('all');
   const [filterCategory, setFilterCategory] = useState<string>('all');
+  const [filterCategoryId, setFilterCategoryId] = useState<string>('');
 
   const categoryIcons: Record<string, string> = {
     food: '',
@@ -50,6 +51,10 @@ export default function ExpensesPage() {
     entertainment: '',
     other: '',
   };
+
+  const visibleExpenses = filterCategoryId
+    ? expenses.filter((e: any) => String(e.categoryid ?? '') === filterCategoryId)
+    : expenses;
 
   return (
     <div className={styles.container}>
@@ -89,7 +94,7 @@ export default function ExpensesPage() {
       </div>
 
       {/* Expenses List */}
-      {expenses.length === 0 ? (
+      {visibleExpenses.length === 0 ? (
         <Card>
           <div className={styles.emptyState}>
             <p className={styles.emptyIcon}></p>
@@ -104,7 +109,7 @@ export default function ExpensesPage() {
         </Card>
       ) : (
         <div className={styles.expensesList}>
-          {expenses.map((expense) => (
+          {visibleExpenses.map((expense) => (
             <div key={expense.id} className={styles.expenseCard}>
               <div className={styles.expenseIcon}>
                 {categoryIcons[expense.category] || ''}
@@ -187,6 +192,7 @@ export default function ExpensesPage() {
 
   const [selectedDivvy, setSelectedDivvy] = useState<string>('all');
   const [filterCategory, setFilterCategory] = useState<string>('all');
+  const [filterCategoryId, setFilterCategoryId] = useState<string>('');
 
   const categoryIcons: Record<string, string> = {
     food: '🍽️',
@@ -195,6 +201,10 @@ export default function ExpensesPage() {
     entertainment: '🎉',
     other: '📝',
   };
+
+  const visibleExpenses = filterCategoryId
+    ? expenses.filter((e: any) => String(e.categoryid ?? '') === filterCategoryId)
+    : expenses;
 
   return (
     <div className={styles.container}>
@@ -234,7 +244,7 @@ export default function ExpensesPage() {
       </div>
 
       {/* Expenses List */}
-      {expenses.length === 0 ? (
+      {visibleExpenses.length === 0 ? (
         <Card>
           <div className={styles.emptyState}>
             <p className={styles.emptyIcon}></p>
@@ -249,7 +259,7 @@ export default function ExpensesPage() {
         </Card>
       ) : (
         <div className={styles.expensesList}>
-          {expenses.map((expense) => (
+          {visibleExpenses.map((expense) => (
             <div key={expense.id} className={styles.expenseCard}>
               <div className={styles.expenseIcon}>
                 {categoryIcons[expense.category] || ''}
