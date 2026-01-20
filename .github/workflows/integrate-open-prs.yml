@@ -47,15 +47,21 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          set -e
+          set -euo pipefail
 
           while read -r pr; do
             echo "==> Merging PR #$pr"
             headRef=$(gh pr view "$pr" --json headRefName --jq '.headRefName')
+            headRepo=$(gh pr view "$pr" --json headRepository --jq '.headRepository.fullName')
             echo "Head branch: $headRef"
+            echo "Head repo: $headRepo"
 
-            git fetch origin "$headRef":"refs/remotes/origin/$headRef" || true
-            git merge --no-edit -X theirs "origin/$headRef" || true
+            git fetch "https://github.com/${headRepo}.git" \
+              "${headRef}:refs/remotes/origin/${headRef}"
+
+            if git merge --no-edit -X theirs "origin/${headRef}"; then
+              continue
+            fi
 
             if git status --porcelain | grep -q '^UU '; then
               echo "Conflicts detected; taking THEIRS for conflicted files"
@@ -64,6 +70,9 @@ jobs:
                 git add "$f"
               done
               git commit -m "Resolve conflicts by preferring latest PR changes (theirs)"
+            else
+              echo "Merge failed for PR #$pr"
+              exit 1
             fi
           done < prs.txt
 
