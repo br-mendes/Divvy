@@ -7,31 +7,26 @@ export type ButtonProps = React.ButtonHTMLAttributes<HTMLButtonElement> & {
   variant?: 'primary' | 'secondary' | 'ghost';
 };
 
-export function Button({
-  className = '',
-  loading = false,
-  variant = 'primary',
-  disabled,
-  children,
-  ...props
-}: ButtonProps) {
-  const base =
-    'inline-flex items-center justify-center rounded-md px-4 py-2 text-sm font-medium transition ' +
-    'disabled:opacity-60 disabled:cursor-not-allowed';
-
-  const variants: Record<string, string> = {
-    primary: 'bg-black text-white hover:opacity-90',
-    secondary: 'border border-gray-300 text-gray-800 hover:bg-gray-50',
-    ghost: 'text-gray-800 hover:bg-gray-100',
-  };
+export function Button({ loading, disabled, variant = 'primary', className, children, ...props }: ButtonProps) {
+  const styles =
+    variant === 'primary'
+      ? 'bg-black text-white hover:opacity-90'
+      : variant === 'secondary'
+      ? 'border border-gray-300 text-gray-800 hover:bg-gray-50'
+      : 'text-gray-800 hover:bg-gray-100';
 
   return (
     <button
-      className={[base, variants[variant], className].join(' ')}
       disabled={disabled || loading}
+      className={[
+        'inline-flex items-center justify-center rounded-md px-4 py-2 text-sm font-medium transition',
+        styles,
+        (disabled || loading) ? 'opacity-60 cursor-not-allowed' : '',
+        className ?? '',
+      ].join(' ')}
       {...props}
     >
-      {loading ? 'Carregando...' : children}
+      {loading ? 'Carregando…' : children}
     </button>
   );
 }
