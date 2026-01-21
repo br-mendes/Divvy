@@ -1,40 +1,56 @@
 import { Resend } from 'resend';
 
-/**
- * Compat layer:
- * Alguns arquivos importam:
- * - resend
- * - appUrl
- * - EMAIL_FROM
- * - getAppUrl / getFromEmail / getResendClient
- */
+function pickFirst(...values: Array<string | undefined | null>) {
+  for (const v of values) {
+    const s = (v ?? '').toString().trim();
+    if (s) return s;
+  }
+  return '';
+}
 
 export function getAppUrl() {
-  const fromEnv =
-    process.env.NEXT_PUBLIC_APP_URL ||
-    (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : '') ||
-    process.env.NEXT_PUBLIC_SITE_URL ||
-    '';
-  return fromEnv || 'http://localhost:3000';
+  // Prefer explicit public URLs
+  const explicit =
+    pickFirst(
+      process.env.NEXT_PUBLIC_APP_URL,
+      process.env.NEXT_PUBLIC_SITE_URL
+    );
+
+  if (explicit) return explicit;
+
+  // Vercel runtime URL
+  const vercelUrl = pickFirst(process.env.VERCEL_URL);
+  if (vercelUrl) return `https://${vercelUrl}`;
+
+  return 'http://localhost:3000';
 }
 
 export function getFromEmail() {
-  // suportar chaves antigas e novas
-  return process.env.RESEND_FROM || process.env.NEXT_PUBLIC_RESEND_FROM_EMAIL || process.env.FROM_EMAIL || 'Divvy <no-reply@divvy.local>';
+  // Try multiple env names for compatibility
+  const from =
+    pickFirst(
+      process.env.RESEND_FROM,
+      process.env.RESEND_FROM_EMAIL,
+      process.env.NEXT_PUBLIC_RESEND_FROM_EMAIL,
+      process.env.NEXT_PUBLIC_RESEND_FROM,
+      process.env.FROM_EMAIL
+    );
+
+  return from || 'Divvy <no-reply@divvy.local>';
 }
 
 export function getResendClient() {
-  const key = process.env.RESEND_API_KEY;
+  const key = pickFirst(process.env.RESEND_API_KEY);
   if (!key) return null;
   return new Resend(key);
 }
 
-// exports “simples” que o resto do app costuma usar
+// Backwards-compatible exports used across the codebase
 export const appUrl = getAppUrl();
 export const EMAIL_FROM = getFromEmail();
 
-// muitos lugares importam "resend" como named export
+// Some files import { resend } from '@/lib/email/resend'
 export const resend = getResendClient();
 
-// manter também default export para compatibilidade
+// Some files may default import resend
 export default resend;
