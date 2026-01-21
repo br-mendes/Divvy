@@ -1,23 +1,14 @@
-// components/common/Logo.tsx
-
 import React from 'react';
-import styles from './Logo.module.css';
+import DivvyLogo from '../branding/DivvyLogo';
 
-interface LogoProps {
-  size?: 'sm' | 'md' | 'lg';
-  animated?: boolean;
-}
+type LogoSize = 'sm' | 'md' | 'lg';
 
-export const Logo: React.FC<LogoProps> = ({ size = 'md', animated = true }) => {
-  const sizeClass = styles[size];
-  const animatedClass = animated ? styles.animated : '';
-
-  return (
-    <div className={`${styles.logo} ${sizeClass} ${animatedClass}`}>
-      <div className={styles.icon} aria-hidden="true">
-        <span className={styles.emoji}>💸</span>
-      </div>
-      <span className={styles.text}>Divvy</span>
-    </div>
-  );
+const sizeClasses: Record<LogoSize, string> = {
+  sm: 'w-8 h-8',
+  md: 'w-12 h-12',
+  lg: 'w-16 h-16',
 };
+
+export function Logo({ size = 'md', animated = true }: { size?: LogoSize; animated?: boolean }) {
+  return <DivvyLogo className={sizeClasses[size]} animated={animated} />;
+}

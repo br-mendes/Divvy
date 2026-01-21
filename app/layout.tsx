@@ -1,15 +1,10 @@
 import type { Metadata } from 'next';
-import { Inter } from 'next/font/google';
+import { AuthProvider } from '@/contexts/AuthContext';
 import './globals.css';
-import { ClientToaster } from '../components/common/ClientToaster';
-
-const inter = Inter({ subsets: ['latin'] });
 
 export const metadata: Metadata = {
-  title: 'Divvy – Divida Despesas de Forma Justa',
-  description:
-    'Aplicativo web para dividir despesas compartilhadas entre grupos. Sem confusão, sem atritos.',
-  keywords: 'dividir despesas, grupos, transações, viagens, república',
+  title: 'Divvy',
+  description: 'Divida despesas de forma inteligente',
 };
 
 export default function RootLayout({
@@ -19,9 +14,8 @@ export default function RootLayout({
 }) {
   return (
     <html lang="pt-BR">
-      <body className={inter.className}>
-        <ClientToaster />
-        {children}
+      <body>
+        <AuthProvider>{children}</AuthProvider>
       </body>
     </html>
   );
