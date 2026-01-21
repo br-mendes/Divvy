@@ -1,4 +1,6 @@
 
+"use client";
+
 import React, { useMemo } from 'react';
 import { Expense } from '../../types';
 import ExpenseCard from './ExpenseCard';

@@ -1,7 +1,9 @@
 
+"use client";
+
 import React, { useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/router';
+import { useRouter } from 'next/navigation';
 import { Divvy } from '../../types';
 import { Button } from '../ui/Button';
 import { Modal } from '../ui/Modal';

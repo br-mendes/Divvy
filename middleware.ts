@@ -13,10 +13,27 @@ export async function middleware(req: NextRequest) {
   if (!session && isDash) {
     return NextResponse.redirect(new URL('/auth/login', req.url));
   }
-  if (session && isAuth) {
+
+  // Redirecionar usuário logado para fora das páginas de auth
+  if (session && (
+    req.nextUrl.pathname === '/login' ||
+    req.nextUrl.pathname === '/auth/login' ||
+    req.nextUrl.pathname === '/signup'
+  )) {
     return NextResponse.redirect(new URL('/dashboard', req.url));
   }
   return res;
 }
 
-export const config = { matcher: ['/dashboard/:path*', '/auth/:path*'] };
+export const config = {
+  matcher: [
+    '/dashboard/:path*', 
+    '/profile/:path*', 
+    '/divvy/:path*', 
+    '/admin/:path*',
+    '/join/:path*',
+    '/login',
+    '/auth/login',
+    '/signup'
+  ],
+};

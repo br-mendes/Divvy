@@ -1,4 +1,6 @@
 
+"use client";
+
 import React, { useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { Button } from '../ui/Button';
@@ -6,7 +8,7 @@ import { Modal } from '../ui/Modal';
 import { Input } from '../ui/Input';
 import { AlertTriangle, LogOut, Trash2, ShieldAlert } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { useRouter } from 'next/router';
+import { useRouter } from 'next/navigation';
 
 export default function DangerZone() {
   const { user, signOut } = useAuth();

@@ -1,5 +1,7 @@
 
-import React, { useState, useEffect } from 'react';
+"use client";
+
+import React, { useMemo, useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { supabase } from '../../lib/supabase';
 import { BalancePair, DivvyMember, Expense, ExpenseSplit, Transaction, PaymentMethod } from '../../types';
