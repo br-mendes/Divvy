@@ -11,6 +11,7 @@ import ExpenseForm from '../../components/expense/ExpenseForm';
 import ExpenseList from '../../components/expense/ExpenseList';
 import InviteModal from '../../components/invite/InviteModal';
 import BalanceView from '../../components/balance/BalanceView';
+import { PaymentsPanel } from '../../components/groups/PaymentsPanel';
 import LoadingSpinner from '../../components/ui/LoadingSpinner';
 import EmptyState from '../../components/ui/EmptyState';
 import { 
@@ -33,7 +34,7 @@ const DivvyDetailContent: React.FC = () => {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
   
-  const [activeTab, setActiveTab] = useState<'expenses' | 'balances' | 'charts' | 'members'>('expenses');
+  const [activeTab, setActiveTab] = useState<'expenses' | 'balances' | 'payments' | 'charts' | 'members'>('expenses');
   const [isExpenseModalOpen, setIsExpenseModalOpen] = useState(false);
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
   const [isViewModalOpen, setIsViewModalOpen] = useState(false);
@@ -326,6 +327,7 @@ const DivvyDetailContent: React.FC = () => {
   const tabs: { id: any, label: string, icon: LucideIcon }[] = [
     { id: 'expenses', label: 'Despesas', icon: Receipt },
     { id: 'balances', label: 'Saldos', icon: Wallet },
+    { id: 'payments', label: 'Pagamentos', icon: Wallet },
     { id: 'charts', label: 'Análise', icon: PieChart },
     { id: 'members', label: 'Membros', icon: Users },
   ];
@@ -411,6 +413,8 @@ const DivvyDetailContent: React.FC = () => {
             onMarkAsSent={handleMarkAsSent}
           />
         )}
+
+        {activeTab === 'payments' && <PaymentsPanel divvyId={divvyId} />}
         
         {activeTab === 'charts' && (
           <div className="bg-white dark:bg-dark-900 p-6 rounded-2xl border border-gray-100 dark:border-dark-800">

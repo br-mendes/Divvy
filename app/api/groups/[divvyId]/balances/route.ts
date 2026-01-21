@@ -1,50 +1,50 @@
 import { NextResponse } from 'next/server';
-import { createServerSupabase } from '@/lib/supabase/server';
-import { getMyRoleInDivvy } from '@/lib/divvy/permissions';
+import { createServerSupabaseClient } from '@/lib/supabaseServer';
 
-type Transfer = { fromUserId: string; toUserId: string; amount_cents: number };
+type BalanceMap = Record<string, number>;
 
-export async function GET(
-  _req: Request,
-  { params }: { params: { divvyId: string } }
-) {
-  const supabase = createServerSupabase();
-  const divvyId = params.divvyId;
+type RouteParams = {
+  params: {
+    divvyId?: string;
+  };
+};
 
-  const { session } = await getMyRoleInDivvy(divvyId);
-  if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+export async function GET(_req: Request, { params }: RouteParams) {
+  const divvyId = params?.divvyId;
 
-  // 1) members (para mapear email e garantir membership)
-  const { data: members, error: memErr } = await supabase
+  if (!divvyId) {
+    return NextResponse.json({ error: 'divvyId is required' }, { status: 400 });
+  }
+
+  const supabase = createServerSupabaseClient();
+
+  const { data: members, error: mErr } = await supabase
     .from('divvymembers')
-    .select('userid, email, role')
+    .select('userid, userprofiles(email)')
     .eq('divvyid', divvyId);
 
-  if (memErr) return NextResponse.json({ error: memErr.message }, { status: 500 });
+  if (mErr) return NextResponse.json({ error: mErr.message }, { status: 500 });
 
-  const isMember = (members ?? []).some((m: any) => m.userid === session.user.id);
-  if (!isMember) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-
-  const emailByUserId = new Map<string, string>();
-  (members ?? []).forEach((m: any) => emailByUserId.set(m.userid, m.email));
-
-  // 2) expenses
-  const { data: expenses, error: expErr } = await supabase
+  const { data: expenses, error: eErr } = await supabase
     .from('expenses')
-    .select('id, payeruserid, amount_cents, currency')
+    .select('id, paidbyuserid, amount')
     .eq('divvyid', divvyId);
 
-  if (expErr) return NextResponse.json({ error: expErr.message }, { status: 500 });
+  if (eErr) return NextResponse.json({ error: eErr.message }, { status: 500 });
 
-  // 3) splits
-  const { data: splits, error: spErr } = await supabase
-    .from('expense_splits')
-    .select('expenseid, userid, amount_cents')
-    .eq('divvyid', divvyId);
+  const expenseIds = expenses?.map((expense) => expense.id) || [];
+  let splits: Array<{ participantuserid: string; amountowed: number }> = [];
 
-  if (spErr) return NextResponse.json({ error: spErr.message }, { status: 500 });
+  if (expenseIds.length > 0) {
+    const { data: sData, error: sErr } = await supabase
+      .from('expensesplits')
+      .select('participantuserid, amountowed')
+      .in('expenseid', expenseIds);
 
-  // 4) payments (ajuste do saldo)
+    if (sErr) return NextResponse.json({ error: sErr.message }, { status: 500 });
+    splits = sData || [];
+  }
+
   const { data: payments, error: payErr } = await supabase
     .from('payments')
     .select('from_userid, to_userid, amount_cents')
@@ -52,109 +52,84 @@ export async function GET(
 
   if (payErr) return NextResponse.json({ error: payErr.message }, { status: 500 });
 
-  // 5) compute
-  const paidBy = new Map<string, number>();
-  const owedBy = new Map<string, number>();
-  const currency = (expenses?.[0]?.currency ?? 'BRL') as string;
+  const { data: transactions, error: tErr } = await supabase
+    .from('transactions')
+    .select('*')
+    .eq('divvyid', divvyId)
+    .order('createdat', { ascending: false });
 
-  for (const e of expenses ?? []) {
-    const payer = String((e as any).payeruserid);
-    const amt = Number((e as any).amount_cents) || 0;
-    paidBy.set(payer, (paidBy.get(payer) ?? 0) + amt);
-  }
-
-  for (const s of splits ?? []) {
-    const uid = String((s as any).userid);
-    const amt = Number((s as any).amount_cents) || 0;
-    owedBy.set(uid, (owedBy.get(uid) ?? 0) + amt);
-  }
+  if (tErr) return NextResponse.json({ error: tErr.message }, { status: 500 });
 
   const paidOutBy = new Map<string, number>();
   const receivedBy = new Map<string, number>();
+  const paidByUser = new Map<string, number>();
+  const owedByUser = new Map<string, number>();
+  const transactionAdjustBy = new Map<string, number>();
 
-  for (const p of payments ?? []) {
-    const from = String((p as any).from_userid);
-    const to = String((p as any).to_userid);
-    const amt = Number((p as any).amount_cents) || 0;
+  for (const payment of payments ?? []) {
+    const from = String((payment as { from_userid?: string }).from_userid);
+    const to = String((payment as { to_userid?: string }).to_userid);
+    const amt = Number((payment as { amount_cents?: number }).amount_cents) || 0;
 
-    paidOutBy.set(from, (paidOutBy.get(from) ?? 0) + amt);
-    receivedBy.set(to, (receivedBy.get(to) ?? 0) + amt);
+    if (from) {
+      paidOutBy.set(from, (paidOutBy.get(from) ?? 0) + amt);
+    }
+    if (to) {
+      receivedBy.set(to, (receivedBy.get(to) ?? 0) + amt);
+    }
   }
 
-  // incluir todos os membros, mesmo se 0
-  const balances = (members ?? []).map((m: any) => {
-    const uid = m.userid as string;
-    const paid = paidBy.get(uid) ?? 0;
-    const owed = owedBy.get(uid) ?? 0;
-    const baseNet = paid - owed;
-
-    const paidOut = paidOutBy.get(uid) ?? 0;
-    const received = receivedBy.get(uid) ?? 0;
-
-    // quem PAGA melhora o net (+); quem RECEBE reduz (-)
-    const net = baseNet + paidOut - received;
-    return {
-      userid: uid,
-      email: m.email,
-      paid_cents: paid,
-      owed_cents: owed,
-      net_cents: net,
-      payments_out_cents: paidOut,
-      payments_in_cents: received,
-    };
+  expenses?.forEach((expense) => {
+    const paid = paidByUser.get(expense.paidbyuserid) ?? 0;
+    paidByUser.set(expense.paidbyuserid, paid + expense.amount);
   });
 
-  // 6) suggested transfers (greedy)
-  const transfers = settle(balances.map((b) => ({ userId: b.userid, net: b.net_cents })));
+  splits.forEach((split) => {
+    const owed = owedByUser.get(split.participantuserid) ?? 0;
+    owedByUser.set(split.participantuserid, owed + split.amountowed);
+  });
 
-  const transfersWithEmail = transfers.map((t) => ({
-    ...t,
-    fromEmail: emailByUserId.get(t.fromUserId) ?? t.fromUserId,
-    toEmail: emailByUserId.get(t.toUserId) ?? t.toUserId,
-  }));
+  transactions?.forEach((transaction) => {
+    if (transaction.status === 'confirmed') {
+      const fromAdjust = transactionAdjustBy.get(transaction.fromuserid) ?? 0;
+      transactionAdjustBy.set(transaction.fromuserid, fromAdjust + transaction.amount);
+      const toAdjust = transactionAdjustBy.get(transaction.touserid) ?? 0;
+      transactionAdjustBy.set(transaction.touserid, toAdjust - transaction.amount);
+    }
+  });
 
-  // ordena: quem mais deve / quem mais recebe
-  balances.sort((a, b) => a.net_cents - b.net_cents);
+  const balances: BalanceMap = {};
+  const balanceDetails =
+    members?.map((member) => {
+      const uid = member.userid;
+      const paid = paidByUser.get(uid) ?? 0;
+      const owed = owedByUser.get(uid) ?? 0;
+      const baseNet = paid - owed;
+
+      const paidOut = paidOutBy.get(uid) ?? 0;
+      const received = receivedBy.get(uid) ?? 0;
+
+      const net = baseNet + paidOut - received + (transactionAdjustBy.get(uid) ?? 0);
+
+      balances[uid] = net;
+
+      return {
+        userid: uid,
+        email: member.userprofiles?.email ?? null,
+        paid_cents: paid,
+        owed_cents: owed,
+        net_cents: net,
+        payments_out_cents: paidOut,
+        payments_in_cents: received
+      };
+    }) ?? [];
 
   return NextResponse.json({
-    currency,
     balances,
-    transfers: transfersWithEmail,
-    meta: {
-      expensesCount: (expenses ?? []).length,
-      splitsCount: (splits ?? []).length,
-    },
+    balanceDetails,
+    paidOutBy: Object.fromEntries(paidOutBy),
+    receivedBy: Object.fromEntries(receivedBy),
+    payments: payments || [],
+    transactions: transactions || []
   });
-}
-
-function settle(items: Array<{ userId: string; net: number }>): Transfer[] {
-  const creditors = items
-    .filter((x) => x.net > 0)
-    .map((x) => ({ userId: x.userId, amount: x.net }))
-    .sort((a, b) => b.amount - a.amount);
-
-  const debtors = items
-    .filter((x) => x.net < 0)
-    .map((x) => ({ userId: x.userId, amount: -x.net }))
-    .sort((a, b) => b.amount - a.amount);
-
-  const out: Transfer[] = [];
-  let i = 0;
-  let j = 0;
-
-  while (i < debtors.length && j < creditors.length) {
-    const d = debtors[i];
-    const c = creditors[j];
-
-    const pay = Math.min(d.amount, c.amount);
-    if (pay > 0) out.push({ fromUserId: d.userId, toUserId: c.userId, amount_cents: pay });
-
-    d.amount -= pay;
-    c.amount -= pay;
-
-    if (d.amount === 0) i++;
-    if (c.amount === 0) j++;
-  }
-
-  return out;
 }

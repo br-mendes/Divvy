@@ -21,7 +21,6 @@ export function PaymentsPanel({ divvyId }: { divvyId: string }) {
   const [payments, setPayments] = useState<Payment[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // form
   const [fromUserId, setFromUserId] = useState('');
   const [toUserId, setToUserId] = useState('');
   const [amount, setAmount] = useState('');
@@ -29,9 +28,9 @@ export function PaymentsPanel({ divvyId }: { divvyId: string }) {
   const [note, setNote] = useState('');
 
   const emailById = useMemo(() => {
-    const m = new Map<string, string>();
-    members.forEach((x) => m.set(x.userid, x.email));
-    return m;
+    const map = new Map<string, string>();
+    members.forEach((member) => map.set(member.userid, member.email));
+    return map;
   }, [members]);
 
   async function load() {
@@ -39,19 +38,18 @@ export function PaymentsPanel({ divvyId }: { divvyId: string }) {
 
     const [groupRes, payRes] = await Promise.all([
       fetch(`/api/groups/${divvyId}`),
-      fetch(`/api/groups/${divvyId}/payments`),
+      fetch(`/api/groups/${divvyId}/payments`)
     ]);
 
     const groupData = await groupRes.json();
     const payData = await payRes.json();
 
     if (groupRes.ok) {
-      const ms = groupData.members ?? [];
-      setMembers(ms);
+      const groupMembers = groupData.members ?? [];
+      setMembers(groupMembers);
 
-      // defaults
-      if (!fromUserId && ms.length) setFromUserId(ms[0].userid);
-      if (!toUserId && ms.length > 1) setToUserId(ms[1].userid);
+      if (!fromUserId && groupMembers.length) setFromUserId(groupMembers[0].userid);
+      if (!toUserId && groupMembers.length > 1) setToUserId(groupMembers[1].userid);
     }
 
     if (payRes.ok) setPayments(payData.payments ?? []);
@@ -74,8 +72,8 @@ export function PaymentsPanel({ divvyId }: { divvyId: string }) {
         toUserId,
         amountCents,
         paidAt: paidAt || undefined,
-        note: note || undefined,
-      }),
+        note: note || undefined
+      })
     });
 
     const data = await res.json();
@@ -115,9 +113,9 @@ export function PaymentsPanel({ divvyId }: { divvyId: string }) {
             <option value="" disabled>
               Quem pagou?
             </option>
-            {members.map((m) => (
-              <option key={m.userid} value={m.userid}>
-                {m.email}
+            {members.map((member) => (
+              <option key={member.userid} value={member.userid}>
+                {member.email}
               </option>
             ))}
           </select>
@@ -130,9 +128,9 @@ export function PaymentsPanel({ divvyId }: { divvyId: string }) {
             <option value="" disabled>
               Para quem?
             </option>
-            {members.map((m) => (
-              <option key={m.userid} value={m.userid}>
-                {m.email}
+            {members.map((member) => (
+              <option key={member.userid} value={member.userid}>
+                {member.email}
               </option>
             ))}
           </select>
@@ -176,21 +174,27 @@ export function PaymentsPanel({ divvyId }: { divvyId: string }) {
           <div className="opacity-70">Nenhum pagamento registrado.</div>
         ) : (
           <div className="space-y-2">
-            {payments.map((p) => (
-              <div key={p.id} className="border rounded p-3 flex items-center justify-between gap-3">
+            {payments.map((payment) => (
+              <div
+                key={payment.id}
+                className="border rounded p-3 flex items-center justify-between gap-3"
+              >
                 <div className="min-w-0">
                   <div className="truncate">
-                    <b>{emailById.get(p.from_userid) ?? p.from_userid}</b> pagou{' '}
-                    <b>{emailById.get(p.to_userid) ?? p.to_userid}</b>
+                    <b>{emailById.get(payment.from_userid) ?? payment.from_userid}</b> pagou{' '}
+                    <b>{emailById.get(payment.to_userid) ?? payment.to_userid}</b>
                   </div>
                   <div className="text-xs opacity-70">
-                    {p.paid_at} {p.note ? `• ${p.note}` : ''}
+                    {payment.paid_at} {payment.note ? `• ${payment.note}` : ''}
                   </div>
                 </div>
 
                 <div className="flex items-center gap-2">
-                  <div className="font-semibold">{fmt(p.currency, p.amount_cents)}</div>
-                  <button className="border rounded px-3 py-1" onClick={() => removePayment(p.id)}>
+                  <div className="font-semibold">{fmt(payment.currency, payment.amount_cents)}</div>
+                  <button
+                    className="border rounded px-3 py-1"
+                    onClick={() => removePayment(payment.id)}
+                  >
                     Excluir
                   </button>
                 </div>
@@ -201,14 +205,14 @@ export function PaymentsPanel({ divvyId }: { divvyId: string }) {
       </div>
 
       <p className="text-xs opacity-70">
-        Dica: depois de registrar pagamentos, volte em “Saldos” para ver o saldo ajustado.
+        Depois de registrar pagamentos, volte em “Saldos” para ver o saldo ajustado.
       </p>
     </div>
   );
 }
 
 function fmt(currency: string, cents: number) {
-  const v = (cents / 100).toFixed(2).replace('.', ',');
-  if (currency === 'BRL') return `R$ ${v}`;
-  return `${currency} ${v}`;
+  const value = (cents / 100).toFixed(2).replace('.', ',');
+  if (currency === 'BRL') return `R$ ${value}`;
+  return `${currency} ${value}`;
 }
