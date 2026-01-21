@@ -1,10 +1,8 @@
-import type { Metadata } from 'next';
-import { AuthProvider } from '@/contexts/AuthContext';
-import './globals.css';
+import '../index.css';
 
-export const metadata: Metadata = {
+export const metadata = {
   title: 'Divvy',
-  description: 'Divida despesas de forma inteligente',
+  description: 'Divvy app dashboard',
 };
 
 export default function RootLayout({
@@ -14,9 +12,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="pt-BR">
-      <body>
-        <AuthProvider>{children}</AuthProvider>
-      </body>
+      <body>{children}</body>
     </html>
   );
 }

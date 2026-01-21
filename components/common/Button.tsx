@@ -9,26 +9,25 @@ interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   loading?: boolean;
   icon?: React.ReactNode;
   fullWidth?: boolean;
-  children: React.ReactNode;
+  loading?: boolean;
+  href?: string;
+  children?: React.ReactNode;
+  className?: string;
+  disabled?: boolean;
 }
 
-export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
-  ({
-    variant = 'primary',
-    size = 'md',
-    loading = false,
-    icon,
-    fullWidth = false,
-    className = '',
-    disabled,
-    children,
-    ...props
-  }, ref) => {
-    const baseClass = styles.button;
-    const variantClass = styles[variant];
-    const sizeClass = styles[size];
-    const fullWidthClass = fullWidth ? styles.fullWidth : '';
-    const loadingClass = loading ? styles.loading : '';
+export function Button({
+  variant = 'primary',
+  size = 'md',
+  fullWidth = false,
+  loading = false,
+  disabled = false,
+  className = '',
+  children,
+  ...props
+}: ButtonProps) {
+  const baseStyles =
+    'font-medium rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed';
 
     return (
       <button
@@ -45,4 +44,25 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
   }
 );
 
-Button.displayName = 'Button';
+  const sizes = {
+    sm: 'px-3 py-1.5 text-sm',
+    md: 'px-4 py-2 text-base',
+    lg: 'px-6 py-3 text-lg',
+  };
+
+  const widthClass = fullWidth ? 'w-full' : '';
+  const isDisabled = disabled || loading;
+
+  return (
+    <button
+      className={`${baseStyles} ${variants[variant]} ${sizes[size]} ${widthClass} ${className}`}
+      disabled={isDisabled}
+      aria-busy={loading}
+      {...props}
+    >
+      {children}
+    </button>
+  );
+}
+
+export default Button;

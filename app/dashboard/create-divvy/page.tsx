@@ -20,11 +20,31 @@ interface DivvyFormData {
 }
 
 const divvyTypes = [
-  { value: 'trip' as DivvyType, label: ' Viagem', description: 'Despesas de viagem em grupo' },
-  { value: 'roommate' as DivvyType, label: ' República', description: 'Contas compartilhadas da casa' },
-  { value: 'couple' as DivvyType, label: ' Casal', description: 'Despesas com seu parceiro' },
-  { value: 'event' as DivvyType, label: ' Evento', description: 'Organize festas e eventos' },
-  { value: 'other' as DivvyType, label: ' Outro', description: 'Qualquer outro tipo' },
+  {
+    value: 'trip' as DivvyType,
+    label: ' Viagem',
+    description: 'Despesas de viagem em grupo',
+  },
+  {
+    value: 'roommate' as DivvyType,
+    label: ' República',
+    description: 'Contas compartilhadas da casa',
+  },
+  {
+    value: 'couple' as DivvyType,
+    label: ' Casal',
+    description: 'Despesas com seu parceiro',
+  },
+  {
+    value: 'event' as DivvyType,
+    label: ' Evento',
+    description: 'Organize festas e eventos',
+  },
+  {
+    value: 'other' as DivvyType,
+    label: ' Outro',
+    description: 'Qualquer outro tipo',
+  },
 ];
 
 const steps = ['Tipo', 'Informações', 'Membros', 'Confirmação'];
@@ -62,7 +82,9 @@ export default function CreateDivvyPage() {
       if (validMembers.length < 2) {
         newErrors.members = 'Adicione pelo menos 2 membros';
       }
-      const validEmails = validMembers.every((m) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(m));
+      const validEmails = validMembers.every((m) =>
+        /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(m)
+      );
       if (!validEmails) {
         newErrors.members = 'Todos os emails devem ser válidos';
       }
@@ -134,6 +156,7 @@ export default function CreateDivvyPage() {
 
         <Stepper steps={steps} currentStep={currentStep} />
 
+        {/* Step 0: Select Type */}
         {currentStep === 0 && (
           <div className={styles.stepContent}>
             <h2>Qual é o tipo de Divvy?</h2>
@@ -150,7 +173,9 @@ export default function CreateDivvyPage() {
                   }`}
                 >
                   <div className={styles.typeCardContent}>
-                    <span className={styles.typeIcon}>{type.label.split(' ')[0]}</span>
+                    <span className={styles.typeIcon}>
+                      {type.label.split(' ')[0]}
+                    </span>
                     <h3>{type.label.slice(2)}</h3>
                     <p>{type.description}</p>
                   </div>
@@ -161,6 +186,7 @@ export default function CreateDivvyPage() {
           </div>
         )}
 
+        {/* Step 1: Information */}
         {currentStep === 1 && (
           <div className={styles.stepContent}>
             <h2>Informações da Divvy</h2>
@@ -196,7 +222,9 @@ export default function CreateDivvyPage() {
                   id="currency"
                   className={styles.select}
                   value={formData.currency}
-                  onChange={(e) => setFormData({ ...formData, currency: e.target.value })}
+                  onChange={(e) =>
+                    setFormData({ ...formData, currency: e.target.value })
+                  }
                 >
                   <option value="BRL"> Real (BRL)</option>
                   <option value="USD"> Dólar (USD)</option>
@@ -207,11 +235,13 @@ export default function CreateDivvyPage() {
           </div>
         )}
 
+        {/* Step 2: Members */}
         {currentStep === 2 && (
           <div className={styles.stepContent}>
             <h2>Adicione os Membros</h2>
             <p className={styles.subtitle}>
-              Convide os membros pelo email. Eles receberão um convite para participar.
+              Convide os membros pelo email. Eles receberão um convite para
+              participar.
             </p>
             <form className={styles.form}>
               <div className={styles.membersForm}>
@@ -251,6 +281,7 @@ export default function CreateDivvyPage() {
           </div>
         )}
 
+        {/* Step 3: Confirmation */}
         {currentStep === 3 && (
           <div className={styles.stepContent}>
             <h2>Confirme os Detalhes</h2>
@@ -280,7 +311,9 @@ export default function CreateDivvyPage() {
 
               <Card>
                 <div className={styles.confirmationItem}>
-                  <label>Membros ({formData.members.filter((m) => m.trim()).length})</label>
+                  <label>
+                    Membros ({formData.members.filter((m) => m.trim()).length})
+                  </label>
                   <ul className={styles.membersList}>
                     {formData.members
                       .filter((m) => m.trim())
@@ -294,6 +327,7 @@ export default function CreateDivvyPage() {
           </div>
         )}
 
+        {/* Navigation Buttons */}
         <div className={styles.navigation}>
           <Link href="/dashboard/divvies">
             <Button variant="outline" size="md">

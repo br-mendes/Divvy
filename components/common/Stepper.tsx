@@ -24,7 +24,9 @@ export const Stepper: React.FC<StepperProps> = ({
                 ? styles.active
                 : styles.inactive
             }`}
-            onClick={() => onStepClick && index < currentStep && onStepClick(index)}
+            onClick={() =>
+              onStepClick && index < currentStep && onStepClick(index)
+            }
             role="button"
             tabIndex={0}
           >
