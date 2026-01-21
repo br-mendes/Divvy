@@ -71,7 +71,47 @@ export default function DashboardPage() {
           ))}
           {divvies.length === 0 && <p className="opacity-70">Nenhum grupo ainda.</p>}
         </div>
-      )}
+      </section>
+
+      {/* Recent Divvies */}
+      <section className={styles.recentSection}>
+        <div className={styles.sectionHeader}>
+          <h3>Minhas Divvies</h3>
+          <Link href="/dashboard/divvies">
+            <Button variant="outline" size="sm">
+              Ver todas
+            </Button>
+          </Link>
+        </div>
+
+        {recentDivvies.length === 0 ? (
+          <Card>
+            <div className={styles.emptyState}>
+              <p className={styles.emptyIcon}></p>
+              <h4>Nenhuma Divvy criada ainda</h4>
+              <p>Crie sua primeira Divvy para começar a compartilhar despesas</p>
+              <Link href="/dashboard/create-divvy">
+                <Button variant="primary" size="md">
+                   Criar Divvy
+                </Button>
+              </Link>
+            </div>
+          </Card>
+        ) : (
+          <div className={styles.divviesList}>
+            {recentDivvies.map((divvy) => (
+              <Link
+                key={divvy.id}
+                href={`/groups/${divvy.id}`}
+                className="block border rounded p-4 hover:opacity-90"
+              >
+                <div className="font-semibold">{divvy.name}</div>
+                <div className="text-sm opacity-70">{divvy.type}</div>
+              </Link>
+            ))}
+          </div>
+        )}
+      </section>
     </div>
   );
 }
