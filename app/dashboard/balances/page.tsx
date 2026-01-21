@@ -2,7 +2,7 @@
 
 'use client';
 
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Card } from '@/components/common/Card';
 import { Button } from '@/components/common/Button';
 import { formatCurrency } from '@/utils/format';
@@ -49,6 +49,9 @@ export default function BalancesPage() {
     .filter((t) => t.to === 'Você' && t.status === 'pending')
     .reduce((sum, t) => sum + t.amount, 0);
 
+  const pendingTransactions = transactions.filter((t) => t.status === 'pending');
+  const completedTransactions = transactions.filter((t) => t.status === 'completed');
+
   return (
     <div className={styles.container}>
       <div className={styles.header}>
@@ -70,31 +73,33 @@ export default function BalancesPage() {
           <div className={styles.summaryCard}>
             <h3>Seu Saldo Geral</h3>
             <p className={`${styles.amount} ${myBalance >= 0 ? styles.receive : styles.owe}`}>
-              {myBalance >= 0 ? '📥' : '📤'} {formatCurrency(Math.abs(myBalance * 100))}
+              {formatCurrency(Math.abs(myBalance))}
             </p>
-            <p className={styles.status}>
-              {myBalance >= 0 ? 'Você deve receber' : 'Você deve pagar'}
-            </p>
+            <p className={styles.status}>{formatBalance(myBalance)}</p>
           </div>
         </Card>
 
         <Card>
           <div className={styles.summaryCard}>
             <h3>Você Deve Pagar</h3>
-            <p className={styles.amount} style={{ color: 'var(--danger)' }}>
-              📤 {formatCurrency(youOwe)}
+            <p className={`${styles.amount} ${styles.owe}`}>
+              {formatCurrency(youOwe)}
             </p>
-            <p className={styles.status}>Em {transactions.filter((t) => t.from === 'Você').length} transações</p>
+            <p className={styles.status}>
+              Em {transactions.filter((t) => t.from === 'Você').length} transações
+            </p>
           </div>
         </Card>
 
         <Card>
           <div className={styles.summaryCard}>
             <h3>Você Deve Receber</h3>
-            <p className={styles.amount} style={{ color: 'var(--secondary)' }}>
-              📥 {formatCurrency(youReceive)}
+            <p className={`${styles.amount} ${styles.receive}`}>
+              {formatCurrency(youReceive)}
             </p>
-            <p className={styles.status}>Em {transactions.filter((t) => t.to === 'Você').length} transações</p>
+            <p className={styles.status}>
+              Em {transactions.filter((t) => t.to === 'Você').length} transações
+            </p>
           </div>
         </Card>
       </div>
@@ -103,7 +108,7 @@ export default function BalancesPage() {
       <div className={styles.transactionsSection}>
         <h2>Transações Pendentes</h2>
 
-        {transactions.filter((t) => t.status === 'pending').length === 0 ? (
+        {pendingTransactions.length === 0 ? (
           <Card>
             <div className={styles.emptyState}>
               <p>✓ Sem saldos pendentes!</p>
@@ -112,60 +117,56 @@ export default function BalancesPage() {
           </Card>
         ) : (
           <div className={styles.transactionsList}>
-            {transactions
-              .filter((t) => t.status === 'pending')
-              .map((transaction) => (
-                <div key={transaction.id} className={styles.transactionCard}>
-                  <div className={styles.transactionInfo}>
-                    <div className={styles.transactionHeader}>
-                      <span className={styles.direction}>
-                        {transaction.from === 'Você' ? '' : ''}
-                      </span>
-                      <div className={styles.transactionDetails}>
-                        <p className={styles.transactionText}>
-                          {transaction.from === 'Você'
-                            ? `Você deve ${formatCurrency(transaction.amount)} para ${transaction.to}`
-                            : `${transaction.from} lhe deve ${formatCurrency(transaction.amount)}`}
-                        </p>
-                        <p className={styles.transactionSubtext}>{transaction.description}</p>
-                      </div>
+            {pendingTransactions.map((transaction) => (
+              <div key={transaction.id} className={styles.transactionCard}>
+                <div className={styles.transactionInfo}>
+                  <div className={styles.transactionHeader}>
+                    <span className={styles.direction}>
+                      {transaction.from === 'Você' ? 'Você paga' : 'Você recebe'}
+                    </span>
+                    <div className={styles.transactionDetails}>
+                      <p className={styles.transactionText}>
+                        {transaction.from === 'Você'
+                          ? `Você deve ${formatCurrency(transaction.amount)} para ${transaction.to}`
+                          : `${transaction.from} lhe deve ${formatCurrency(transaction.amount)}`}
+                      </p>
+                      <p className={styles.transactionSubtext}>{transaction.description}</p>
                     </div>
                   </div>
-
-                  <div className={styles.transactionActions}>
-                    {transaction.from === 'Você' ? (
-                      <Button variant="primary" size="sm">
-                         Pagar
-                      </Button>
-                    ) : (
-                      <Button variant="secondary" size="sm">
-                        ✓ Cobrar
-                      </Button>
-                    )}
-                  </div>
                 </div>
-              ))}
+
+                <div className={styles.transactionActions}>
+                  {transaction.from === 'Você' ? (
+                    <Button variant="primary" size="sm">
+                      Pagar
+                    </Button>
+                  ) : (
+                    <Button variant="secondary" size="sm">
+                      ✓ Cobrar
+                    </Button>
+                  )}
+                </div>
+              </div>
+            ))}
           </div>
         )}
       </div>
 
       {/* Completed Transactions */}
-      {transactions.filter((t) => t.status === 'completed').length > 0 && (
+      {completedTransactions.length > 0 && (
         <div className={styles.completedSection}>
           <h3>Histórico de Transações Acertadas</h3>
           <div className={styles.completedList}>
-            {transactions
-              .filter((t) => t.status === 'completed')
-              .map((transaction) => (
-                <div key={transaction.id} className={styles.completedItem}>
-                  <span className={styles.completedIcon}>✓</span>
-                  <p className={styles.completedText}>
-                    {transaction.from === 'Você'
-                      ? `Você pagou ${formatCurrency(transaction.amount)} para ${transaction.to}`
-                      : `${transaction.from} lhe pagou ${formatCurrency(transaction.amount)}`}
-                  </p>
-                </div>
-              ))}
+            {completedTransactions.map((transaction) => (
+              <div key={transaction.id} className={styles.completedItem}>
+                <span className={styles.completedIcon}>✓</span>
+                <p className={styles.completedText}>
+                  {transaction.from === 'Você'
+                    ? `Você pagou ${formatCurrency(transaction.amount)} para ${transaction.to}`
+                    : `${transaction.from} lhe pagou ${formatCurrency(transaction.amount)}`}
+                </p>
+              </div>
+            ))}
           </div>
         </div>
       )}

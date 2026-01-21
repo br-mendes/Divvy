@@ -81,7 +81,7 @@ export default function CreateExpensePage() {
       const totalShare = calculateTotalShare();
       const expectedAmount = parseFloat(amount) || 0;
       if (Math.abs(totalShare - expectedAmount) > 0.01) {
-        newErrors.split = `Total da divisão (R$ ${(totalShare / 100).toFixed(2)}) deve ser igual ao valor (R$ ${(expectedAmount).toFixed(2)})`;
+        newErrors.split = `Total da divisão (R$ ${(totalShare / 100).toFixed(2)}) deve ser igual ao valor (R$ ${expectedAmount.toFixed(2)})`;
       }
     }
 
@@ -171,7 +171,7 @@ export default function CreateExpensePage() {
               onChange={(e) => setPayer(e.target.value)}
             >
               {participants.map((p, i) => (
-                <option key={i} value={p.email}>
+                <option key={p.email} value={p.email}>
                   {p.name}
                 </option>
               ))}
@@ -198,14 +198,14 @@ export default function CreateExpensePage() {
                   }
                 }}
               >
-                ➗ Igual
+                Igual
               </button>
               <button
                 type="button"
                 className={`${styles.splitButton} ${splitType === 'custom' ? styles.active : ''}`}
                 onClick={() => setSplitType('custom')}
               >
-                ⚙️ Customizado
+                Customizado
               </button>
             </div>
           </div>
@@ -215,7 +215,7 @@ export default function CreateExpensePage() {
             <h3>Divisão entre participantes</h3>
             <div className={styles.participantsList}>
               {participants.map((participant, index) => (
-                <div key={index} className={styles.participantItem}>
+                <div key={participant.email} className={styles.participantItem}>
                   <div className={styles.participantInfo}>
                     <p className={styles.participantName}>{participant.name}</p>
                     <p className={styles.participantEmail}>{participant.email}</p>
@@ -251,7 +251,7 @@ export default function CreateExpensePage() {
               </div>
               {!isBalanced && (
                 <p className={styles.unbalancedWarning}>
-                   Os valores não batem. Verifique a divisão.
+                  Os valores não batem. Verifique a divisão.
                 </p>
               )}
             </div>

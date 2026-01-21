@@ -118,7 +118,7 @@ export const simplifyTransactions = (
         from_user_id: debtor,
         to_user_id: creditor,
         amount: Math.round(amount * 100),
-        description: `Deve R$ ${(amount).toFixed(2)}`,
+        description: `Deve R$ ${amount.toFixed(2)}`,
       });
 
       debtors[debtorIdx][1] += amount;
