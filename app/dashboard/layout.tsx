@@ -1,85 +1,100 @@
+// app/dashboard/layout.tsx
+
 'use client';
 
-import React, { useEffect } from 'react';
+import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { useAuth } from '@/hooks/useAuth';
+import { useAuth } from '@/contexts/AuthContext';
 import { Logo } from '@/components/common/Logo';
 import { Button } from '@/components/common/Button';
 import styles from './layout.module.css';
 
-export default function DashboardLayout({ children }: { children: React.ReactNode }) {
+export default function DashboardLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   const router = useRouter();
-  const { user, logout, isAuthenticated, loading } = useAuth();
+  const { user, loading, logout } = useAuth();
 
   useEffect(() => {
-    // TODO: Descomentar após implementar sistema de sessão
-    // if (!isAuthenticated && !loading) {
-    //   router.push('/login');
-    // }
-  }, [isAuthenticated, loading, router]);
+    if (!loading && !user) {
+      router.push('/login');
+    }
+  }, [user, loading, router]);
+
+  if (loading) {
+    return (
+      <div className={styles.loadingContainer}>
+        <div className={styles.spinner}></div>
+        <p>Carregando...</p>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return null;
+  }
 
   const handleLogout = async () => {
-    try {
-      await logout();
-      router.push('/');
-    } catch (error) {
-      console.error('Erro ao fazer logout:', error);
-    }
+    await logout();
+    router.push('/login');
   };
 
   return (
-    <div className={styles.layoutContainer}>
+    <div className={styles.layout}>
+      {/* Sidebar */}
       <aside className={styles.sidebar}>
-        <div className={styles.sidebarHeader}>
-          <Logo size="md" animated={false} />
+        <div className={styles.sidebarTop}>
+          <Link href="/dashboard" className={styles.logoLink}>
+            <Logo size="sm" animated={false} />
+          </Link>
+
+          <nav className={styles.nav}>
+            <Link href="/dashboard" className={styles.navLink}>
+              Dashboard
+            </Link>
+            <Link href="/dashboard/divvies" className={styles.navLink}>
+              Minhas Divvies
+            </Link>
+            <Link href="/dashboard/expenses" className={styles.navLink}>
+              Despesas
+            </Link>
+            <Link href="/dashboard/balances" className={styles.navLink}>
+              Saldos
+            </Link>
+          </nav>
         </div>
 
-        <nav className={styles.sidebarNav}>
-          <Link href="/dashboard" className={styles.navItem}>
-            Dashboard
-          </Link>
-          <Link href="/dashboard/divvies" className={styles.navItem}>
-            Minhas Divvies
-          </Link>
-          <Link href="/dashboard/create-divvy" className={styles.navItem}>
-            Nova Divvy
-          </Link>
-          <Link href="/dashboard/expenses" className={styles.navItem}>
-            Despesas
-          </Link>
-          <Link href="/dashboard/balances" className={styles.navItem}>
-            Saldos
-          </Link>
-        </nav>
-
-        <div className={styles.sidebarFooter}>
+        <div className={styles.sidebarBottom}>
           <div className={styles.userInfo}>
-            <div className={styles.avatar}>{user?.full_name?.charAt(0) || '?'}</div>
+            <div className={styles.avatar}></div>
             <div className={styles.userDetails}>
-              <p className={styles.userName}>{user?.full_name || 'Usuário'}</p>
-              <p className={styles.userEmail}>{user?.email}</p>
+              <p className={styles.userName}>{user.email}</p>
+              <p className={styles.userEmail}>Perfil</p>
             </div>
           </div>
-          <Button variant="ghost" size="sm" fullWidth onClick={handleLogout}>
+          <Button variant="outline" size="sm" fullWidth onClick={handleLogout}>
             Sair
           </Button>
         </div>
       </aside>
 
-      <main className={styles.mainContent}>
-        <header className={styles.topBar}>
+      {/* Main Content */}
+      <main className={styles.main}>
+        <header className={styles.header}>
           <h1 className={styles.pageTitle}>Dashboard</h1>
-          <div className={styles.topBarRight}>
-            <Link href="/dashboard/settings">
-              <Button variant="ghost" size="sm">
-                Configurações
+          <div className={styles.headerActions}>
+            <Link href="/dashboard/create-divvy">
+              <Button variant="primary" size="md">
+                + Nova Divvy
               </Button>
             </Link>
           </div>
         </header>
 
-        <div className={styles.contentArea}>{children}</div>
+        <div className={styles.content}>{children}</div>
       </main>
     </div>
   );

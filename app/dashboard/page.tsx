@@ -1,118 +1,118 @@
+// app/dashboard/page.tsx
+
 'use client';
 
 import React from 'react';
 import Link from 'next/link';
-import { useAuth } from '@/hooks/useAuth';
-import { Button } from '@/components/common/Button';
 import { Card } from '@/components/common/Card';
+import { Button } from '@/components/common/Button';
 import styles from './page.module.css';
 
 export default function DashboardPage() {
-  const { user } = useAuth();
-
-  // TODO: Substituir por dados reais da API
-  const quickStats = [
-    {
-      label: 'Divvies Ativas',
-      value: '0',
-      icon: '',
-      color: 'primary',
-    },
-    {
-      label: 'Você deve pagar',
-      value: 'R$ 0,00',
-      icon: '',
-      color: 'danger',
-    },
-    {
-      label: 'Deve receber',
-      value: 'R$ 0,00',
-      icon: '',
-      color: 'secondary',
-    },
-    {
-      label: 'Despesas este mês',
-      value: '0',
-      icon: '',
-      color: 'info',
-    },
-  ];
-
-  const recentDivvies = [
-    // TODO: Substituir por dados reais
-    {
-      id: '1',
-      name: 'Viagem RJ',
-      type: 'Viagem',
-      members: 3,
-      totalAmount: 1500.0,
-    },
-  ];
-
   return (
     <div className={styles.container}>
-      <section className={styles.welcomeSection}>
-        <h2>Bem-vindo, {user?.full_name?.split(' ')[0]}! </h2>
-        <p>Aqui está um resumo de suas Divvies</p>
-      </section>
+      <div className={styles.welcomeSection}>
+        <h2>Bem-vindo ao Divvy!</h2>
+        <p>Gerencie suas despesas compartilhadas com facilidade</p>
+      </div>
 
       {/* Quick Stats */}
-      <section className={styles.statsSection}>
-        <div className={styles.grid}>
-          {quickStats.map((stat, index) => (
-            <div key={index} className={`${styles.statCard} ${styles[stat.color]}`}>
-              <div className={styles.statIcon}>{stat.icon}</div>
-              <div className={styles.statContent}>
-                <p className={styles.statLabel}>{stat.label}</p>
-                <p className={styles.statValue}>{stat.value}</p>
-              </div>
-            </div>
-          ))}
-        </div>
-      </section>
+      <div className={styles.statsGrid}>
+        <Card>
+          <div className={styles.stat}>
+            <h3>Suas Divvies</h3>
+            <p className={styles.statValue}>3</p>
+            <p className={styles.statLabel}>Grupos ativos</p>
+          </div>
+        </Card>
 
-      {/* Recent Divvies */}
-      <section className={styles.recentSection}>
-        <div className={styles.sectionHeader}>
-          <h3>Minhas Divvies</h3>
-          <Link href="/dashboard/divvies">
+        <Card>
+          <div className={styles.stat}>
+            <h3>Despesas</h3>
+            <p className={styles.statValue}>15</p>
+            <p className={styles.statLabel}>Despesas registradas</p>
+          </div>
+        </Card>
+
+        <Card>
+          <div className={styles.stat}>
+            <h3>Seu Saldo</h3>
+            <p className={`${styles.statValue} ${styles.balance}`}>-R$ 245,50</p>
+            <p className={styles.statLabel}>Você deve pagar</p>
+          </div>
+        </Card>
+      </div>
+
+      {/* Quick Actions */}
+      <div className={styles.actionsSection}>
+        <h3>Ações Rápidas</h3>
+        <div className={styles.actionsGrid}>
+          <Link href="/dashboard/create-divvy" className={styles.actionCard}>
+            <span className={styles.actionIcon}></span>
+            <h4>Criar Nova Divvy</h4>
+            <p>Comece um novo grupo de despesas</p>
+          </Link>
+
+          <Link href="/dashboard/expenses/create" className={styles.actionCard}>
+            <span className={styles.actionIcon}></span>
+            <h4>Adicionar Despesa</h4>
+            <p>Registre uma nova despesa</p>
+          </Link>
+
+          <Link href="/dashboard/balances" className={styles.actionCard}>
+            <span className={styles.actionIcon}></span>
+            <h4>Ver Saldos</h4>
+            <p>Confira quem deve para quem</p>
+          </Link>
+
+          <Link href="/dashboard/divvies" className={styles.actionCard}>
+            <span className={styles.actionIcon}></span>
+            <h4>Minhas Divvies</h4>
+            <p>Gerencie seus grupos</p>
+          </Link>
+        </div>
+      </div>
+
+      {/* Recent Expenses */}
+      <div className={styles.recentSection}>
+        <div className={styles.recentHeader}>
+          <h3>Despesas Recentes</h3>
+          <Link href="/dashboard/expenses">
             <Button variant="outline" size="sm">
-              Ver todas
+              Ver Tudo
             </Button>
           </Link>
         </div>
 
-        {recentDivvies.length === 0 ? (
-          <Card>
-            <div className={styles.emptyState}>
-              <p className={styles.emptyIcon}></p>
-              <h4>Nenhuma Divvy criada ainda</h4>
-              <p>Crie sua primeira Divvy para começar a compartilhar despesas</p>
-              <Link href="/dashboard/create-divvy">
-                <Button variant="primary" size="md">
-                  Criar Divvy
-                </Button>
-              </Link>
+        <div className={styles.expensesList}>
+          <div className={styles.expenseItem}>
+            <span className={styles.expenseIcon}></span>
+            <div className={styles.expenseInfo}>
+              <p className={styles.expenseName}>Jantar no restaurante</p>
+              <p className={styles.expenseDate}>Hoje</p>
             </div>
-          </Card>
-        ) : (
-          <div className={styles.divviesList}>
-            {recentDivvies.map((divvy) => (
-              <Card
-                key={divvy.id}
-                title={divvy.name}
-                description={`${divvy.members} membros • R$ ${divvy.totalAmount.toFixed(2)}`}
-              >
-                <Link href={`/dashboard/divvies/${divvy.id}`}>
-                  <Button variant="outline" size="sm" fullWidth>
-                    Gerenciar
-                  </Button>
-                </Link>
-              </Card>
-            ))}
+            <p className={styles.expenseAmount}>R$ 125,00</p>
           </div>
-        )}
-      </section>
+
+          <div className={styles.expenseItem}>
+            <span className={styles.expenseIcon}></span>
+            <div className={styles.expenseInfo}>
+              <p className={styles.expenseName}>Hospedagem Hotel</p>
+              <p className={styles.expenseDate}>Ontem</p>
+            </div>
+            <p className={styles.expenseAmount}>R$ 500,00</p>
+          </div>
+
+          <div className={styles.expenseItem}>
+            <span className={styles.expenseIcon}></span>
+            <div className={styles.expenseInfo}>
+              <p className={styles.expenseName}>Uber para passeio</p>
+              <p className={styles.expenseDate}>2 dias atrás</p>
+            </div>
+            <p className={styles.expenseAmount}>R$ 45,00</p>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
