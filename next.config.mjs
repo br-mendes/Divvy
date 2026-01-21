@@ -10,7 +10,7 @@ const nextConfig = {
   basePath,
   assetPrefix: basePath ? `${basePath}/` : undefined,
 
-  // SSR na Vercel: NÃO forçar trailingSlash (mais seguro)
+  // SSR na Vercel: NÃO forçar trailingSlash
   // trailingSlash: true,
 
   images: { unoptimized: true },
