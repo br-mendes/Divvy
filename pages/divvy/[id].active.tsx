@@ -142,17 +142,15 @@ const DivvyDetailContent: React.FC = () => {
     }
   };
 
-  const handleMarkAsSent = async (to: string, amount: number) => {
+  const handleMarkAsSent = async (transactionId: string) => {
     const toastId = toast.loading("Registrando...");
     try {
       const response = await fetch('/api/payments/mark-sent', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-              divvyId,
-              fromUserId: user?.id,
-              toUserId: to,
-              amount
+              transactionId,
+              fromUserId: user?.id
           })
       });
 

@@ -16,7 +16,7 @@ interface BalanceViewProps {
   allSplits: ExpenseSplit[];
   transactions: Transaction[];
   onUpdateTransaction: (t: Transaction, action: 'confirm' | 'reject') => void;
-  onMarkAsSent: (toUserId: string, amount: number) => void;
+  onMarkAsSent: (transactionId: string) => void;
 }
 
 export default function BalanceView({
@@ -33,7 +33,7 @@ export default function BalanceView({
   
   // Payment Modal State
   const [paymentModalOpen, setPaymentModalOpen] = useState(false);
-  const [selectedDebt, setSelectedDebt] = useState<{ to: string; amount: number } | null>(null);
+  const [selectedDebt, setSelectedDebt] = useState<{ to: string; amount: number; transactionId: string } | null>(null);
   
   // Loaded Payment Methods for the target user
   const [targetPaymentMethods, setTargetPaymentMethods] = useState<PaymentMethod[]>([]);
@@ -97,14 +97,37 @@ export default function BalanceView({
   const rejectedSent = transactions.filter(t => t.status === 'rejected' && t.fromuserid === user?.id);
   const historyTransactions = transactions.filter(t => t.status === 'confirmed' || t.status === 'rejected' || (t.status === 'paymentsent' && t.touserid !== user?.id));
 
-  const handlePayClick = async (to: string, amount: number) => {
-    setSelectedDebt({ to, amount });
+  const handlePayClick = async (to: string, amount: number, existingTransactionId?: string) => {
     setPaymentModalOpen(true);
     setMethodsLoading(true);
     setTargetPaymentMethods([]);
 
-    // Fetch Payment Methods for the target user
     try {
+        let transactionId = existingTransactionId;
+
+        if (!transactionId) {
+            const response = await fetch('/api/payments/create-pending', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    divvyId,
+                    fromUserId: user?.id,
+                    toUserId: to,
+                    amount
+                })
+            });
+
+            const data = await response.json();
+            if (!response.ok) throw new Error(data.error || 'Erro ao iniciar pagamento');
+            transactionId = data.transaction?.id;
+        }
+
+        if (!transactionId) {
+            throw new Error('Transação pendente não encontrada.');
+        }
+
+        setSelectedDebt({ to, amount, transactionId });
+
         const { data } = await supabase
             .from('payment_methods')
             .select('*')
@@ -115,6 +138,8 @@ export default function BalanceView({
         if (data) setTargetPaymentMethods(data);
     } catch (e) {
         console.error("Error fetching payment methods", e);
+        toast.error('Não foi possível iniciar o pagamento.');
+        setPaymentModalOpen(false);
     } finally {
         setMethodsLoading(false);
     }
@@ -122,7 +147,7 @@ export default function BalanceView({
 
   const confirmPayment = () => {
     if (selectedDebt) {
-      onMarkAsSent(selectedDebt.to, selectedDebt.amount);
+      onMarkAsSent(selectedDebt.transactionId);
       setPaymentModalOpen(false);
       setSelectedDebt(null);
     }
@@ -237,11 +262,22 @@ export default function BalanceView({
                 <span className="font-bold text-gray-900 dark:text-white text-lg">{formatMoney(p.amount)}</span>
                 
                 {/* Pay Button Logic */}
-                {p.from === user?.id && !transactions.some(t => t.fromuserid === p.from && t.touserid === p.to && (t.status === 'pending' || t.status === 'paymentsent')) && (
-                  <Button size="sm" className="bg-green-600 text-white hover:bg-green-700 shadow-md shadow-green-500/20" onClick={() => handlePayClick(p.to, p.amount)}>
-                    Paguei
-                  </Button>
-                )}
+                {p.from === user?.id && (() => {
+                  const pendingTransaction = transactions.find(t => t.fromuserid === p.from && t.touserid === p.to && t.status === 'pending');
+                  const hasPaymentSent = transactions.some(t => t.fromuserid === p.from && t.touserid === p.to && t.status === 'paymentsent');
+
+                  if (hasPaymentSent) return null;
+
+                  return (
+                    <Button
+                      size="sm"
+                      className="bg-green-600 text-white hover:bg-green-700 shadow-md shadow-green-500/20"
+                      onClick={() => handlePayClick(p.to, p.amount, pendingTransaction?.id)}
+                    >
+                      {pendingTransaction ? 'Registrar envio' : 'Paguei'}
+                    </Button>
+                  );
+                })()}
                 
                 {/* Status Badge */}
                 {p.from === user?.id && transactions.some(t => t.fromuserid === p.from && t.touserid === p.to && t.status === 'paymentsent') && (

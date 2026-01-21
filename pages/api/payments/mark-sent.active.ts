@@ -9,7 +9,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const { divvyId, fromUserId, toUserId, amount } = req.body;
+  const { transactionId, fromUserId } = req.body;
+
+  if (!transactionId || !fromUserId) {
+    return res.status(400).json({ error: 'transactionId e fromUserId são obrigatórios.' });
+  }
 
   try {
     // 1. Authenticate Request
@@ -21,37 +25,52 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         return res.status(403).json({ error: 'Você só pode registrar pagamentos que você enviou.' });
     }
 
-    // 3. Create Transaction
-    const { data: transaction, error } = await supabase
+    // 3. Fetch Transaction
+    const { data: transaction, error: transactionError } = await supabase
       .from('transactions')
-      .insert({
-        divvyid: divvyId,
-        fromuserid: fromUserId,
-        touserid: toUserId,
-        amount: amount,
+      .select('*')
+      .eq('id', transactionId)
+      .single();
+
+    if (transactionError || !transaction) {
+      return res.status(404).json({ error: 'Transação não encontrada.' });
+    }
+
+    if (transaction.status !== 'pending') {
+      return res.status(400).json({ error: 'Somente transações pendentes podem ser marcadas como enviadas.' });
+    }
+
+    if (transaction.fromuserid !== fromUserId) {
+      return res.status(403).json({ error: 'Você só pode registrar pagamentos que você enviou.' });
+    }
+
+    const updatedAt = new Date().toISOString();
+    const { data: updatedTransaction, error: updateError } = await supabase
+      .from('transactions')
+      .update({
         status: 'paymentsent',
-        createdat: new Date().toISOString(),
-        updatedat: new Date().toISOString()
+        updatedat: updatedAt
       })
+      .eq('id', transactionId)
       .select()
       .single();
 
-    if (error) throw error;
+    if (updateError) throw updateError;
 
     // 4. Fetch Notification Data
-    const { data: creditor } = await supabase.from('userprofiles').select('email').eq('id', toUserId).single();
-    const { data: sender } = await supabase.from('userprofiles').select('fullname, displayname').eq('id', fromUserId).single();
-    const { data: divvy } = await supabase.from('divvies').select('name').eq('id', divvyId).single();
+    const { data: creditor } = await supabase.from('userprofiles').select('email').eq('id', updatedTransaction.touserid).single();
+    const { data: sender } = await supabase.from('userprofiles').select('fullname, displayname').eq('id', updatedTransaction.fromuserid).single();
+    const { data: divvy } = await supabase.from('divvies').select('name').eq('id', updatedTransaction.divvyid).single();
 
     const senderName = sender?.displayname || sender?.fullname || 'Alguém';
     
     // 5. Insert Notification
     await supabase.from('notifications').insert({
-        user_id: toUserId,
-        divvy_id: divvyId,
+        user_id: updatedTransaction.touserid,
+        divvy_id: updatedTransaction.divvyid,
         type: 'settlement',
         title: 'Pagamento Recebido',
-        message: `${senderName} marcou um pagamento de R$ ${amount.toFixed(2)} como enviado.`,
+        message: `${senderName} marcou um pagamento de R$ ${updatedTransaction.amount.toFixed(2)} como enviado.`,
         created_at: new Date().toISOString(),
         is_read: false
     });
@@ -61,12 +80,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         await sendPaymentSentEmail(
             creditor.email, 
             senderName, 
-            amount.toFixed(2), 
+            updatedTransaction.amount.toFixed(2), 
             divvy?.name || 'Grupo'
         );
     }
 
-    return res.status(200).json({ success: true, transaction });
+    return res.status(200).json({ success: true, transaction: updatedTransaction });
 
   } catch (error: any) {
     if (error.message === 'Unauthorized') return res.status(401).json({ error: 'Não autorizado' });
