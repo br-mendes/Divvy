@@ -1,34 +1,32 @@
 import Link from 'next/link';
-import React from 'react';
 
-const staticLinks = [
-  { href: '/about', label: 'Sobre' },
-  { href: '/faq', label: 'FAQ' },
-  { href: '/support', label: 'Suporte' },
-  { href: '/terms', label: 'Termos' },
-  { href: '/privacy', label: 'Privacidade' },
-];
-
-type StaticPageLinksProps = {
+type Props = {
   className?: string;
-  linkClassName?: string;
+  compact?: boolean;
 };
 
-export default function StaticPageLinks({
-  className = '',
-  linkClassName = '',
-}: StaticPageLinksProps) {
+export default function StaticPageLinks({ className, compact }: Props) {
+  const style: React.CSSProperties = {
+    display: 'flex',
+    gap: compact ? 10 : 14,
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    justifyContent: compact ? 'flex-start' : 'center',
+    fontSize: 14,
+    opacity: 0.85,
+    marginTop: compact ? 10 : 16,
+  };
+
+  const linkStyle: React.CSSProperties = {
+    textDecoration: 'underline',
+  };
+
   return (
-    <div className={`flex flex-wrap items-center justify-center gap-4 ${className}`.trim()}>
-      {staticLinks.map((link) => (
-        <Link
-          key={link.href}
-          href={link.href}
-          className={`transition-colors ${linkClassName}`.trim()}
-        >
-          {link.label}
-        </Link>
-      ))}
+    <div className={className} style={style} aria-label='Links institucionais'>
+      <Link href='/about' style={linkStyle}>Sobre</Link>
+      <Link href='/faq' style={linkStyle}>FAQ</Link>
+      <Link href='/privacy' style={linkStyle}>Privacidade</Link>
+      <Link href='/terms' style={linkStyle}>Termos</Link>
     </div>
   );
 }

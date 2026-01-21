@@ -1,66 +1,35 @@
-import React, { useId } from 'react';
+import React from 'react';
+import DivvyLogo from '../branding/DivvyLogo';
 import styles from './Logo.module.css';
 
 type LogoSize = 'sm' | 'md' | 'lg';
 
-export const Logo: React.FC<LogoProps> = ({ size = 'md', animated = true }) => {
-  const sizeClass = styles[size];
-  const animatedClass = animated ? styles.animated : '';
-  const uniqueId = useId();
-  const gradientId = `${uniqueId}-divvy-gradient`;
-  const maskId = `${uniqueId}-divvy-mask`;
-  const shadowId = `${uniqueId}-divvy-shadow`;
-
-  return (
-    <div className={`${styles.logoWrapper} ${sizeClass} ${animatedClass}`}>
-      <svg
-        className={styles.logo}
-        width="40"
-        height="40"
-        viewBox="0 0 100 100"
-        xmlns="http://www.w3.org/2000/svg"
-        aria-hidden="true"
-      >
-        <defs>
-          <linearGradient id={gradientId} x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stopColor="#9b5bff" />
-            <stop offset="100%" stopColor="#6c2bff" />
-          </linearGradient>
-
-          <mask id={maskId}>
-            <rect x="0" y="0" width="100" height="100" fill="white" />
-            <path
-              d="M 50 50 L 50 2 A 48 48 0 0 0 2 50 Z"
-              fill="black"
-            />
-          </mask>
-
-          <filter id={shadowId} x="-20%" y="-20%" width="140%" height="140%">
-            <feDropShadow dx="0" dy="4" stdDeviation="4" floodOpacity="0.2" />
-          </filter>
-        </defs>
-
-        <circle
-          cx="50"
-          cy="50"
-          r="48"
-          fill={`url(#${gradientId})`}
-          filter={`url(#${shadowId})`}
-          mask={`url(#${maskId})`}
-        />
-
-        <g className={styles.slice}>
-          <path
-            d="M 50 50 L 50 2 A 48 48 0 0 0 2 50 Z"
-            fill="#b78cff"
-          />
-        </g>
-      </svg>
-      <span className={styles.text}>Divvy</span>
-    </div>
-  );
+const sizeClass: Record<LogoSize, string> = {
+  sm: (styles as any).sm ?? '',
+  md: (styles as any).md ?? '',
+  lg: (styles as any).lg ?? '',
 };
 
-export function Logo({ size = 'md', animated = true }: { size?: LogoSize; animated?: boolean }) {
-  return <DivvyLogo className={sizeClasses[size]} animated={animated} />;
+function LogoImpl({
+  size = 'md',
+  animated = true,
+  className = '',
+}: {
+  size?: LogoSize;
+  animated?: boolean;
+  className?: string;
+}) {
+  const wrapper = (styles as any).logoWrapper ?? '';
+  const animatedClass = animated ? ((styles as any).animated ?? '') : '';
+  const text = (styles as any).text ?? '';
+
+  return (
+    <div className={[wrapper, sizeClass[size], animatedClass, className].filter(Boolean).join(' ')}>
+      <DivvyLogo animated={animated} />
+      <span className={text}>Divvy</span>
+    </div>
+  );
 }
+
+export const Logo = LogoImpl;
+export default LogoImpl;

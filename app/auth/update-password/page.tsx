@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import DivvyLogo from '@/components/branding/DivvyLogo';
 import toast from 'react-hot-toast';
-import StaticPageLinks from '../../components/common/StaticPageLinks';
+import StaticPageLinks from '@/components/common/StaticPageLinks';
 
 export default function UpdatePassword() {
   const router = useRouter();
@@ -75,3 +75,4 @@ export default function UpdatePassword() {
     </div>
   );
 }
+
