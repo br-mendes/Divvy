@@ -37,3 +37,7 @@ prs.txt
 # Next.js build output
 .next
 
+out
+*.bak.*
+__backups/
+_pages_legacy/

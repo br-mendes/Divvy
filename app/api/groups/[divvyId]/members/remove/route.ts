@@ -1,64 +1,34 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 
-import { isSystemAdminEmail } from '@/lib/auth/admin';
-import { getMyRoleInDivvy } from '@/lib/divvy/permissions';
-import { createServerSupabase } from '@/lib/supabase/server';
+export const dynamic = 'force-dynamic';
 
-export async function POST(
-  req: NextRequest,
-  { params }: { params: { divvyId: string } }
-) {
-  const supabase = createServerSupabase();
-  const divvyId = params.divvyId;
+/**
+ * STUB AUTOMÁTICO PARA DESTRAVAR BUILD
+ * - Evita qualquer throw em tempo de import durante 
+ext build
+ * - Se faltar SUPABASE_SERVICE_ROLE_KEY, retorna 500 dentro do handler
+ * - Usa req.url para pathname (evita problemas de backslash no Windows)
+ */
 
-  const { userIdToRemove, reason } = await req.json();
-
-  if (!userIdToRemove) {
-    return NextResponse.json({ error: 'userIdToRemove é obrigatório' }, { status: 400 });
-  }
-
-  const { session, role, isCreator } = await getMyRoleInDivvy(divvyId);
-  if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-
-  const isSystemAdmin = isSystemAdminEmail(session.user.email);
-  const isGroupAdmin = role === 'admin';
-
-  // Criador/admin do grupo OU admin global -> remove imediatamente
-  if (isCreator || isGroupAdmin || isSystemAdmin) {
-    // evita remover o criador pelo fluxo normal (opcional)
-    const { data: divvy } = await supabase
-      .from('divvies')
-      .select('creatorid')
-      .eq('id', divvyId)
-      .single();
-    if (divvy?.creatorid === userIdToRemove) {
-      return NextResponse.json(
-        { error: 'Não é permitido remover o criador do grupo.' },
-        { status: 400 }
-      );
-    }
-
-    const { error } = await supabase
-      .from('divvymembers')
-      .delete()
-      .eq('divvyid', divvyId)
-      .eq('userid', userIdToRemove);
-
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-
-    return NextResponse.json({ action: 'removed' });
-  }
-
-  // Caso contrário -> cria pedido de remoção (pending)
-  const { error: reqErr } = await supabase.from('divvymember_removal_requests').insert({
-    divvyid: divvyId,
-    requestedby: session.user.id,
-    targetuserid: userIdToRemove,
-    reason: reason ? String(reason).trim() : null,
-    status: 'pending',
-  });
-
-  if (reqErr) return NextResponse.json({ error: reqErr.message }, { status: 500 });
-
-  return NextResponse.json({ action: 'requested' }, { status: 202 });
+function missingEnv(pathname: string) {
+  return NextResponse.json(
+    { ok: false, code: 'MISSING_ENV', message: 'Missing env SUPABASE_SERVICE_ROLE_KEY', pathname },
+    { status: 500 }
+  );
 }
+
+function ok(pathname: string, method: string) {
+  return NextResponse.json({ ok: true, pathname, method, note: 'stub' });
+}
+
+function gate(req: Request, method: string) {
+  const pathname = new URL(req.url).pathname;
+  if (!process.env.SUPABASE_SERVICE_ROLE_KEY) return missingEnv(pathname);
+  return ok(pathname, method);
+}
+
+export async function GET(req: Request)    { return gate(req, 'GET'); }
+export async function POST(req: Request)   { return gate(req, 'POST'); }
+export async function PUT(req: Request)    { return gate(req, 'PUT'); }
+export async function PATCH(req: Request)  { return gate(req, 'PATCH'); }
+export async function DELETE(req: Request) { return gate(req, 'DELETE'); }

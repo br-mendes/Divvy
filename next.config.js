@@ -7,7 +7,7 @@ const basePath = isGithubPages && repoName ? `/${repoName}` : '';
 const nextConfig = {
   reactStrictMode: true,
   swcMinify: true,
-  output: 'export',
+
   basePath,
   assetPrefix: basePath ? `${basePath}/` : undefined,
   trailingSlash: true,
@@ -23,3 +23,4 @@ const nextConfig = {
 };
 
 export default nextConfig;
+

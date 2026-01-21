@@ -1,56 +1,29 @@
 'use client';
 
-import React, { useState } from 'react';
+import * as React from 'react';
 
-interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
+export type InputProps = React.InputHTMLAttributes<HTMLInputElement> & {
   label?: string;
-  error?: string;
-  helperText?: string;
-  showPasswordToggle?: boolean;
-}
+};
 
-export default function Input({
-  label,
-  error,
-  helperText,
-  showPasswordToggle = false,
-  type = 'text',
-  className = '',
-  ...props
-}: InputProps) {
-  const [showPassword, setShowPassword] = useState(false);
-  const inputType =
-    showPasswordToggle && type === 'password' ? (showPassword ? 'text' : 'password') : type;
-
+export const Input = React.forwardRef<HTMLInputElement, InputProps>(function Input(
+  { className = '', label, ...props },
+  ref
+) {
   return (
-    <div className="w-full">
-      {label && <label className="block text-sm font-medium text-gray-700 mb-2">{label}</label>}
-      <div className="relative">
-        <input
-          type={inputType}
-          className={`
-            w-full px-4 py-2 border rounded-lg text-gray-900
-            focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent
-            disabled:bg-gray-100 disabled:cursor-not-allowed
-            ${error ? 'border-red-500' : 'border-gray-300'}
-            ${className}
-          `
-            .trim()
-            .replace(/\s+/g, ' ')}
-          {...props}
-        />
-        {showPasswordToggle && type === 'password' && (
-          <button
-            type="button"
-            onClick={() => setShowPassword(!showPassword)}
-            className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
-          >
-            {showPassword ? '🙈' : '👁️'}
-          </button>
-        )}
-      </div>
-      {error && <p className="mt-1 text-sm text-red-600">{error}</p>}
-      {helperText && !error && <p className="mt-1 text-sm text-gray-500">{helperText}</p>}
-    </div>
+    <label className={'block ' + (label ? 'space-y-1 ' : '')}>
+      {label ? <span className='text-sm text-gray-600'>{label}</span> : null}
+      <input
+        ref={ref}
+        className={
+          'w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm outline-none ' +
+          'focus:ring-2 focus:ring-black/10 focus:border-gray-400 ' +
+          className
+        }
+        {...props}
+      />
+    </label>
   );
-}
+});
+
+export default Input;
