@@ -1,19 +1,27 @@
+// components/common/LogoAnimated.tsx
 'use client';
+
 import { useState } from 'react';
 import Link from 'next/link';
 
 export default function LogoAnimated() {
-  const [hover, setHover] = useState(false);
+  const [isHovered, setIsHovered] = useState(false);
+
   return (
-    <Link href="/" 
-      className="flex items-center gap-2 font-bold text-xl text-[#6366f1]"
-      onMouseEnter={() => setHover(true)}
-      onMouseLeave={() => setHover(false)}
+    <Link 
+      href="/"
+      className="inline-flex items-center gap-2 cursor-pointer"
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
     >
-      <span className={`text-2xl transition-transform duration-300 ${hover ? 'rotate-12 scale-110' : ''}`}>
-        
-      </span>
-      Divvy
-    </Link>
-  );
-}
+      <span
+        className={`text-2xl transition-transform duration-300 ${
+          isHovered ? 'scale-110 rotate-12' : 'scale-100 rotate-0'
+        }`}
+      > 
+         
+      </span> 
+      <span className="font-bold text-xl text-[#208085]">Divvy</span> 
+    </Link> 
+  ); 
+} 

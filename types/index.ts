@@ -1,64 +1,72 @@
-export interface Expense {
+// types/index.ts
+
+export interface User {
   id: string;
-  divvy_id: string;
-  payer_id: string;
-  description: string;
-  amount: number; // em centavos
-  category: 'food' | 'transport' | 'accommodation' | 'entertainment' | 'other';
-  date: string;
-  split_type: 'equal' | 'custom';
-  participants: {
-    user_id: string;
-    share: number; // em centavos
-  }[];
+  email: string;
+  full_name: string;
+  avatar_url?: string;
+  phone?: string;
   created_at: string;
   updated_at?: string;
+}
+
+export interface Divvy {
+  id: string;
+  name: string;
+  description?: string;
+  creator_id: string;
+  type: 'trip' | 'roommate' | 'couple' | 'event' | 'other';
+  currency: string;
+  created_at: string;
+  updated_at: string;
+  ended_at?: string;
+  is_archived: boolean;
+  members?: DivvyMember[];
 }
 
 export interface DivvyMember {
   id: string;
   divvy_id: string;
   user_id: string;
+  email: string;
+  role: 'admin' | 'member';
   joined_at: string;
-  role: 'creator' | 'member';
+  user_profile?: User;
 }
-
-export interface Balance {
-  from_user_id: string;
-  to_user_id: string;
-  amount: number; // em centavos
-  divvy_id: string;
-}
-// Adicione ao arquivo types/index.ts
 
 export interface Expense {
   id: string;
   divvy_id: string;
-  payer_id: string;
+  paid_by_user_id: string;
+  amount: number;
+  currency: string;
+  category: 'food' | 'transport' | 'accommodation' | 'activity' | 'utilities' | 'shopping' | 'other';
   description: string;
-  amount: number; // em centavos
-  category: 'food' | 'transport' | 'accommodation' | 'entertainment' | 'other';
   date: string;
-  split_type: 'equal' | 'custom';
-  participants: {
-    user_id: string;
-    share: number; // em centavos
-  }[];
   created_at: string;
-  updated_at?: string;
+  updated_at: string;
+  paid_by?: User;
+  splits?: ExpenseSplit[];
 }
 
-export interface DivvyMember {
+export interface ExpenseSplit {
+  id: string;
+  expense_id: string;
+  participant_user_id: string;
+  amount_owed: number;
+  created_at: string;
+  participant?: User;
+}
+
+export interface Transaction {
   id: string;
   divvy_id: string;
-  user_id: string;
-  joined_at: string;
-  role: 'creator' | 'member';
-}
-
-export interface Balance {
   from_user_id: string;
   to_user_id: string;
-  amount: number; // em centavos
-  divvy_id: string;
+  amount: number;
+  status: 'pending' | 'paid';
+  paid_at?: string;
+  created_at: string;
+  from_user?: User;
+  to_user?: User;
 }

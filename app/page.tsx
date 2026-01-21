@@ -1,351 +1,261 @@
-'use client';
+// app/page.tsx 
+'use client'; 
 
-import { useEffect, useState } from 'react';
-import Link from 'next/link';
-import { motion } from 'framer-motion';
-import Button from '@/components/common/Button';
-import ThemeToggle from '@/components/common/ThemeToggle';
-import supabase from '@/lib/supabase';
+import { useEffect, useState } from 'react'; 
+import { useRouter } from 'next/navigation'; 
+import { supabase } from '@/lib/supabase'; 
+import { Button } from '@/components/common/Button'; 
+import LogoAnimated from '@/components/common/LogoAnimated'; 
+import Link from 'next/link'; 
 
-const features = [
-  {
-    icon: '',
-    title: 'Registre Despesas',
-    description:
-      'Adicione despesas com categoria, data e descrição. Automático e rápido.',
-  },
-  {
-    icon: '',
-    title: 'Calcule Saldos',
-    description: 'Saiba automaticamente quem deve quem. Sem matemática confusa.',
-  },
-  {
-    icon: '',
-    title: 'Convide Membros',
-    description:
-      'Compartilhe com link ou QR code. Eles recebem e-mail com convite.',
-  },
-  {
-    icon: '',
-    title: 'Visualize Gráficos',
-    description:
-      'Veja despesas por categoria e por pessoa com gráficos intuitivos.',
-  },
-  {
-    icon: '',
-    title: 'Divisão Flexível',
-    description: 'Divida igualmente, por porcentagens ou valores customizados.',
-  },
-  {
-    icon: '',
-    title: 'Marque Pagamentos',
-    description: 'Registre quando alguém pagou. Acompanhe histórico completo.',
-  },
-];
+export default function HomePage() { 
+  const router = useRouter(); 
+  const [user, setUser] = useState(null); 
+  const [loading, setLoading] = useState(true); 
 
-const usecases = [
-  { emoji: '', title: 'Viagens', desc: 'Hotel, carro, refeições' },
-  { emoji: '', title: 'República', desc: 'Aluguel, contas, compras' },
-  { emoji: '', title: 'Casal', desc: 'Refeições, eventos' },
-  { emoji: '', title: 'Eventos', desc: 'Festas, encontros' },
-];
+  useEffect(() => { 
+    checkUser(); 
+  }, []); 
 
-export default function HomePage() {
-  const [user, setUser] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  async function checkUser() { 
+    try { 
+      const { data: { session } } = await supabase.auth.getSession(); 
+      setUser(session?.user ?? null); 
+    } catch (err) { 
+      console.error('Erro ao verificar usuário:', err); 
+    } finally { 
+      setLoading(false); 
+    } 
+  } 
 
-  useEffect(() => {
-    async function checkUser() {
-      try {
-        const { data } = await supabase.auth.getSession();
-        setUser(data.session?.user ?? null);
-      } catch (err) {
-        console.error('Erro ao verificar usuário', err);
-      } finally {
-        setLoading(false);
-      }
-    }
-    checkUser();
-  }, []);
+  if (loading) { 
+    return ( 
+      <div className="min-h-screen flex items-center justify-center"> 
+        <div className="text-center"> 
+          <div className="text-4xl mb-4"></div> 
+          <p className="text-gray-600">Carregando...</p> 
+        </div> 
+      </div> 
+    ); 
+  } 
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        Carregando...
-      </div>
-    );
-  }
+  return ( 
+    <div className="min-h-screen bg-gradient-to-br from-purple-50 via-white to-blue-50"> 
+      {/* Header */} 
+      <header className="sticky top-0 z-40 border-b border-gray-200 bg-white/80 backdrop-blur-sm"> 
+        <div className="max-w-7xl mx-auto px-4 py-4 flex justify-between items-center"> 
+          <LogoAnimated /> 
 
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-purple-50 via-white to-blue-50 dark:from-slate-900 dark:via-slate-950 dark:to-slate-900">
-      {/* Header */}
-      <header className="sticky top-0 z-40 border-b border-gray-200 dark:border-slate-700 bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm">
-        <div className="max-w-7xl mx-auto px-4 py-3 sm:py-4 flex justify-between items-center min-h-[60px] sm:min-h-[70px]">
-          <div className="flex items-center gap-2">
-            <span className="text-2xl"></span>
-            <span className="font-bold text-lg text-gray-900 dark:text-gray-100">
-              Divvy
-            </span>
-          </div>
+          <div className="flex items-center gap-3 flex-nowrap"> 
+            {user ? ( 
+              <Link href="/dashboard"> 
+                <Button variant="primary" className="whitespace-nowrap h-11">Ir ao Dashboard</Button> 
+              </Link> 
+            ) : ( 
+              <> 
+                <Link href="/auth/login"> 
+                  <Button variant="outline" className="whitespace-nowrap h-11">Entrar</Button> 
+                </Link> 
+                <Link href="/auth/signup"> 
+                  <Button variant="primary" className="whitespace-nowrap h-11">Criar Conta</Button> 
+                </Link> 
+              </> 
+            )} 
+          </div> 
+        </div> 
+      </header> 
 
-          <div className="hidden sm:flex items-center gap-4">
-            <ThemeToggle />
-            {user ? (
-              <Link href="/dashboard">
-                <Button variant="primary">Ir ao Dashboard</Button>
-              </Link>
-            ) : (
-              <>
-                <Link href="/auth/login">
-                  <Button variant="outline">Entrar</Button>
-                </Link>
-                <Link href="/auth/signup">
-                  <Button variant="primary">Criar Conta</Button>
-                </Link>
-              </>
-            )}
-          </div>
+      {/* Hero Section */} 
+      <section className="max-w-7xl mx-auto px-4 py-12 md:py-20"> 
+        <div className="grid md:grid-cols-2 gap-8 md:gap-12 items-center"> 
+          <div className="space-y-6"> 
+            <div className="inline-block bg-[#208085]/10 px-4 py-2 rounded-full"> 
+              <span className="text-[#208085] font-semibold text-sm"> 
+                 Divisão de Gastos Facilitada 
+              </span> 
+            </div> 
 
-          <button
-            className="sm:hidden p-2 hover:bg-gray-100 dark:hover:bg-slate-800 rounded-lg"
-            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-            aria-label="Menu"
-          >
-            ☰
-          </button>
-        </div>
+            {/* TÍTULO EM 1 LINHA - RESPONSIVO */} 
+            <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl lg:whitespace-nowrap font-bold text-gray-900 leading-tight"> 
+              Despesas em grupo <span className="text-[#208085]">sem drama</span> 
+            </h1> 
 
-        {mobileMenuOpen && (
-          <div className="sm:hidden border-t border-gray-200 dark:border-slate-700 p-4 bg-white dark:bg-slate-900 space-y-3">
-            <div className="flex justify-between items-center mb-3">
-              <span className="font-semibold text-gray-800 dark:text-gray-100">
-                Menu
-              </span>
-              <ThemeToggle />
-            </div>
-            {user ? (
-              <Link href="/dashboard" onClick={() => setMobileMenuOpen(false)}>
-                <Button variant="primary" fullWidth>
-                  Ir ao Dashboard
-                </Button>
-              </Link>
-            ) : (
-              <>
-                <Link href="/auth/login" onClick={() => setMobileMenuOpen(false)}>
-                  <Button variant="outline" fullWidth>
-                    Entrar
-                  </Button>
-                </Link>
-                <Link href="/auth/signup" onClick={() => setMobileMenuOpen(false)}>
-                  <Button variant="primary" fullWidth>
-                    Criar Conta
-                  </Button>
-                </Link>
-              </>
-            )}
-          </div>
-        )}
-      </header>
+            <p className="text-lg md:text-xl text-gray-600 leading-relaxed"> 
+              Organize despesas compartilhadas com amigos, família ou república. 
+              Calcule automaticamente quem deve quem. Sem burocracia. 
+            </p> 
 
-      {/* Hero Section */}
-      <section className="max-w-7xl mx-auto px-4 py-16 sm:py-24 text-center">
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6 }}
-        >
-          <h1 className="text-4xl sm:text-6xl font-bold text-gray-900 dark:text-white mb-4">
-            Divida Despesas de Forma Justa
-          </h1>
-          <p className="text-lg sm:text-xl text-gray-600 dark:text-gray-400 max-w-2xl mx-auto mb-8">
-            Organize suas contas compartilhadas com simplicidade. Sem confusão,
-            sem atritos. Transparência total em cada transação.
-          </p>
-          {!user ? (
-            <div className="flex flex-col sm:flex-row gap-4 justify-center">
-              <Link href="/auth/signup">
-                <Button variant="primary" size="lg">
-                  Começar Grátis
-                </Button>
-              </Link>
-              <Link href="#features">
-                <Button variant="outline" size="lg">
-                  Saiba Mais
-                </Button>
-              </Link>
-            </div>
-          ) : (
-            <Link href="/dashboard">
-              <Button variant="primary" size="lg">
-                Abrir Dashboard
-              </Button>
-            </Link>
-          )}
-        </motion.div>
-      </section>
+            {/* BOTÕES NA MESMA LINHA */} 
+            <div className="flex flex-wrap gap-4 pt-4"> 
+              <Link href={user ? '/dashboard' : '/auth/signup'}> 
+                <Button variant="primary" size="lg" className="whitespace-nowrap"> 
+                  {user ? 'Começar Agora' : 'Criar Conta Grátis'} → 
+                </Button> 
+              </Link> 
+              <a href="#features"> 
+                <Button variant="outline" size="lg" className="whitespace-nowrap"> 
+                  Saiba Mais 
+                </Button> 
+              </a> 
+            </div> 
+          </div> 
 
-      {/* Use Cases */}
-      <section className="max-w-7xl mx-auto px-4 py-12 sm:py-16">
-        <h2 className="text-2xl sm:text-3xl font-bold text-center mb-8 text-gray-900 dark:text-white">
-          Para Qualquer Situação
-        </h2>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-          {usecases.map((usecase, idx) => (
-            <motion.div
-              key={idx}
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: idx * 0.1, duration: 0.4 }}
-              className="bg-white dark:bg-slate-800 rounded-lg p-6 text-center shadow-sm hover:shadow-md transition-shadow"
-            >
-              <div className="text-4xl mb-2">{usecase.emoji}</div>
-              <h3 className="font-semibold text-gray-900 dark:text-white">
-                {usecase.title}
-              </h3>
-              <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                {usecase.desc}
-              </p>
-            </motion.div>
-          ))}
-        </div>
-      </section>
+          <div className="hidden md:flex justify-center"> 
+            <div className="bg-gradient-to-br from-[#208085]/20 to-purple-200/20 rounded-3xl w-full h-96 flex items-center justify-center"> 
+              <div className="text-8xl"></div> 
+            </div> 
+          </div> 
+        </div> 
+      </section> 
 
-      {/* Features Grid */}
-      <section id="features" className="max-w-7xl mx-auto px-4 py-16 sm:py-24">
-        <h2 className="text-3xl sm:text-4xl font-bold text-center mb-12 text-gray-900 dark:text-white">
-          Recursos Poderosos
-        </h2>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
-          {features.map((feature, idx) => (
-            <motion.div
-              key={idx}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: idx * 0.1, duration: 0.5 }}
-              className="bg-white dark:bg-slate-800 rounded-xl p-8 shadow-md hover:shadow-lg transition-shadow border border-gray-100 dark:border-slate-700"
-            >
-              <div className="text-5xl mb-4">{feature.icon}</div>
-              <h3 className="text-xl font-semibold mb-3 text-gray-900 dark:text-white">
-                {feature.title}
-              </h3>
-              <p className="text-gray-600 dark:text-gray-400">
-                {feature.description}
-              </p>
-            </motion.div>
-          ))}
-        </div>
-      </section>
+      {/* Features Section */} 
+      <section id="features" className="bg-white py-16 md:py-20"> 
+        <div className="max-w-7xl mx-auto px-4"> 
+          <div className="text-center mb-12 md:mb-16"> 
+            <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-4"> 
+              Tudo que você precisa 
+            </h2> 
+            <p className="text-lg md:text-xl text-gray-600"> 
+              Ferramentas poderosas e simples para gerenciar despesas 
+            </p> 
+          </div> 
 
-      {/* CTA Section */}
-      {!user && (
-        <section className="max-w-7xl mx-auto px-4 py-16 sm:py-24 text-center">
-          <div className="bg-gradient-to-r from-blue-600 to-purple-600 rounded-2xl p-12 text-white">
-            <h2 className="text-3xl sm:text-4xl font-bold mb-4">
-              Pronto para Começar?
-            </h2>
-            <p className="text-lg mb-8 opacity-90 max-w-xl mx-auto">
-              Crie sua conta agora e comece a dividir despesas com seus amigos e
-              família.
-            </p>
-            <Link href="/auth/signup">
-              <Button
-                variant="primary"
-                size="lg"
-                className="bg-white text-blue-600 hover:bg-gray-100"
-              >
-                Criar Conta Grátis
-              </Button>
-            </Link>
-          </div>
-        </section>
-      )}
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6 md:gap-8"> 
+            {[ 
+              { 
+                icon: '', 
+                title: 'Registre Despesas', 
+                description: 'Adicione despesas com categoria, data e descrição. Automático e rápido.', 
+              }, 
+              { 
+                icon: '', 
+                title: 'Calcule Saldos', 
+                description: 'Saiba automaticamente quem deve quem. Sem matemática confusa.', 
+              }, 
+              { 
+                icon: '', 
+                title: 'Convide Membros', 
+                description: 'Compartilhe com link ou QR code. Eles recebem email com convite.', 
+              }, 
+              { 
+                icon: '', 
+                title: 'Visualize Gráficos', 
+                description: 'Veja despesas por categoria e por pessoa com gráficos intuitivos.', 
+              }, 
+              { 
+                icon: '', 
+                title: 'Divida Flexível', 
+                description: 'Divida igualmente, por shares ou valores customizados.', 
+              }, 
+              { 
+                icon: '', 
+                title: 'Marque Pagamentos', 
+                description: 'Registre quando alguém pagou. Acompanhe histórico completo.', 
+              }, 
+            ].map((feature, idx) => ( 
+              <div 
+                key={idx} 
+                className="p-6 bg-gray-50 rounded-xl border border-gray-200 hover:shadow-lg transition" 
+              > 
+                <div className="text-4xl mb-4">{feature.icon}</div> 
+                <h3 className="text-xl font-semibold text-gray-900 mb-2"> 
+                  {feature.title} 
+                </h3> 
+                <p className="text-gray-600">{feature.description}</p> 
+              </div> 
+            ))} 
+          </div> 
+        </div> 
+      </section> 
 
-      {/* Footer */}
-      <footer className="border-t border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-900 py-12">
-        <div className="max-w-7xl mx-auto px-4">
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-8 mb-8">
-            <div>
-              <h4 className="font-semibold text-gray-900 dark:text-white mb-4">
-                Produto
-              </h4>
-              <ul className="space-y-2 text-sm text-gray-600 dark:text-gray-400">
-                <li>
-                  <Link href="/about" className="hover:text-blue-600">
-                    Sobre
-                  </Link>
-                </li>
-                <li>
-                  <Link href="/faq" className="hover:text-blue-600">
-                    FAQ
-                  </Link>
-                </li>
-              </ul>
-            </div>
-            <div>
-              <h4 className="font-semibold text-gray-900 dark:text-white mb-4">
-                Suporte
-              </h4>
-              <ul className="space-y-2 text-sm text-gray-600 dark:text-gray-400">
-                <li>
-                  <Link href="/support" className="hover:text-blue-600">
-                    Contato
-                  </Link>
-                </li>
-                <li>
-                  <a
-                    href="mailto:support@divvy.app"
-                    className="hover:text-blue-600"
-                  >
-                    Email
-                  </a>
-                </li>
-              </ul>
-            </div>
-            <div>
-              <h4 className="font-semibold text-gray-900 dark:text-white mb-4">
-                Legal
-              </h4>
-              <ul className="space-y-2 text-sm text-gray-600 dark:text-gray-400">
-                <li>
-                  <Link href="/terms" className="hover:text-blue-600">
-                    Termos
-                  </Link>
-                </li>
-                <li>
-                  <Link href="/privacy" className="hover:text-blue-600">
-                    Privacidade
-                  </Link>
-                </li>
-              </ul>
-            </div>
-            <div>
-              <h4 className="font-semibold text-gray-900 dark:text-white mb-4">
-                Social
-              </h4>
-              <ul className="space-y-2 text-sm text-gray-600 dark:text-gray-400">
-                <li>
-                  <a href="https://twitter.com" className="hover:text-blue-600">
-                    Twitter
-                  </a>
-                </li>
-                <li>
-                  <a href="https://github.com" className="hover:text-blue-600">
-                    GitHub
-                  </a>
-                </li>
-              </ul>
-            </div>
-          </div>
+      {/* Use Cases Section - 4 CARDS */} 
+      <section className="py-16 md:py-20"> 
+        <div className="max-w-7xl mx-auto px-4"> 
+          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6"> 
+            {[ 
+              { emoji: '', title: 'Viagens', desc: 'Hotel, carro, refeições' }, 
+              { emoji: '', title: 'República', desc: 'Aluguel, contas, compras' }, 
+              { emoji: '', title: 'Casal', desc: 'Refeições, eventos' }, 
+              { emoji: '', title: 'Eventos', desc: 'Festas, encontros' }, 
+            ].map((useCase, idx) => ( 
+              <div 
+                key={idx} 
+                className="p-6 bg-gradient-to-br from-gray-50 to-white rounded-xl border border-gray-200 text-center" 
+              > 
+                <div className="text-5xl mb-3">{useCase.emoji}</div> 
+                <h3 className="font-semibold text-gray-900">{useCase.title}</h3> 
+                <p className="text-sm text-gray-600 mt-2">{useCase.desc}</p> 
+              </div> 
+            ))} 
+          </div> 
+        </div> 
+      </section> 
 
-          <div className="border-t border-gray-200 dark:border-slate-700 pt-8">
-            <div className="flex flex-col sm:flex-row justify-between items-center text-sm text-gray-600 dark:text-gray-400">
-              <p>&copy; 2026 Divvy. Todos os direitos reservados.</p>
-              <p>Feito com no Brasil</p>
-            </div>
-          </div>
-        </div>
-      </footer>
-    </div>
-  );
-}
+      {/* CTA Final */} 
+      <section className="bg-gradient-to-r from-[#208085] to-purple-600 text-white py-16 md:py-20"> 
+        <div className="max-w-4xl mx-auto px-4 text-center"> 
+          <h2 className="text-3xl md:text-4xl font-bold mb-6">Pronto para começar?</h2> 
+          <p className="text-lg md:text-xl mb-8 opacity-90"> 
+            Grátis. Sem cartão de crédito. Sem complicações. 
+          </p> 
+          <Link href={user ? '/dashboard' : '/auth/signup'}> 
+            <Button variant="primary" size="lg" className="bg-white text-[#208085] hover:bg-gray-100"> 
+              {user ? 'Ir ao Dashboard' : 'Criar Conta Agora'} → 
+            </Button> 
+          </Link> 
+        </div> 
+      </section> 
+
+      {/* Footer */} 
+      <footer className="bg-gray-900 text-white py-12"> 
+        <div className="max-w-7xl mx-auto px-4"> 
+          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-8 mb-8"> 
+            <div> 
+              <div className="flex items-center gap-2 mb-4"> 
+                <span className="text-2xl"></span> 
+                <span className="font-bold">Divvy</span> 
+              </div> 
+              <p className="text-gray-400 text-sm"> 
+                Despesas em grupo sem drama 
+              </p> 
+            </div> 
+
+            <div> 
+              <h4 className="font-semibold mb-4">Produto</h4> 
+              <ul className="space-y-2 text-sm text-gray-400"> 
+                <li> 
+                  <a href="#features" className="hover:text-white">Features</a> 
+                </li> 
+              </ul> 
+            </div> 
+
+            <div> 
+              <h4 className="font-semibold mb-4">Empresa</h4> 
+              <ul className="space-y-2 text-sm text-gray-400"> 
+                <li> 
+                  <Link href="/about" className="hover:text-white">Sobre</Link> 
+                </li> 
+              </ul> 
+            </div> 
+
+            <div> 
+              <h4 className="font-semibold mb-4">Legal</h4> 
+              <ul className="space-y-2 text-sm text-gray-400"> 
+                <li> 
+                  <Link href="/privacy" className="hover:text-white">Privacidade</Link> 
+                </li> 
+                <li> 
+                  <Link href="/terms" className="hover:text-white">Termos</Link> 
+                </li> 
+              </ul> 
+            </div> 
+          </div> 
+
+          <div className="border-t border-gray-700 pt-8 text-center text-gray-400 text-sm"> 
+            <p>© 2026 Divvy. Todos os direitos reservados.</p> 
+          </div> 
+        </div> 
+      </footer> 
+    </div> 
+  ); 
+} 

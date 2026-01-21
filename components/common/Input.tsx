@@ -1,3 +1,5 @@
+// components/common/Input.tsx
+
 import React, { useState } from 'react';
 import styles from './Input.module.css';
 
@@ -49,7 +51,7 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
               onClick={() => setShowPassword(!showPassword)}
               tabIndex={-1}
             >
-              {showPassword ? '' : ''}
+              {showPassword ? '' : ''} 
             </button>
           )}
         </div>
