@@ -1,8 +1,7 @@
 import { NextResponse } from 'next/server';
-
-import { isSystemAdminEmail } from '@/lib/auth/admin';
-import { getMyRoleInDivvy } from '@/lib/divvy/permissions';
 import { createServerSupabase } from '@/lib/supabase/server';
+import { getMyRoleInDivvy } from '@/lib/divvy/permissions';
+import { isSystemAdminEmail } from '@/lib/auth/admin';
 
 export async function GET(
   _req: Request,
@@ -20,9 +19,7 @@ export async function GET(
 
   const { data, error } = await supabase
     .from('divvyinvites')
-    .select(
-      'id, divvyid, token, invitedemail, role, status, createdat, expiresat, acceptedat, acceptedby, invitedby'
-    )
+    .select('id, divvyid, token, invitedemail, role, status, createdat, expiresat, acceptedat, acceptedby, invitedby')
     .eq('divvyid', divvyId)
     .order('createdat', { ascending: false });
 

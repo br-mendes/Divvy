@@ -1,9 +1,8 @@
 import { NextResponse } from 'next/server';
-
-import { isSystemAdminEmail } from '@/lib/auth/admin';
-import { getMyRoleInDivvy } from '@/lib/divvy/permissions';
-import { resend, getAppUrl, getFromEmail } from '@/lib/email/resend';
 import { createServerSupabase } from '@/lib/supabase/server';
+import { getMyRoleInDivvy } from '@/lib/divvy/permissions';
+import { isSystemAdminEmail } from '@/lib/auth/admin';
+import { resend, getAppUrl, getFromEmail } from '@/lib/email/resend';
 
 export async function POST(
   _req: Request,
@@ -37,10 +36,7 @@ export async function POST(
 
   const expired = new Date(invite.expiresat).getTime() < Date.now();
   if (invite.status !== 'pending' || expired) {
-    return NextResponse.json(
-      { error: 'Só é possível reenviar convites pendentes e válidos' },
-      { status: 400 }
-    );
+    return NextResponse.json({ error: 'Só é possível reenviar convites pendentes e válidos' }, { status: 400 });
   }
 
   const inviteUrl = `${getAppUrl()}/invite/${invite.token}`;
@@ -57,7 +53,6 @@ export async function POST(
         <p><a href="${inviteUrl}" style="display:inline-block;padding:10px 14px;border-radius:8px;background:#111;color:#fff;text-decoration:none">Aceitar convite</a></p>
         <p>Ou use este link:</p>
         <p><a href="${inviteUrl}">${inviteUrl}</a></p>
-        <p style="opacity:.7;font-size:12px">Convite expira automaticamente.</p>
       </div>
     `,
   });
@@ -66,7 +61,5 @@ export async function POST(
 }
 
 function escapeHtml(s: string) {
-  return s.replace(/[&<>"']/g, (c) =>
-    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' }[c] as string)
-  );
+  return s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' }[c] as string));
 }

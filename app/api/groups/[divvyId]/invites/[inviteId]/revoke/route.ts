@@ -1,8 +1,7 @@
 import { NextResponse } from 'next/server';
-
-import { isSystemAdminEmail } from '@/lib/auth/admin';
-import { getMyRoleInDivvy } from '@/lib/divvy/permissions';
 import { createServerSupabase } from '@/lib/supabase/server';
+import { getMyRoleInDivvy } from '@/lib/divvy/permissions';
+import { isSystemAdminEmail } from '@/lib/auth/admin';
 
 export async function POST(
   _req: Request,
@@ -18,7 +17,6 @@ export async function POST(
   const canManage = isSystemAdmin || isCreator || role === 'admin';
   if (!canManage) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
-  // só revoga se ainda estiver pendente
   const { data: invite, error: readErr } = await supabase
     .from('divvyinvites')
     .select('id, status')
@@ -26,14 +24,9 @@ export async function POST(
     .eq('divvyid', divvyId)
     .single();
 
-  if (readErr || !invite) {
-    return NextResponse.json({ error: 'Invite não encontrado' }, { status: 404 });
-  }
+  if (readErr || !invite) return NextResponse.json({ error: 'Invite não encontrado' }, { status: 404 });
   if (invite.status !== 'pending') {
-    return NextResponse.json(
-      { error: 'Apenas convites pendentes podem ser revogados' },
-      { status: 400 }
-    );
+    return NextResponse.json({ error: 'Apenas convites pendentes podem ser revogados' }, { status: 400 });
   }
 
   const { error: updErr } = await supabase
