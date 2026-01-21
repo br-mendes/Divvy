@@ -1,3 +1,5 @@
+// Adicione ao arquivo types/index.ts
+
 export interface Expense {
   id: string;
   divvy_id: string;

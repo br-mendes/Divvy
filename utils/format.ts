@@ -1,30 +1,23 @@
-const currencyFormatter = new Intl.NumberFormat('pt-BR', {
-  style: 'currency',
-  currency: 'BRL',
-  minimumFractionDigits: 2,
-});
+export function formatCurrency(amountInCents: number): string {
+  const value = amountInCents / 100;
+  return new Intl.NumberFormat('pt-BR', {
+    style: 'currency',
+    currency: 'BRL',
+  }).format(value);
+}
 
-const dateFormats: Record<string, Intl.DateTimeFormatOptions> = {
-  short: {
-    day: '2-digit',
-    month: 'short',
-  },
-  long: {
-    day: '2-digit',
-    month: 'long',
-    year: 'numeric',
-  },
-};
+type DateFormat = 'short' | 'long';
 
-export const formatCurrency = (amountInCents: number) => {
-  return currencyFormatter.format(amountInCents / 100);
-};
-
-export const formatDate = (date: string, format: 'short' | 'long' = 'long') => {
-  const parsedDate = new Date(date);
-  if (Number.isNaN(parsedDate.getTime())) {
-    return '';
+export function formatDate(dateString: string, format: DateFormat = 'long'): string {
+  const date = new Date(dateString);
+  if (Number.isNaN(date.getTime())) {
+    return dateString;
   }
 
-  return parsedDate.toLocaleDateString('pt-BR', dateFormats[format]);
-};
+  const options: Intl.DateTimeFormatOptions =
+    format === 'short'
+      ? { day: '2-digit', month: 'short' }
+      : { day: '2-digit', month: 'short', year: 'numeric' };
+
+  return new Intl.DateTimeFormat('pt-BR', options).format(date);
+}

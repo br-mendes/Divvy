@@ -2,8 +2,8 @@
 
 import React, { useState } from 'react';
 import Link from 'next/link';
-import { Button } from '@/components/common/Button';
-import { Card } from '@/components/common/Card';
+import Button from '@/components/common/Button';
+import Card from '@/components/common/Card';
 import { formatCurrency, formatDate } from '@/utils/format';
 import styles from './page.module.css';
 
@@ -62,6 +62,7 @@ export default function ExpensesPage() {
         </Link>
       </div>
 
+      {/* Filters */}
       <div className={styles.filters}>
         <select
           value={selectedDivvy}
@@ -87,6 +88,7 @@ export default function ExpensesPage() {
         </select>
       </div>
 
+      {/* Expenses List */}
       {expenses.length === 0 ? (
         <Card>
           <div className={styles.emptyState}>
@@ -110,7 +112,9 @@ export default function ExpensesPage() {
               <div className={styles.expenseDetails}>
                 <div className={styles.expenseHeader}>
                   <h3>{expense.description}</h3>
-                  <span className={styles.amount}>{formatCurrency(expense.amount)}</span>
+                  <span className={styles.amount}>
+                    {formatCurrency(expense.amount)}
+                  </span>
                 </div>
                 <p className={styles.expenseMeta}>
                   Adicionado por <strong>{expense.payer}</strong> em{' '}
