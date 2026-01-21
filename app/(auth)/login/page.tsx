@@ -68,7 +68,7 @@ export default function LoginPage() {
 
         {submitError && (
           <div className={styles.errorAlert}>
-            <span></span>
+            <span aria-hidden="true">!</span>
             <p>{submitError}</p>
           </div>
         )}
