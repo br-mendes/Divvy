@@ -1,73 +1,51 @@
 'use client';
 
-import type { ReactNode } from 'react';
+import { useState } from 'react';
 import { BalancesPanel } from '@/components/groups/BalancesPanel';
+import { ExpensesPanel } from '@/components/groups/ExpensesPanel';
 import { PaymentsPanel } from '@/components/groups/PaymentsPanel';
 
-type TabKey = 'members' | 'invites' | 'requests' | 'expenses' | 'balances' | 'payments';
+const tabs = [
+  { id: 'expenses', label: 'Despesas' },
+  { id: 'balances', label: 'Saldos' },
+  { id: 'payments', label: 'Pagamentos' },
+] as const;
 
-type Tab = {
-  key: TabKey;
-  label: string;
-};
+type TabId = (typeof tabs)[number]['id'];
 
 type GroupTabsProps = {
   divvyId: string;
-  tab: TabKey;
-  onChange: (tab: TabKey) => void;
-  membersPanel?: ReactNode;
-  invitesPanel?: ReactNode;
-  requestsPanel?: ReactNode;
-  expensesPanel?: ReactNode;
+  membersCount: number;
 };
 
-export function GroupTabs({
-  divvyId,
-  tab,
-  onChange,
-  membersPanel,
-  invitesPanel,
-  requestsPanel,
-  expensesPanel,
-}: GroupTabsProps) {
-  const base: Tab[] = [
-    { key: 'members', label: 'Membros' },
-    { key: 'invites', label: 'Convites' },
-    { key: 'requests', label: 'Pedidos' },
-    { key: 'expenses', label: 'Despesas' },
-  ];
-
-  base.push({ key: 'balances', label: 'Saldos' });
-  base.push({ key: 'payments', label: 'Pagamentos' });
+export function GroupTabs({ divvyId, membersCount }: GroupTabsProps) {
+  const [activeTab, setActiveTab] = useState<TabId>('expenses');
 
   return (
     <div className="space-y-4">
-      <div className="border-b border-gray-200 dark:border-dark-700">
-        <nav className="flex space-x-6 overflow-x-auto scrollbar-hide">
-          {base.map((item) => (
-            <button
-              key={item.key}
-              onClick={() => onChange(item.key)}
-              className={`pb-3 px-1 border-b-2 font-medium text-sm transition-colors whitespace-nowrap ${
-                tab === item.key
-                  ? 'border-brand-500 text-brand-600 dark:text-brand-400'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
-              }`}
-            >
-              {item.label}
-            </button>
-          ))}
-        </nav>
+      <div className="flex items-center gap-4 border-b">
+        {tabs.map((tab) => (
+          <button
+            key={tab.id}
+            className={`border-b-2 px-2 py-2 text-sm ${
+              activeTab === tab.id
+                ? 'border-blue-600 text-blue-600'
+                : 'border-transparent text-gray-500'
+            }`}
+            onClick={() => setActiveTab(tab.id)}
+            type="button"
+          >
+            {tab.label}
+          </button>
+        ))}
+        <div className="ml-auto text-xs text-gray-500">
+          {membersCount} membros
+        </div>
       </div>
 
-      <div className="min-h-[200px]">
-        {tab === 'members' && membersPanel}
-        {tab === 'invites' && invitesPanel}
-        {tab === 'requests' && requestsPanel}
-        {tab === 'expenses' && expensesPanel}
-        {tab === 'balances' && <BalancesPanel divvyId={divvyId} />}
-        {tab === 'payments' && <PaymentsPanel divvyId={divvyId} />}
-      </div>
+      {activeTab === 'expenses' && <ExpensesPanel divvyId={divvyId} />}
+      {activeTab === 'balances' && <BalancesPanel divvyId={divvyId} />}
+      {activeTab === 'payments' && <PaymentsPanel divvyId={divvyId} />}
     </div>
   );
 }

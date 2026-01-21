@@ -1,135 +1,104 @@
 import { NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabaseServer';
 
-type BalanceMap = Record<string, number>;
-
 type RouteParams = {
   params: {
-    divvyId?: string;
+    divvyId: string;
   };
 };
 
 export async function GET(_req: Request, { params }: RouteParams) {
-  const divvyId = params?.divvyId;
+  const { divvyId } = params;
 
   if (!divvyId) {
-    return NextResponse.json({ error: 'divvyId is required' }, { status: 400 });
+    return NextResponse.json({ error: 'ID do grupo obrigatório' }, { status: 400 });
   }
+
+  const { searchParams } = new URL(_req.url);
+  const from = searchParams.get('from');
+  const to = searchParams.get('to');
 
   const supabase = createServerSupabaseClient();
 
-  const { data: members, error: mErr } = await supabase
+  const { data: members, error: memErr } = await supabase
     .from('divvymembers')
-    .select('userid, userprofiles(email)')
+    .select('userid')
     .eq('divvyid', divvyId);
 
-  if (mErr) return NextResponse.json({ error: mErr.message }, { status: 500 });
+  if (memErr) {
+    return NextResponse.json({ error: memErr.message }, { status: 500 });
+  }
 
-  const { data: expenses, error: eErr } = await supabase
+  let expQ = supabase
     .from('expenses')
-    .select('id, paidbyuserid, amount')
+    .select('id, payeruserid, amount_cents, currency, expense_date')
     .eq('divvyid', divvyId);
 
-  if (eErr) return NextResponse.json({ error: eErr.message }, { status: 500 });
+  if (from) expQ = expQ.gte('expense_date', from);
+  if (to) expQ = expQ.lte('expense_date', to);
 
-  const expenseIds = expenses?.map((expense) => expense.id) || [];
-  let splits: Array<{ participantuserid: string; amountowed: number }> = [];
+  const { data: expenses, error: expErr } = await expQ;
 
-  if (expenseIds.length > 0) {
-    const { data: sData, error: sErr } = await supabase
-      .from('expensesplits')
-      .select('participantuserid, amountowed')
+  if (expErr) {
+    return NextResponse.json({ error: expErr.message }, { status: 500 });
+  }
+
+  const expenseIds = (expenses ?? []).map((e: any) => e.id);
+  let splits: any[] = [];
+
+  if (expenseIds.length) {
+    const { data: sp, error: spErr } = await supabase
+      .from('expense_splits')
+      .select('expenseid, userid, amount_cents')
+      .eq('divvyid', divvyId)
       .in('expenseid', expenseIds);
 
-    if (sErr) return NextResponse.json({ error: sErr.message }, { status: 500 });
-    splits = sData || [];
+    if (spErr) {
+      return NextResponse.json({ error: spErr.message }, { status: 500 });
+    }
+    splits = sp ?? [];
   }
 
-  const { data: payments, error: payErr } = await supabase
+  let payQ = supabase
     .from('payments')
-    .select('from_userid, to_userid, amount_cents')
+    .select('from_userid, to_userid, amount_cents, paid_at')
     .eq('divvyid', divvyId);
 
-  if (payErr) return NextResponse.json({ error: payErr.message }, { status: 500 });
+  if (from) payQ = payQ.gte('paid_at', from);
+  if (to) payQ = payQ.lte('paid_at', to);
 
-  const { data: transactions, error: tErr } = await supabase
-    .from('transactions')
-    .select('*')
-    .eq('divvyid', divvyId)
-    .order('createdat', { ascending: false });
+  const { data: payments, error: payErr } = await payQ;
 
-  if (tErr) return NextResponse.json({ error: tErr.message }, { status: 500 });
-
-  const paidOutBy = new Map<string, number>();
-  const receivedBy = new Map<string, number>();
-  const paidByUser = new Map<string, number>();
-  const owedByUser = new Map<string, number>();
-  const transactionAdjustBy = new Map<string, number>();
-
-  for (const payment of payments ?? []) {
-    const from = String((payment as { from_userid?: string }).from_userid);
-    const to = String((payment as { to_userid?: string }).to_userid);
-    const amt = Number((payment as { amount_cents?: number }).amount_cents) || 0;
-
-    if (from) {
-      paidOutBy.set(from, (paidOutBy.get(from) ?? 0) + amt);
-    }
-    if (to) {
-      receivedBy.set(to, (receivedBy.get(to) ?? 0) + amt);
-    }
+  if (payErr) {
+    return NextResponse.json({ error: payErr.message }, { status: 500 });
   }
 
-  expenses?.forEach((expense) => {
-    const paid = paidByUser.get(expense.paidbyuserid) ?? 0;
-    paidByUser.set(expense.paidbyuserid, paid + expense.amount);
+  const balances: Record<string, number> = {};
+
+  members?.forEach(m => {
+    balances[m.userid] = 0;
   });
 
-  splits.forEach((split) => {
-    const owed = owedByUser.get(split.participantuserid) ?? 0;
-    owedByUser.set(split.participantuserid, owed + split.amountowed);
-  });
-
-  transactions?.forEach((transaction) => {
-    if (transaction.status === 'confirmed') {
-      const fromAdjust = transactionAdjustBy.get(transaction.fromuserid) ?? 0;
-      transactionAdjustBy.set(transaction.fromuserid, fromAdjust + transaction.amount);
-      const toAdjust = transactionAdjustBy.get(transaction.touserid) ?? 0;
-      transactionAdjustBy.set(transaction.touserid, toAdjust - transaction.amount);
+  expenses?.forEach(e => {
+    if (balances[e.payeruserid] !== undefined) {
+      balances[e.payeruserid] += e.amount_cents;
     }
   });
 
-  const balances: BalanceMap = {};
-  const balanceDetails =
-    members?.map((member) => {
-      const uid = member.userid;
-      const paid = paidByUser.get(uid) ?? 0;
-      const owed = owedByUser.get(uid) ?? 0;
-      const baseNet = paid - owed;
-
-      const paidOut = paidOutBy.get(uid) ?? 0;
-      const received = receivedBy.get(uid) ?? 0;
-
-      const net = baseNet + paidOut - received + (transactionAdjustBy.get(uid) ?? 0);
-
-      balances[uid] = net;
-
-      return {
-        userid: uid,
-        email: member.userprofiles?.email ?? null,
-        paid_cents: paid,
-        owed_cents: owed,
-        net_cents: net,
-        payments_out_cents: paidOut,
-        payments_in_cents: received
-      };
-    }) ?? [];
-
-  return NextResponse.json({
-    balances,
-    balanceDetails,
-    paidOutBy: Object.fromEntries(paidOutBy),
-    receivedBy: Object.fromEntries(receivedBy),
-    payments: payments || [],
-    transactions: transactions || []
+  splits.forEach(s => {
+    if (balances[s.userid] !== undefined) {
+      balances[s.userid] -= s.amount_cents;
+    }
   });
+
+  payments?.forEach(p => {
+    if (balances[p.from_userid] !== undefined) {
+      balances[p.from_userid] += p.amount_cents;
+    }
+    if (balances[p.to_userid] !== undefined) {
+      balances[p.to_userid] -= p.amount_cents;
+    }
+  });
+
+  return NextResponse.json({ balances, payments: payments ?? [] });
 }
