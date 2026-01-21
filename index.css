@@ -1,7 +1,13 @@
 
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Poppins:wght@600;700&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+body {
+  font-family: 'Inter', system-ui, sans-serif;
+}
 
 /* Animações de Tagline */
 @keyframes fadeInOut {
@@ -44,4 +50,47 @@
   stroke-dasharray: 100;
   stroke-dashoffset: 100;
   animation: draw-check 0.4s 0.3s ease-out forwards;
+}
+
+/* Divvy logo animations */
+.divvy-logo {
+  transform-origin: 50% 50%;
+}
+
+.divvy-logo--animated {
+  will-change: transform;
+  animation:
+    divvy-rotate 12s linear infinite,
+    divvy-pulse 3s ease-in-out infinite;
+}
+
+.divvy-logo-slice {
+  transform-origin: 50px 50px;
+}
+
+.divvy-logo--animated .divvy-logo-slice {
+  will-change: transform;
+  animation: divvy-slice-detach 3s cubic-bezier(0.45, 0.05, 0.55, 0.95) infinite;
+}
+
+@keyframes divvy-rotate {
+  0% { transform: rotate(0deg) scale(1); }
+  100% { transform: rotate(360deg) scale(1); }
+}
+
+@keyframes divvy-pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.08); }
+}
+
+@keyframes divvy-slice-detach {
+  0% {
+    transform: translate3d(0, 0, 0);
+  }
+  50% {
+    transform: translate3d(-14px, -14px, 0);
+  }
+  100% {
+    transform: translate3d(0, 0, 0);
+  }
 }

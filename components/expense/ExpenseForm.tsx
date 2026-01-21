@@ -1,12 +1,11 @@
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../context/AuthContext';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
 import { DivvyMember, Expense } from '../../types';
 import toast from 'react-hot-toast';
-import { Camera, Upload } from 'lucide-react';
 
 interface ExpenseFormProps {
   divvyId: string;
@@ -32,24 +31,17 @@ export default function ExpenseForm({ divvyId, members, onSuccess, onCancel, ini
   const [manualAmounts, setManualAmounts] = useState<Record<string, string>>({});
   const [manualPercentages, setManualPercentages] = useState<Record<string, string>>({});
   
-  // Receipt State
-  const [receiptFile, setReceiptFile] = useState<File | null>(null);
-  const [receiptUrl, setReceiptUrl] = useState<string | null>(null);
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  
   const [loading, setLoading] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const amountValue = amount ? parseInt(amount, 10) / 100 : 0;
 
   // Load Initial Data for Editing
   useEffect(() => {
     if (initialData) {
       setDescription(initialData.description);
-      setAmount(initialData.amount.toString());
+      setAmount(Math.round(initialData.amount * 100).toString());
       setCategory(initialData.category);
       setDate(initialData.date.split('T')[0]);
       setPayerId(initialData.paidbyuserid);
-      setReceiptUrl(initialData.receiptphotourl || null);
-      if (initialData.receiptphotourl) setPreviewUrl(initialData.receiptphotourl);
 
       // Fetch Splits for this expense to populate form
       const fetchSplits = async () => {
@@ -97,14 +89,6 @@ export default function ExpenseForm({ divvyId, members, onSuccess, onCancel, ini
     }
   }, [initialData, user, members]);
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      const file = e.target.files[0];
-      setReceiptFile(file);
-      setPreviewUrl(URL.createObjectURL(file));
-    }
-  };
-
   const getMemberName = (uid: string) => {
     const m = members.find(m => m.userid === uid);
     if (!m) return 'Membro';
@@ -115,7 +99,7 @@ export default function ExpenseForm({ divvyId, members, onSuccess, onCancel, ini
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const val = parseFloat(amount);
+    const val = amountValue;
     
     if (isNaN(val) || val <= 0 || !description.trim() || !payerId) {
         toast.error("Preencha os campos obrigatórios.");
@@ -158,22 +142,7 @@ export default function ExpenseForm({ divvyId, members, onSuccess, onCancel, ini
           if (Math.abs(totalPct - 100) > 0.5) throw new Error("A soma das porcentagens deve ser 100%.");
       }
 
-      // 2. Upload Receipt to Supabase Storage (Client-Side)
-      let finalReceiptUrl = receiptUrl;
-      if (receiptFile) {
-        const fileExt = receiptFile.name.split('.').pop();
-        const fileName = `${divvyId}/${Date.now()}.${fileExt}`;
-        const { error: uploadError } = await supabase.storage.from('receipts').upload(fileName, receiptFile);
-        if (uploadError) {
-            console.error("Upload error:", uploadError);
-            toast.error("Erro ao enviar imagem. A despesa será salva sem o comprovante.");
-        } else {
-            const { data: urlData } = supabase.storage.from('receipts').getPublicUrl(fileName);
-            finalReceiptUrl = urlData.publicUrl;
-        }
-      }
-
-      // 3. Send to API
+      // 2. Send to API
       const endpoint = initialData ? `/api/expenses/${initialData.id}` : '/api/expenses';
       const method = initialData ? 'PUT' : 'POST';
 
@@ -187,7 +156,6 @@ export default function ExpenseForm({ divvyId, members, onSuccess, onCancel, ini
               category,
               description,
               date,
-              receiptPhotoUrl: finalReceiptUrl,
               splits: splitsPayload
           })
       });
@@ -216,7 +184,20 @@ export default function ExpenseForm({ divvyId, members, onSuccess, onCancel, ini
             <Input label="Descrição *" value={description} onChange={e => setDescription(e.target.value)} placeholder="Ex: Jantar Pizza" required />
          </div>
          
-         <Input label="Valor (R$) *" type="number" step="0.01" value={amount} onChange={e => setAmount(e.target.value)} required placeholder="0.00" />
+         <div>
+          <Input
+            label="Valor (somente números) *"
+            type="text"
+            inputMode="numeric"
+            value={amount}
+            onChange={e => setAmount(e.target.value.replace(/\D/g, ''))}
+            required
+            placeholder="Ex: 15000 = R$ 150,00"
+          />
+          <p className="mt-1 text-xs text-gray-500">
+            {amount ? `Total: ${formatMoney(amountValue)}` : 'Digite apenas números, sem vírgula ou ponto.'}
+          </p>
+         </div>
          
          <Input label="Data" type="date" value={date} onChange={e => setDate(e.target.value)} />
          
@@ -250,44 +231,6 @@ export default function ExpenseForm({ divvyId, members, onSuccess, onCancel, ini
                    </option>
                ))}
             </select>
-         </div>
-      </div>
-
-      {/* Receipt Upload */}
-      <div>
-         <label className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">Comprovante / Recibo</label>
-         <div className="flex items-center gap-4">
-            <div 
-                className="w-24 h-24 rounded-lg bg-gray-100 dark:bg-dark-800 border-2 border-dashed border-gray-300 dark:border-dark-600 flex items-center justify-center overflow-hidden cursor-pointer hover:bg-gray-50 dark:hover:bg-dark-700 transition-colors"
-                onClick={() => fileInputRef.current?.click()}
-            >
-                {previewUrl ? (
-                    <img src={previewUrl} alt="Preview" className="w-full h-full object-cover" />
-                ) : (
-                    <div className="text-center">
-                        <Camera size={20} className="mx-auto text-gray-400 mb-1" />
-                        <span className="text-[10px] text-gray-500">Adicionar</span>
-                    </div>
-                )}
-            </div>
-            
-            <div className="flex-1">
-                <input 
-                    type="file" 
-                    ref={fileInputRef} 
-                    className="hidden" 
-                    accept="image/*" 
-                    onChange={handleFileChange} 
-                />
-                <Button type="button" variant="outline" size="sm" onClick={() => fileInputRef.current?.click()}>
-                    <Upload size={14} className="mr-2" /> Escolher arquivo
-                </Button>
-                {previewUrl && (
-                    <Button type="button" variant="ghost" size="sm" className="ml-2 text-red-500" onClick={() => { setReceiptFile(null); setPreviewUrl(null); setReceiptUrl(null); }}>
-                        Remover
-                    </Button>
-                )}
-            </div>
          </div>
       </div>
 
@@ -334,8 +277,8 @@ export default function ExpenseForm({ divvyId, members, onSuccess, onCancel, ini
                      
                      {splitType === 'equal' && (
                          <span className="text-xs font-mono text-gray-500">
-                             {selectedParticipants.has(m.userid) 
-                                ? formatMoney(parseFloat(amount || '0') / selectedParticipants.size) 
+                             {selectedParticipants.has(m.userid)
+                                ? formatMoney(selectedParticipants.size ? amountValue / selectedParticipants.size : 0)
                                 : '-'}
                          </span>
                      )}
@@ -354,7 +297,7 @@ export default function ExpenseForm({ divvyId, members, onSuccess, onCancel, ini
                      {splitType === 'percentage' && (
                          <div className="flex items-center gap-2">
                              <span className="text-xs text-gray-400 font-mono">
-                                 {formatMoney((parseFloat(amount || '0') * (parseFloat(manualPercentages[m.userid] || '0'))) / 100)}
+                                 {formatMoney((amountValue * (parseFloat(manualPercentages[m.userid] || '0'))) / 100)}
                              </span>
                              <div className="relative">
                                 <input 

@@ -28,6 +28,19 @@ const DivvyCard: React.FC<DivvyCardProps> = ({ divvy }) => {
   
   const previewMembers = members.slice(0, 3);
   const remainingCount = memberCount > previewMembers.length ? memberCount - previewMembers.length : 0;
+  const memberTotals = (divvy.member_totals && divvy.member_totals.length > 0)
+    ? divvy.member_totals
+    : members.map((member) => ({
+        userid: member.userid,
+        paid: 0,
+        owed: 0,
+        email: member.email,
+        userprofiles: member.userprofiles
+      }));
+
+  const formatMoney = (val: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
+  const getMemberName = (member: typeof memberTotals[number]) =>
+    member.userprofiles?.displayname || member.userprofiles?.fullname || member.email?.split('@')[0] || 'Membro';
 
   return (
     <Link href={`/divvy/${divvy.id}`} className="block h-full group">
@@ -65,6 +78,39 @@ const DivvyCard: React.FC<DivvyCardProps> = ({ divvy }) => {
             <p className="text-sm text-gray-500 dark:text-gray-400 line-clamp-2 leading-relaxed">
               {divvy.description}
             </p>
+          )}
+
+          {memberTotals.length > 0 && (
+            <div className="mt-4 bg-gray-50 dark:bg-dark-800/70 rounded-2xl p-3 border border-gray-100 dark:border-dark-800">
+              <div className="flex items-center justify-between text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-2">
+                <span>Membros</span>
+                <span>Resumo</span>
+              </div>
+              <div className="space-y-2 max-h-40 overflow-y-auto pr-1">
+                {memberTotals.map((member) => (
+                  <div key={member.userid} className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <div className="w-7 h-7 rounded-full bg-white dark:bg-dark-900 border border-gray-200 dark:border-dark-700 flex items-center justify-center overflow-hidden shrink-0">
+                        {member.userprofiles?.avatarurl ? (
+                          <img src={member.userprofiles.avatarurl} alt={getMemberName(member)} className="w-full h-full object-cover" />
+                        ) : (
+                          <span className="text-[10px] font-bold text-gray-500 dark:text-gray-400">
+                            {getMemberName(member).charAt(0).toUpperCase()}
+                          </span>
+                        )}
+                      </div>
+                      <span className="text-xs font-semibold text-gray-700 dark:text-gray-200 truncate">
+                        {getMemberName(member)}
+                      </span>
+                    </div>
+                    <div className="text-right text-[10px] font-medium whitespace-nowrap">
+                      <div className="text-emerald-600 dark:text-emerald-400">Pagou {formatMoney(member.paid)}</div>
+                      <div className="text-amber-600 dark:text-amber-400">Deve {formatMoney(member.owed)}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
           )}
         </div>
 

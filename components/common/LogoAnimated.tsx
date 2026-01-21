@@ -1,19 +1,13 @@
+// components/common/LogoAnimated.tsx
 'use client';
-import { useState } from 'react';
+
 import Link from 'next/link';
+import { Logo } from './Logo';
 
 export default function LogoAnimated() {
-  const [hover, setHover] = useState(false);
   return (
-    <Link href="/" 
-      className="flex items-center gap-2 font-bold text-xl text-[#6366f1]"
-      onMouseEnter={() => setHover(true)}
-      onMouseLeave={() => setHover(false)}
-    >
-      <span className={`text-2xl transition-transform duration-300 ${hover ? 'rotate-12 scale-110' : ''}`}>
-        
-      </span>
-      Divvy
+    <Link href="/" className="inline-flex">
+      <Logo size="md" animated={true} />
     </Link>
   );
 }

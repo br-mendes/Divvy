@@ -1,7 +1,7 @@
 
 import React from 'react';
 import { Expense } from '../../types';
-import { FileText, Lock } from 'lucide-react';
+import { Lock } from 'lucide-react';
 
 interface ExpenseCardProps {
   expense: Expense;
@@ -20,7 +20,35 @@ const categoryIcons: Record<string, string> = {
   other: '💰',
 };
 
+function ColorDot({ color }: { color?: string | null }) {
+  return (
+    <span
+      className="inline-block w-2.5 h-2.5 rounded align-middle"
+      style={{ backgroundColor: color ?? '#64748B' }}
+      aria-hidden
+    />
+  );
+}
+
+function CategoryChip({ name, color }: { name?: string | null; color?: string | null }) {
+  if (!name) return null;
+  return (
+    <span className="inline-flex items-center gap-1 border rounded px-2 py-0.5 text-xs">
+      <ColorDot color={color} />
+      <span className="truncate">{name}</span>
+    </span>
+  );
+}
+
 const ExpenseCard: React.FC<ExpenseCardProps> = ({ expense, payerName, onClick, formatMoney }) => {
+  const categoryData = expense.category as
+    | string
+    | { name?: string | null; color?: string | null };
+  const categoryName =
+    typeof categoryData === 'string' ? categoryData : categoryData?.name;
+  const categoryColor =
+    typeof categoryData === 'string' ? null : categoryData?.color ?? null;
+
   return (
     <div 
       onClick={() => onClick(expense)} 
@@ -34,17 +62,22 @@ const ExpenseCard: React.FC<ExpenseCardProps> = ({ expense, payerName, onClick, 
           <p className="font-bold flex items-center gap-2 text-gray-900 dark:text-white truncate pr-2">
             <span className="truncate">{expense.description || expense.category}</span>
             <span className="flex-shrink-0 flex gap-1">
-              {expense.receiptphotourl && (
-                <span title="Com comprovante"><FileText size={14} className="text-gray-400" /></span>
-              )}
               {expense.locked && (
                 <span title="Bloqueado"><Lock size={14} className="text-red-500" /></span>
               )}
             </span>
           </p>
-          <p className="text-xs text-gray-500 truncate">
-            {new Date(expense.date).toLocaleDateString()} • {payerName}
-          </p>
+          <div className="text-xs text-gray-500 flex flex-wrap items-center gap-2">
+            <span>{new Date(expense.date).toLocaleDateString()}</span>
+            <span>•</span>
+            <span>pagou: <b>{payerName}</b></span>
+            {categoryName && (
+              <>
+                <span>•</span>
+                <CategoryChip name={categoryName} color={categoryColor} />
+              </>
+            )}
+          </div>
         </div>
       </div>
       <span className="font-bold text-lg text-gray-900 dark:text-white whitespace-nowrap pl-2">

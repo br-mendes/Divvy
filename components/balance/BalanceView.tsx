@@ -1,11 +1,13 @@
 
+"use client";
+
 import React, { useMemo, useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { supabase } from '../../lib/supabase';
-import { DivvyMember, Expense, ExpenseSplit, Transaction, PaymentMethod } from '../../types';
+import { BalancePair, DivvyMember, Expense, ExpenseSplit, Transaction, PaymentMethod } from '../../types';
 import { Button } from '../ui/Button';
 import { Modal } from '../ui/Modal';
-import { ArrowRight, Wallet, AlertTriangle, CheckCircle, Clock, XCircle, History, ChevronDown, ChevronUp, Copy, Phone, QrCode, Banknote, ArrowUpRight, ArrowDownLeft } from 'lucide-react';
+import { ArrowRight, Wallet, CheckCircle, Clock, XCircle, History, ChevronDown, ChevronUp, Copy, Phone, QrCode, Banknote, ArrowUpRight, ArrowDownLeft } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { POPULAR_BANKS } from '../../lib/constants';
 
@@ -16,7 +18,7 @@ interface BalanceViewProps {
   allSplits: ExpenseSplit[];
   transactions: Transaction[];
   onUpdateTransaction: (t: Transaction, action: 'confirm' | 'reject') => void;
-  onMarkAsSent: (toUserId: string, amount: number) => void;
+  onMarkAsSent: (transactionId: string) => void;
 }
 
 export default function BalanceView({
@@ -30,10 +32,12 @@ export default function BalanceView({
 }: BalanceViewProps) {
   const { user } = useAuth();
   const [showHistory, setShowHistory] = useState(false);
+  const [plan, setPlan] = useState<BalancePair[]>([]);
+  const [planLoading, setPlanLoading] = useState(false);
   
   // Payment Modal State
   const [paymentModalOpen, setPaymentModalOpen] = useState(false);
-  const [selectedDebt, setSelectedDebt] = useState<{ to: string; amount: number } | null>(null);
+  const [selectedDebt, setSelectedDebt] = useState<{ to: string; amount: number; transactionId: string } | null>(null);
   
   // Loaded Payment Methods for the target user
   const [targetPaymentMethods, setTargetPaymentMethods] = useState<PaymentMethod[]>([]);
@@ -53,58 +57,82 @@ export default function BalanceView({
 
   const formatMoney = (v: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v);
 
-  const calculateBalances = useMemo(() => {
-    const balances: Record<string, number> = {};
-    members.forEach(m => balances[m.userid] = 0);
+  useEffect(() => {
+    if (!divvyId) return;
+    let isMounted = true;
+    const controller = new AbortController();
 
-    // Add payments made (creditor)
-    expenses.forEach(e => { 
-        if (balances[e.paidbyuserid] !== undefined) balances[e.paidbyuserid] += e.amount; 
-    });
-    
-    // Subtract share of expenses (debtor)
-    allSplits.forEach(s => { 
-        if (balances[s.participantuserid] !== undefined) balances[s.participantuserid] -= s.amountowed; 
-    });
-    
-    // Process Confirmed Transactions (Settlements)
-    transactions.filter(t => t.status === 'confirmed').forEach(t => {
-      if (balances[t.fromuserid] !== undefined) balances[t.fromuserid] += t.amount; 
-      if (balances[t.touserid] !== undefined) balances[t.touserid] -= t.amount;     
-    });
+    const fetchBalances = async () => {
+      setPlanLoading(true);
+      try {
+        const response = await fetch(`/api/balance.active?divvyId=${divvyId}`, {
+          signal: controller.signal
+        });
+        if (!response.ok) {
+          throw new Error('Erro ao buscar os saldos');
+        }
+        const data = await response.json();
+        if (isMounted) {
+          setPlan(data?.balances || []);
+        }
+      } catch (error: any) {
+        if (error?.name !== 'AbortError') {
+          console.error('Erro ao buscar saldos:', error);
+          if (isMounted) setPlan([]);
+        }
+      } finally {
+        if (isMounted) setPlanLoading(false);
+      }
+    };
 
-    // Simplify Debts Algorithm
-    const plan: { from: string; to: string; amount: number }[] = [];
-    const debtors = Object.entries(balances).filter(([_, b]) => b < -0.01).map(([id, b]) => ({ id, b: Math.abs(b) }));
-    const creditors = Object.entries(balances).filter(([_, b]) => b > 0.01).map(([id, b]) => ({ id, b }));
+    fetchBalances();
 
-    let i = 0, j = 0;
-    while (i < debtors.length && j < creditors.length) {
-      const amount = Math.min(debtors[i].b, creditors[j].b);
-      if (amount > 0.01) plan.push({ from: debtors[i].id, to: creditors[j].id, amount });
-      debtors[i].b -= amount; creditors[j].b -= amount;
-      if (debtors[i].b < 0.01) i++;
-      if (creditors[j].b < 0.01) j++;
-    }
+    return () => {
+      isMounted = false;
+      controller.abort();
+    };
+  }, [divvyId, expenses, allSplits, transactions]);
 
-    return { plan, balances };
-  }, [expenses, allSplits, members, transactions]);
-
-  const { plan } = calculateBalances;
+  const getPlanName = (userId: string, displayName?: string | null) => {
+    return displayName || getMemberName(userId);
+  };
 
   // Separate transactions
   const pendingReceived = transactions.filter(t => t.status === 'paymentsent' && t.touserid === user?.id);
   const rejectedSent = transactions.filter(t => t.status === 'rejected' && t.fromuserid === user?.id);
   const historyTransactions = transactions.filter(t => t.status === 'confirmed' || t.status === 'rejected' || (t.status === 'paymentsent' && t.touserid !== user?.id));
 
-  const handlePayClick = async (to: string, amount: number) => {
-    setSelectedDebt({ to, amount });
+  const handlePayClick = async (to: string, amount: number, existingTransactionId?: string) => {
     setPaymentModalOpen(true);
     setMethodsLoading(true);
     setTargetPaymentMethods([]);
 
-    // Fetch Payment Methods for the target user
     try {
+        let transactionId = existingTransactionId;
+
+        if (!transactionId) {
+            const response = await fetch('/api/payments/create-pending', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    divvyId,
+                    fromUserId: user?.id,
+                    toUserId: to,
+                    amount
+                })
+            });
+
+            const data = await response.json();
+            if (!response.ok) throw new Error(data.error || 'Erro ao iniciar pagamento');
+            transactionId = data.transaction?.id;
+        }
+
+        if (!transactionId) {
+            throw new Error('Transação pendente não encontrada.');
+        }
+
+        setSelectedDebt({ to, amount, transactionId });
+
         const { data } = await supabase
             .from('payment_methods')
             .select('*')
@@ -115,6 +143,8 @@ export default function BalanceView({
         if (data) setTargetPaymentMethods(data);
     } catch (e) {
         console.error("Error fetching payment methods", e);
+        toast.error('Não foi possível iniciar o pagamento.');
+        setPaymentModalOpen(false);
     } finally {
         setMethodsLoading(false);
     }
@@ -122,7 +152,7 @@ export default function BalanceView({
 
   const confirmPayment = () => {
     if (selectedDebt) {
-      onMarkAsSent(selectedDebt.to, selectedDebt.amount);
+      onMarkAsSent(selectedDebt.transactionId);
       setPaymentModalOpen(false);
       setSelectedDebt(null);
     }
@@ -192,7 +222,11 @@ export default function BalanceView({
         </h3>
         
         <div className="space-y-3">
-          {plan.length === 0 ? (
+          {planLoading ? (
+            <div className="text-center py-10 text-sm text-gray-500 dark:text-gray-400">
+              Carregando saldos...
+            </div>
+          ) : plan.length === 0 ? (
             <div className="text-center py-10 flex flex-col items-center">
                <div className="w-16 h-16 bg-green-50 dark:bg-green-900/20 rounded-full flex items-center justify-center mb-3">
                   <CheckCircle className="text-green-500 w-8 h-8" />
@@ -201,7 +235,10 @@ export default function BalanceView({
                <p className="text-sm text-gray-500 dark:text-gray-400">Ninguém deve nada neste grupo.</p>
             </div>
           ) : (
-            plan.map((p, i) => (
+            plan.map((p, i) => {
+              const fromName = p.from === user?.id ? 'Você' : getPlanName(p.from, p.fromDisplayName);
+              const toName = p.to === user?.id ? 'Você' : getPlanName(p.to, p.toDisplayName);
+              return (
             <div key={i} className="p-4 bg-gray-50 dark:bg-dark-800/50 rounded-xl flex flex-col sm:flex-row justify-between items-center gap-4 border border-gray-100 dark:border-dark-700 relative overflow-hidden">
               {/* Highlight if user is involved */}
               {(p.from === user?.id || p.to === user?.id) && (
@@ -211,10 +248,10 @@ export default function BalanceView({
               <div className="flex items-center gap-3 text-gray-900 dark:text-white w-full sm:w-auto justify-center sm:justify-start">
                 <div className="flex items-center gap-2">
                    <div className="w-8 h-8 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center text-xs font-bold text-red-600 dark:text-red-400">
-                      {getMemberName(p.from).charAt(0)}
+                      {fromName.charAt(0)}
                    </div>
                    <span className={`font-semibold ${p.from === user?.id ? 'text-red-600 dark:text-red-400' : ''}`}>
-                     {p.from === user?.id ? 'Você' : getMemberName(p.from)}
+                     {fromName}
                    </span>
                 </div>
                 
@@ -225,10 +262,10 @@ export default function BalanceView({
 
                 <div className="flex items-center gap-2">
                    <div className="w-8 h-8 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center text-xs font-bold text-green-600 dark:text-green-400">
-                      {getMemberName(p.to).charAt(0)}
+                      {toName.charAt(0)}
                    </div>
                    <span className={`font-semibold ${p.to === user?.id ? 'text-green-600 dark:text-green-400' : ''}`}>
-                     {p.to === user?.id ? 'Você' : getMemberName(p.to)}
+                     {toName}
                    </span>
                 </div>
               </div>
@@ -237,11 +274,22 @@ export default function BalanceView({
                 <span className="font-bold text-gray-900 dark:text-white text-lg">{formatMoney(p.amount)}</span>
                 
                 {/* Pay Button Logic */}
-                {p.from === user?.id && !transactions.some(t => t.fromuserid === p.from && t.touserid === p.to && (t.status === 'pending' || t.status === 'paymentsent')) && (
-                  <Button size="sm" className="bg-green-600 text-white hover:bg-green-700 shadow-md shadow-green-500/20" onClick={() => handlePayClick(p.to, p.amount)}>
-                    Paguei
-                  </Button>
-                )}
+                {p.from === user?.id && (() => {
+                  const pendingTransaction = transactions.find(t => t.fromuserid === p.from && t.touserid === p.to && t.status === 'pending');
+                  const hasPaymentSent = transactions.some(t => t.fromuserid === p.from && t.touserid === p.to && t.status === 'paymentsent');
+
+                  if (hasPaymentSent) return null;
+
+                  return (
+                    <Button
+                      size="sm"
+                      className="bg-green-600 text-white hover:bg-green-700 shadow-md shadow-green-500/20"
+                      onClick={() => handlePayClick(p.to, p.amount, pendingTransaction?.id)}
+                    >
+                      {pendingTransaction ? 'Registrar envio' : 'Paguei'}
+                    </Button>
+                  );
+                })()}
                 
                 {/* Status Badge */}
                 {p.from === user?.id && transactions.some(t => t.fromuserid === p.from && t.touserid === p.to && t.status === 'paymentsent') && (
@@ -251,7 +299,8 @@ export default function BalanceView({
                 )}
               </div>
             </div>
-          ))) }
+            );
+          })) }
         </div>
       </div>
 

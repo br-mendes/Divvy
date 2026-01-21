@@ -120,7 +120,7 @@ export default function SignupPage() {
 
         {submitError && (
           <div className={styles.errorAlert}>
-            <span>⚠️</span>
+            <span aria-hidden="true">!</span>
             <p>{submitError}</p>
           </div>
         )}
@@ -211,9 +211,7 @@ export default function SignupPage() {
                 </Link>
               </label>
             </div>
-            {errors.terms && (
-              <p className={styles.checkboxError}>{errors.terms}</p>
-            )}
+            {errors.terms && <p className={styles.checkboxError}>{errors.terms}</p>}
 
             <div className={styles.checkbox}>
               <input

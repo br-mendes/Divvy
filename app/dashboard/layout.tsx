@@ -1,97 +1,28 @@
+// app/dashboard/layout.tsx
+
 'use client';
 
-import React, { useEffect } from 'react';
-import { useRouter } from 'next/navigation';
-import Link from 'next/link';
 import { useAuth } from '@/hooks/useAuth';
-import { Logo } from '@/components/common/Logo';
-import { Button } from '@/components/common/Button';
-import styles from './layout.module.css';
+import LogoAnimated from '@/components/common/LogoAnimated';
+import Button from '@/components/common/Button';
 
-export default function DashboardLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
-  const router = useRouter();
-  const { user, logout, isAuthenticated, loading } = useAuth();
-
-  useEffect(() => {
-    // TODO: Descomentar após implementar sistema de sessão
-    // if (!isAuthenticated && !loading) {
-    //   router.push('/login');
-    // }
-  }, [isAuthenticated, loading, router]);
-
-  const handleLogout = async () => {
-    try {
-      await logout();
-      router.push('/');
-    } catch (error) {
-      console.error('Erro ao fazer logout:', error);
-    }
-  };
+export default function DashboardLayout({ children }: { children: React.ReactNode }) {
+  const { user, logout } = useAuth();
 
   return (
-    <div className={styles.layoutContainer}>
-      <aside className={styles.sidebar}>
-        <div className={styles.sidebarHeader}>
-          <Logo size="md" animated={false} />
-        </div>
-
-        <nav className={styles.sidebarNav}>
-          <Link href="/dashboard" className={styles.navItem}>
-             Dashboard
-          </Link>
-          <Link href="/dashboard/divvies" className={styles.navItem}>
-             Minhas Divvies
-          </Link>
-          <Link href="/dashboard/create-divvy" className={styles.navItem}>
-             Nova Divvy
-          </Link>
-          <Link href="/dashboard/expenses" className={styles.navItem}>
-             Despesas
-          </Link>
-          <Link href="/dashboard/balances" className={styles.navItem}>
-             Saldos
-          </Link>
-        </nav>
-
-        <div className={styles.sidebarFooter}>
-          <div className={styles.userInfo}>
-            <div className={styles.avatar}>{user?.full_name?.charAt(0) || '?'}</div>
-            <div className={styles.userDetails}>
-              <p className={styles.userName}>{user?.full_name || 'Usuário'}</p>
-              <p className={styles.userEmail}>{user?.email}</p>
-            </div>
+    <div className="min-h-screen bg-gray-50">
+      <header className="bg-white border-b border-gray-200 sticky top-0 z-40">
+        <div className="max-w-7xl mx-auto px-4 py-4 flex justify-between items-center">
+          <LogoAnimated />
+          <div className="flex items-center gap-4">
+            <span className="hidden sm:inline text-sm text-gray-600">{user?.email}</span>
+            <Button variant="outline" size="sm" onClick={() => logout()}>
+              Sair
+            </Button>
           </div>
-          <Button
-            variant="ghost"
-            size="sm"
-            fullWidth
-            onClick={handleLogout}
-          >
-            Sair
-          </Button>
         </div>
-      </aside>
-
-      <main className={styles.mainContent}>
-        <header className={styles.topBar}>
-          <h1 className={styles.pageTitle}>Dashboard</h1>
-          <div className={styles.topBarRight}>
-            <Link href="/dashboard/settings">
-              <Button variant="ghost" size="sm">
-                 Configurações
-              </Button>
-            </Link>
-          </div>
-        </header>
-
-        <div className={styles.contentArea}>
-          {children}
-        </div>
-      </main>
+      </header>
+      <main className="max-w-7xl mx-auto px-4 py-8">{children}</main>
     </div>
   );
 }
