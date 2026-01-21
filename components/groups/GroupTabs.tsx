@@ -1,89 +1,72 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
-import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { ExpensesPanel } from '@/components/groups/ExpensesPanel';
-import { MembersPanel } from '@/components/groups/MembersPanel';
-import { InvitesPanel } from '@/components/groups/InvitesPanel';
-import { RemovalRequestsPanel } from '@/components/groups/RemovalRequestsPanel';
+import type { ReactNode } from 'react';
+import { BalancesPanel } from '@/components/groups/BalancesPanel';
+import { PaymentsPanel } from '@/components/groups/PaymentsPanel';
 
-type TabKey = 'members' | 'invites' | 'requests' | 'expenses';
+type TabKey = 'members' | 'invites' | 'requests' | 'expenses' | 'balances' | 'payments';
+
+type Tab = {
+  key: TabKey;
+  label: string;
+};
+
+type GroupTabsProps = {
+  divvyId: string;
+  tab: TabKey;
+  onChange: (tab: TabKey) => void;
+  membersPanel?: ReactNode;
+  invitesPanel?: ReactNode;
+  requestsPanel?: ReactNode;
+  expensesPanel?: ReactNode;
+};
 
 export function GroupTabs({
   divvyId,
-  membersCount,
-}: {
-  divvyId: string;
-  membersCount: number;
-}) {
-  const router = useRouter();
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
+  tab,
+  onChange,
+  membersPanel,
+  invitesPanel,
+  requestsPanel,
+  expensesPanel,
+}: GroupTabsProps) {
+  const base: Tab[] = [
+    { key: 'members', label: 'Membros' },
+    { key: 'invites', label: 'Convites' },
+    { key: 'requests', label: 'Pedidos' },
+    { key: 'expenses', label: 'Despesas' },
+  ];
 
-  const initialTab = (searchParams.get('tab') as TabKey) || 'members';
-  const [tab, setTab] = useState<TabKey>(initialTab);
-
-  useEffect(() => {
-    const urlTab = (searchParams.get('tab') as TabKey) || 'members';
-    // Mantém em sincronia se alguém mexer no URL
-    setTab(urlTab);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchParams.get('tab')]);
-
-  function go(next: TabKey) {
-    setTab(next);
-    const sp = new URLSearchParams(searchParams.toString());
-    sp.set('tab', next);
-    router.replace(`${pathname}?${sp.toString()}`);
-  }
-
-  const tabs = useMemo(
-    () => [
-      { key: 'expenses' as const, label: 'Despesas' },
-      { key: 'members' as const, label: `Membros (${membersCount})` },
-      { key: 'invites' as const, label: 'Convites' },
-      { key: 'requests' as const, label: 'Pedidos' },
-    ],
-    [membersCount],
-  );
+  base.push({ key: 'balances', label: 'Saldos' });
+  base.push({ key: 'payments', label: 'Pagamentos' });
 
   return (
-    <div className="border rounded">
-      {/* Tabs header */}
-      <div className="flex gap-2 border-b p-2 overflow-x-auto">
-        {tabs.map((t) => (
-          <button
-            key={t.key}
-            className={[
-              'px-3 py-2 rounded border text-sm whitespace-nowrap',
-              tab === t.key ? 'font-semibold' : 'opacity-70',
-            ].join(' ')}
-            onClick={() => go(t.key)}
-          >
-            {t.label}
-          </button>
-        ))}
+    <div className="space-y-4">
+      <div className="border-b border-gray-200 dark:border-dark-700">
+        <nav className="flex space-x-6 overflow-x-auto scrollbar-hide">
+          {base.map((item) => (
+            <button
+              key={item.key}
+              onClick={() => onChange(item.key)}
+              className={`pb-3 px-1 border-b-2 font-medium text-sm transition-colors whitespace-nowrap ${
+                tab === item.key
+                  ? 'border-brand-500 text-brand-600 dark:text-brand-400'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
+              }`}
+            >
+              {item.label}
+            </button>
+          ))}
+        </nav>
       </div>
 
-      {/* Tabs content */}
-      <div className="p-4">
-        {tab === 'expenses' && <ExpensesPanel divvyId={divvyId} />}
-        {tab === 'members' && <MembersPanel divvyId={divvyId} />}
-        {tab === 'invites' && <InvitesPanel divvyId={divvyId} />}
-
-        {/*
-          Important: o RemovalRequestsPanel já retorna null em 403, então:
-          - Se usuário não tiver permissão, a aba “Pedidos” fica vazia.
-          - A gente trata isso com um texto de fallback.
-        */}
-        {tab === 'requests' && (
-          <div className="space-y-3">
-            <RemovalRequestsPanel divvyId={divvyId} />
-            <p className="text-sm opacity-70">
-              Se você não for criador/admin do grupo (ou admin global), esta seção não aparece.
-            </p>
-          </div>
-        )}
+      <div className="min-h-[200px]">
+        {tab === 'members' && membersPanel}
+        {tab === 'invites' && invitesPanel}
+        {tab === 'requests' && requestsPanel}
+        {tab === 'expenses' && expensesPanel}
+        {tab === 'balances' && <BalancesPanel divvyId={divvyId} />}
+        {tab === 'payments' && <PaymentsPanel divvyId={divvyId} />}
       </div>
     </div>
   );
