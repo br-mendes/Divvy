@@ -1,63 +1,85 @@
 'use client';
 
-import type { ReactNode } from 'react';
+import { ReactNode } from 'react';
+import { CategoriesPanel } from '@/components/groups/CategoriesPanel';
 
-import { PeriodsPanel } from './PeriodsPanel';
+type TabKey =
+  | 'members'
+  | 'invites'
+  | 'requests'
+  | 'expenses'
+  | 'balances'
+  | 'payments'
+  | 'periods'
+  | 'categories';
 
-type Tab = {
-  key: TabKey;
-  label: string;
-};
-
-type Permissions = {
-  canManagePeriods?: boolean;
-};
-
-export type TabKey = 'periods' | (string & {});
+type TabItem = { key: TabKey; label: string };
 
 type GroupTabsProps = {
   divvyId: string;
-  permissions?: Permissions;
   tab: TabKey;
   onTabChange: (tab: TabKey) => void;
-  tabs: Tab[];
-  renderTab: (tab: TabKey) => ReactNode;
+  members?: ReactNode;
+  invites?: ReactNode;
+  requests?: ReactNode;
+  expenses?: ReactNode;
+  balances?: ReactNode;
+  payments?: ReactNode;
+  periods?: ReactNode;
 };
 
 export function GroupTabs({
   divvyId,
-  permissions,
   tab,
   onTabChange,
-  tabs,
-  renderTab,
+  members,
+  invites,
+  requests,
+  expenses,
+  balances,
+  payments,
+  periods,
 }: GroupTabsProps) {
-  const base = [...tabs];
+  const base: TabItem[] = [
+    { key: 'expenses', label: 'Despesas' },
+    { key: 'balances', label: 'Saldos' },
+    { key: 'payments', label: 'Pagamentos' },
+    { key: 'periods', label: 'Períodos' },
+    { key: 'members', label: 'Membros' },
+    { key: 'invites', label: 'Convites' },
+    { key: 'requests', label: 'Pedidos' },
+  ];
 
-  if (permissions?.canManagePeriods) base.push({ key: 'periods', label: 'Períodos' });
+  base.push({ key: 'categories', label: 'Categorias' });
 
   return (
     <div className="space-y-4">
-      <div className="border-b border-gray-200">
-        <nav className="flex space-x-8 overflow-x-auto scrollbar-hide">
-          {base.map((item) => (
-            <button
-              key={item.key}
-              onClick={() => onTabChange(item.key)}
-              className={`pb-4 px-1 border-b-2 font-medium text-sm transition-colors whitespace-nowrap ${
-                tab === item.key
-                  ? 'border-brand-500 text-brand-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700'
-              }`}
-            >
-              {item.label}
-            </button>
-          ))}
-        </nav>
-      </div>
+      <nav className="flex flex-wrap gap-2">
+        {base.map((item) => (
+          <button
+            key={item.key}
+            className={`rounded border px-3 py-1 text-sm ${
+              tab === item.key
+                ? 'border-slate-900 text-slate-900'
+                : 'border-slate-300 text-slate-500'
+            }`}
+            onClick={() => onTabChange(item.key)}
+            type="button"
+          >
+            {item.label}
+          </button>
+        ))}
+      </nav>
 
-      <div className="min-h-[200px]">
-        {tab === 'periods' ? <PeriodsPanel divvyId={divvyId} /> : renderTab(tab)}
+      <div>
+        {tab === 'members' && members}
+        {tab === 'invites' && invites}
+        {tab === 'requests' && requests}
+        {tab === 'expenses' && expenses}
+        {tab === 'balances' && balances}
+        {tab === 'payments' && payments}
+        {tab === 'periods' && periods}
+        {tab === 'categories' && <CategoriesPanel divvyId={divvyId} />}
       </div>
     </div>
   );
