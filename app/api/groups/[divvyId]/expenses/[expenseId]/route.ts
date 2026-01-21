@@ -1,39 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabase } from '@/lib/supabase/server';
+import { assertDateNotLocked } from '@/lib/divvy/periodLocks';
 
-export async function GET(
-  _req: NextRequest,
-  { params }: { params: { divvyId: string; expenseId: string } }
-) {
-  const supabase = createServerSupabase();
-  const { divvyId, expenseId } = params;
-
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
-  if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-
-  const { data: expense, error: expErr } = await supabase
-    .from('expenses')
-    .select('*')
-    .eq('id', expenseId)
-    .eq('divvyid', divvyId)
-    .single();
-
-  if (expErr || !expense) {
-    return NextResponse.json({ error: 'Despesa não encontrada' }, { status: 404 });
+const toCents = (value: unknown) => {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return Math.round(value * 100);
   }
-
-  const { data: splits, error: spErr } = await supabase
-    .from('expense_splits')
-    .select('id, userid, amount_cents')
-    .eq('expenseid', expenseId)
-    .order('amount_cents', { ascending: false });
-
-  if (spErr) return NextResponse.json({ error: spErr.message }, { status: 500 });
-
-  return NextResponse.json({ expense, splits: splits ?? [] });
-}
+  if (typeof value === 'string') {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) {
+      return Math.round(parsed * 100);
+    }
+  }
+  return null;
+};
 
 export async function PATCH(
   req: NextRequest,
@@ -47,26 +27,77 @@ export async function PATCH(
   } = await supabase.auth.getSession();
   if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const body = await req.json();
-
-  const patch: Record<string, string | number | null> = {};
-  if (body.title != null) patch.title = String(body.title).trim();
-  if (body.description !== undefined) patch.description = String(body.description).trim() || null;
-  if (body.payerUserId != null) patch.payeruserid = String(body.payerUserId).trim();
-  if (body.expenseDate != null) patch.expense_date = String(body.expenseDate).trim();
-  if (body.currency != null) patch.currency = String(body.currency).trim().toUpperCase();
-  if (body.amountCents != null) patch.amount_cents = Math.round(Number(body.amountCents));
-
-  const { data, error } = await supabase
-    .from('expenses')
-    .update(patch)
-    .eq('id', expenseId)
+  const { data: membership, error: membershipError } = await supabase
+    .from('divvymembers')
+    .select('id')
     .eq('divvyid', divvyId)
+    .eq('userid', session.user.id)
+    .maybeSingle();
+
+  if (membershipError) {
+    return NextResponse.json({ error: membershipError.message }, { status: 500 });
+  }
+
+  if (!membership) {
+    return NextResponse.json({ error: 'Você não é membro deste grupo.' }, { status: 403 });
+  }
+
+  const { data: expense, error: expenseFetchError } = await supabase
+    .from('expenses')
+    .select('id, expense_date')
+    .eq('divvyid', divvyId)
+    .eq('id', expenseId)
+    .single();
+
+  if (expenseFetchError) {
+    return NextResponse.json({ error: expenseFetchError.message }, { status: 500 });
+  }
+
+  if (!expense) {
+    return NextResponse.json({ error: 'Expense not found' }, { status: 404 });
+  }
+
+  await assertDateNotLocked(divvyId, expense.expense_date);
+
+  const body = await req.json();
+  const updates: Record<string, unknown> = {};
+
+  if (typeof body?.description === 'string') updates.description = body.description;
+  if (typeof body?.category === 'string') updates.category = body.category;
+  if (typeof body?.currency === 'string') updates.currency = body.currency;
+  if (typeof body?.expense_date === 'string') updates.expense_date = body.expense_date;
+  if (typeof body?.payeruserid === 'string') updates.payeruserid = body.payeruserid;
+  if (typeof body?.receiptPhotoUrl === 'string') updates.receiptphotourl = body.receiptPhotoUrl;
+  if (typeof body?.receiptphotourl === 'string') updates.receiptphotourl = body.receiptphotourl;
+
+  if (body?.amount_cents != null || body?.amount != null) {
+    const amountCents =
+      typeof body?.amount_cents === 'number' && Number.isFinite(body.amount_cents)
+        ? Math.round(body.amount_cents)
+        : toCents(body?.amount);
+    if (!amountCents || amountCents <= 0) {
+      return NextResponse.json({ error: 'amount inválido' }, { status: 400 });
+    }
+    updates.amount_cents = amountCents;
+  }
+
+  if (!Object.keys(updates).length) {
+    return NextResponse.json({ error: 'Nenhuma alteração enviada.' }, { status: 400 });
+  }
+
+  const { data: updated, error: updateError } = await supabase
+    .from('expenses')
+    .update(updates)
+    .eq('divvyid', divvyId)
+    .eq('id', expenseId)
     .select('*')
     .single();
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json({ expense: data });
+  if (updateError) {
+    return NextResponse.json({ error: updateError.message }, { status: 500 });
+  }
+
+  return NextResponse.json({ expense: updated });
 }
 
 export async function DELETE(
@@ -81,12 +112,56 @@ export async function DELETE(
   } = await supabase.auth.getSession();
   if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const { error } = await supabase
+  const { data: membership, error: membershipError } = await supabase
+    .from('divvymembers')
+    .select('id')
+    .eq('divvyid', divvyId)
+    .eq('userid', session.user.id)
+    .maybeSingle();
+
+  if (membershipError) {
+    return NextResponse.json({ error: membershipError.message }, { status: 500 });
+  }
+
+  if (!membership) {
+    return NextResponse.json({ error: 'Você não é membro deste grupo.' }, { status: 403 });
+  }
+
+  const { data: expense, error: expenseFetchError } = await supabase
+    .from('expenses')
+    .select('id, expense_date')
+    .eq('divvyid', divvyId)
+    .eq('id', expenseId)
+    .single();
+
+  if (expenseFetchError) {
+    return NextResponse.json({ error: expenseFetchError.message }, { status: 500 });
+  }
+
+  if (!expense) {
+    return NextResponse.json({ error: 'Expense not found' }, { status: 404 });
+  }
+
+  await assertDateNotLocked(divvyId, expense.expense_date);
+
+  const { error: splitsError } = await supabase
+    .from('expense_splits')
+    .delete()
+    .eq('expenseid', expenseId);
+
+  if (splitsError) {
+    return NextResponse.json({ error: splitsError.message }, { status: 500 });
+  }
+
+  const { error: deleteError } = await supabase
     .from('expenses')
     .delete()
-    .eq('id', expenseId)
-    .eq('divvyid', divvyId);
+    .eq('divvyid', divvyId)
+    .eq('id', expenseId);
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json({ ok: true });
+  if (deleteError) {
+    return NextResponse.json({ error: deleteError.message }, { status: 500 });
+  }
+
+  return NextResponse.json({ success: true });
 }

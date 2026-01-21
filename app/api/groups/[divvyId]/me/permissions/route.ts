@@ -1,31 +1,39 @@
 import { NextResponse } from 'next/server';
-import { getMyRoleInDivvy } from '@/lib/divvy/permissions';
-import { isSystemAdminEmail } from '@/lib/auth/admin';
+import { createServerSupabase } from '@/lib/supabase/server';
 
 export async function GET(
   _req: Request,
   { params }: { params: { divvyId: string } }
 ) {
+  const supabase = createServerSupabase();
   const divvyId = params.divvyId;
 
-  const { session, role, isCreator } = await getMyRoleInDivvy(divvyId);
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
   if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const isSystemAdmin = isSystemAdminEmail(session.user.email);
+  const { data: membership, error: membershipError } = await supabase
+    .from('divvymembers')
+    .select('role')
+    .eq('divvyid', divvyId)
+    .eq('userid', session.user.id)
+    .maybeSingle();
 
-  const canManageGroup = isSystemAdmin || isCreator || role === 'admin';
+  if (membershipError) {
+    return NextResponse.json({ error: membershipError.message }, { status: 500 });
+  }
 
-  // Por enquanto:
-  // - Convites: criador/admin/system admin
-  // - Pedidos de remoção: criador/admin/system admin
-  // (membros podem "pedir remoção" via endpoint remove, mas não aprovar)
+  if (!membership) {
+    return NextResponse.json({ error: 'Você não é membro deste grupo.' }, { status: 403 });
+  }
+
+  const role = membership.role ?? 'member';
+  const canManageGroup = role === 'admin' || role === 'creator';
+
   return NextResponse.json({
-    permissions: {
-      isSystemAdmin,
-      isCreator,
-      role: role ?? 'none',
-      canManageInvites: canManageGroup,
-      canApproveRemovalRequests: canManageGroup,
-    },
+    role,
+    canManageGroup,
+    canManagePeriods: canManageGroup,
   });
 }
