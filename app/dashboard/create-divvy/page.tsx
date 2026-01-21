@@ -1,5 +1,3 @@
-// app/dashboard/create-divvy/page.tsx
-
 'use client';
 
 import { useState } from 'react';
@@ -22,11 +20,11 @@ interface DivvyFormData {
 }
 
 const divvyTypes = [
-  { value: 'trip' as DivvyType, label: '✈️ Viagem', description: 'Despesas de viagem em grupo' },
-  { value: 'roommate' as DivvyType, label: '🏠 República', description: 'Contas compartilhadas da casa' },
-  { value: 'couple' as DivvyType, label: '❤️ Casal', description: 'Despesas com seu parceiro' },
-  { value: 'event' as DivvyType, label: '🎉 Evento', description: 'Organize festas e eventos' },
-  { value: 'other' as DivvyType, label: '📝 Outro', description: 'Qualquer outro tipo' },
+  { value: 'trip' as DivvyType, label: ' Viagem', description: 'Despesas de viagem em grupo' },
+  { value: 'roommate' as DivvyType, label: ' República', description: 'Contas compartilhadas da casa' },
+  { value: 'couple' as DivvyType, label: ' Casal', description: 'Despesas com seu parceiro' },
+  { value: 'event' as DivvyType, label: ' Evento', description: 'Organize festas e eventos' },
+  { value: 'other' as DivvyType, label: ' Outro', description: 'Qualquer outro tipo' },
 ];
 
 const steps = ['Tipo', 'Informações', 'Membros', 'Confirmação'];
@@ -136,7 +134,6 @@ export default function CreateDivvyPage() {
 
         <Stepper steps={steps} currentStep={currentStep} />
 
-        {/* Step 0: Select Type */}
         {currentStep === 0 && (
           <div className={styles.stepContent}>
             <h2>Qual é o tipo de Divvy?</h2>
@@ -164,7 +161,6 @@ export default function CreateDivvyPage() {
           </div>
         )}
 
-        {/* Step 1: Information */}
         {currentStep === 1 && (
           <div className={styles.stepContent}>
             <h2>Informações da Divvy</h2>
@@ -202,16 +198,15 @@ export default function CreateDivvyPage() {
                   value={formData.currency}
                   onChange={(e) => setFormData({ ...formData, currency: e.target.value })}
                 >
-                  <option value="BRL">🇧🇷 Real (BRL)</option>
-                  <option value="USD">🇺🇸 Dólar (USD)</option>
-                  <option value="EUR">🇪🇺 Euro (EUR)</option>
+                  <option value="BRL"> Real (BRL)</option>
+                  <option value="USD"> Dólar (USD)</option>
+                  <option value="EUR"> Euro (EUR)</option>
                 </select>
               </div>
             </form>
           </div>
         )}
 
-        {/* Step 2: Members */}
         {currentStep === 2 && (
           <div className={styles.stepContent}>
             <h2>Adicione os Membros</h2>
@@ -256,7 +251,6 @@ export default function CreateDivvyPage() {
           </div>
         )}
 
-        {/* Step 3: Confirmation */}
         {currentStep === 3 && (
           <div className={styles.stepContent}>
             <h2>Confirme os Detalhes</h2>
@@ -300,7 +294,6 @@ export default function CreateDivvyPage() {
           </div>
         )}
 
-        {/* Navigation Buttons */}
         <div className={styles.navigation}>
           <Link href="/dashboard/divvies">
             <Button variant="outline" size="md">
@@ -310,21 +303,13 @@ export default function CreateDivvyPage() {
 
           <div className={styles.navButtons}>
             {currentStep > 0 && (
-              <Button
-                variant="outline"
-                size="md"
-                onClick={handlePrev}
-              >
+              <Button variant="outline" size="md" onClick={handlePrev}>
                 ← Anterior
               </Button>
             )}
 
             {currentStep < steps.length - 1 ? (
-              <Button
-                variant="primary"
-                size="md"
-                onClick={handleNext}
-              >
+              <Button variant="primary" size="md" onClick={handleNext}>
                 Próximo →
               </Button>
             ) : (

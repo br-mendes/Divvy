@@ -1,5 +1,3 @@
-// components/common/Stepper.tsx
-
 import React from 'react';
 import styles from './Stepper.module.css';
 
