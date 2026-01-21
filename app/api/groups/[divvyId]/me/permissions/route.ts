@@ -4,8 +4,7 @@ export const dynamic = 'force-dynamic';
 
 /**
  * STUB AUTOMÁTICO PARA DESTRAVAR BUILD
- * - Evita qualquer throw em tempo de import durante 
-ext build
+ * - Evita qualquer throw em tempo de import durante next build
  * - Se faltar SUPABASE_SERVICE_ROLE_KEY, retorna 500 dentro do handler
  * - Usa req.url para pathname (evita problemas de backslash no Windows)
  */
