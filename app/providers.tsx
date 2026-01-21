@@ -11,6 +11,10 @@ import { Toaster } from 'react-hot-toast';
 export default function Providers({ children }: { children: React.ReactNode }) {
   return (
     <ErrorBoundary>
+      <Head>
+        <title>Divvy App</title>
+        <link rel="icon" href="https://i.ibb.co/qLBKgSVR/favicon.png" />
+      </Head>
       <AuthProvider>
         <ThemeProvider>
           <Head>

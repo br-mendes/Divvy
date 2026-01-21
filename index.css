@@ -52,16 +52,45 @@ body {
   animation: draw-check 0.4s 0.3s ease-out forwards;
 }
 
-/* Animações da Logo */
-@keyframes logo-float {
-  0%, 100% {
-    transform: translateY(0);
-  }
-  50% {
-    transform: translateY(-6px);
-  }
+/* Divvy logo animations */
+.divvy-logo {
+  transform-origin: 50% 50%;
 }
 
-.animate-logo-float {
-  animation: logo-float 6s ease-in-out infinite;
+.divvy-logo--animated {
+  will-change: transform;
+  animation:
+    divvy-rotate 12s linear infinite,
+    divvy-pulse 3s ease-in-out infinite;
+}
+
+.divvy-logo-slice {
+  transform-origin: 50px 50px;
+}
+
+.divvy-logo--animated .divvy-logo-slice {
+  will-change: transform;
+  animation: divvy-slice-detach 3s cubic-bezier(0.45, 0.05, 0.55, 0.95) infinite;
+}
+
+@keyframes divvy-rotate {
+  0% { transform: rotate(0deg) scale(1); }
+  100% { transform: rotate(360deg) scale(1); }
+}
+
+@keyframes divvy-pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.08); }
+}
+
+@keyframes divvy-slice-detach {
+  0% {
+    transform: translate3d(0, 0, 0);
+  }
+  50% {
+    transform: translate3d(-14px, -14px, 0);
+  }
+  100% {
+    transform: translate3d(0, 0, 0);
+  }
 }
