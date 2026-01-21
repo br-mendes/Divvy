@@ -6,11 +6,11 @@ import { Divvy, DivvyMember, Expense } from '../../types';
 import { Button } from '../../components/ui/Button';
 import { Modal } from '../../components/ui/Modal';
 import { Input } from '../../components/ui/Input';
-import { ExpenseCharts } from '../../components/Charts';
 import DivvyHeader from '../../components/divvy/DivvyHeader';
+import GroupTabs from '../../components/groups/GroupTabs';
 import InviteModal from '../../components/invite/InviteModal';
 import LoadingSpinner from '../../components/ui/LoadingSpinner';
-import { Plus, UserPlus, Receipt, PieChart, Users } from 'lucide-react';
+import { Plus, UserPlus } from 'lucide-react';
 import { ProtectedRoute } from '../../components/ProtectedRoute';
 
 const DivvyDetailContent: React.FC = () => {
@@ -21,9 +21,6 @@ const DivvyDetailContent: React.FC = () => {
   const [members, setMembers] = useState<DivvyMember[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'expenses' | 'charts' | 'members'>('expenses');
-  const [filterCategoryId, setFilterCategoryId] = useState<string>('');
-  
   // Modals
   const [isExpenseModalOpen, setIsExpenseModalOpen] = useState(false);
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
@@ -142,100 +139,7 @@ const DivvyDetailContent: React.FC = () => {
         </Button>
       </div>
 
-      {/* Tabs */}
-      <div className="border-b border-gray-200">
-        <nav className="-mb-px flex space-x-8">
-          <button
-            onClick={() => setActiveTab('expenses')}
-            className={`pb-4 px-1 border-b-2 font-medium text-sm flex items-center gap-2 ${
-              activeTab === 'expenses'
-                ? 'border-brand-500 text-brand-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-            }`}
-          >
-            <Receipt size={16} />
-            Expenses
-          </button>
-          <button
-            onClick={() => setActiveTab('charts')}
-            className={`pb-4 px-1 border-b-2 font-medium text-sm flex items-center gap-2 ${
-              activeTab === 'charts'
-                ? 'border-brand-500 text-brand-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-            }`}
-          >
-            <PieChart size={16} />
-            Analysis
-          </button>
-          <button
-            onClick={() => setActiveTab('members')}
-            className={`pb-4 px-1 border-b-2 font-medium text-sm flex items-center gap-2 ${
-              activeTab === 'members'
-                ? 'border-brand-500 text-brand-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-            }`}
-          >
-            <Users size={16} />
-            Members ({members.length})
-          </button>
-        </nav>
-      </div>
-
-      {/* Content */}
-      <div className="min-h-[400px]">
-        {activeTab === 'expenses' && (
-          <div className="space-y-4">
-            {visibleExpenses.length === 0 ? (
-              <div className="opacity-70">
-                {filterCategoryId ? 'Nenhuma despesa nesta categoria.' : 'Nenhuma despesa ainda.'}
-              </div>
-            ) : (
-              visibleExpenses.map((exp) => (
-                <div key={exp.id} className="bg-white p-4 rounded-lg shadow-sm border border-gray-100 flex justify-between items-center">
-                  <div className="flex items-center gap-4">
-                    <div className="h-10 w-10 rounded-full bg-brand-50 flex items-center justify-center text-xl">
-                      {exp.category === 'food' ? '🍽️' : 
-                       exp.category === 'transport' ? '🚗' : 
-                       exp.category === 'accommodation' ? '🏨' : 
-                       exp.category === 'activity' ? '🎬' : '💰'}
-                    </div>
-                    <div>
-                      <p className="font-medium text-gray-900">{exp.description || exp.category}</p>
-                      <p className="text-sm text-gray-500">{new Date(exp.date).toLocaleDateString()}</p>
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <p className="font-bold text-gray-900">R$ {exp.amount.toFixed(2)}</p>
-                    <p className="text-xs text-gray-400">Paid by {members.find(m => m.userid === exp.paidbyuserid)?.email.split('@')[0] || 'Unknown'}</p>
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
-        )}
-
-        {activeTab === 'charts' && (
-          <div className="bg-white p-6 rounded-xl border border-gray-100">
-             <ExpenseCharts expenses={expenses} />
-          </div>
-        )}
-
-        {activeTab === 'members' && (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {members.map(member => (
-              <div key={member.id} className="bg-white p-4 rounded-lg border border-gray-100 flex items-center gap-3">
-                <div className="h-10 w-10 rounded-full bg-gray-200 flex items-center justify-center text-gray-600 font-bold">
-                  {member.email.charAt(0).toUpperCase()}
-                </div>
-                <div>
-                  <p className="font-medium text-gray-900">{member.email}</p>
-                  <p className="text-xs text-gray-500 capitalize">{member.role}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
+      <GroupTabs divvyId={divvy.id} members={members} expenses={expenses} />
 
       {/* Add Expense Modal */}
       <Modal isOpen={isExpenseModalOpen} onClose={() => setIsExpenseModalOpen(false)} title="Add New Expense">
