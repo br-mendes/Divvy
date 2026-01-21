@@ -1,20 +1,33 @@
 
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { createServerSupabaseClient } from '../../../lib/supabaseServer';
+import { authorizeUser } from '../../../lib/serverAuth';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const supabase = createServerSupabaseClient();
-  const { inviteToken, userId, userEmail } = req.body;
+  const authHeader = req.headers.authorization;
+  if (!authHeader?.startsWith('Bearer ')) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
 
-  if (!inviteToken || !userId || !userEmail) {
+  const supabase = createServerSupabaseClient();
+  const { inviteToken } = req.body;
+
+  if (!inviteToken) {
     return res.status(400).json({ error: 'Missing required fields' });
   }
 
   try {
+    const user = await authorizeUser(req, res);
+    const userEmail = user.email;
+
+    if (!userEmail) {
+      return res.status(400).json({ error: 'Missing user email.' });
+    }
+
     // 1. Buscar convite e dados do grupo/criador
     const { data: invite, error: inviteError } = await supabase
       .from('divvyinvites')
@@ -31,6 +44,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(400).json({ error: 'Este convite já foi utilizado.' });
     }
 
+    if (invite.invitedemail?.toLowerCase() !== userEmail.toLowerCase()) {
+      return res.status(403).json({ error: 'Este convite não pertence ao usuário autenticado.' });
+    }
+
     if (new Date(invite.expiresat) < new Date()) {
       return res.status(400).json({ error: 'Este convite expirou.' });
     }
@@ -40,7 +57,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       .from('divvymembers')
       .select('id')
       .eq('divvyid', invite.divvyid)
-      .eq('userid', userId)
+      .eq('userid', user.id)
       .single();
 
     if (existingMember) {
@@ -50,7 +67,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // 4. Adicionar Membro
     const { error: memberError } = await supabase.from('divvymembers').insert({
       divvyid: invite.divvyid,
-      userid: userId,
+      userid: user.id,
       email: userEmail,
       role: 'member',
       joinedat: new Date().toISOString()
@@ -74,14 +91,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const { data: newUserProfile } = await supabase
         .from('userprofiles')
         .select('fullname, displayname')
-        .eq('id', userId)
+        .eq('id', user.id)
         .single();
     
     const newUserName = newUserProfile?.displayname || newUserProfile?.fullname || userEmail;
     const divvyName = (invite.divvies as any)?.name || 'Grupo';
     const creatorId = (invite.divvies as any)?.creatorid;
 
-    if (creatorId && creatorId !== userId) {
+    if (creatorId && creatorId !== user.id) {
         await supabase.from('notifications').insert({
             user_id: creatorId,
             divvy_id: invite.divvyid,
@@ -100,6 +117,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     });
 
   } catch (error: any) {
+    if (error?.message === 'Unauthorized') {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
     console.error('Accept Invite Error:', error);
     return res.status(500).json({ error: error.message });
   }

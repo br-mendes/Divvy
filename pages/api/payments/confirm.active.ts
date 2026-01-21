@@ -2,16 +2,24 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { createServerSupabaseClient } from '../../../lib/supabaseServer';
 import { sendPaymentConfirmedEmail } from '../../../lib/email';
+import { authorizeUser } from '../../../lib/serverAuth';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
+  const authHeader = req.headers.authorization;
+  if (!authHeader?.startsWith('Bearer ')) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+
   const supabase = createServerSupabaseClient();
-  const { transactionId, userId } = req.body;
+  const { transactionId } = req.body;
 
   try {
+    const user = await authorizeUser(req, res);
+
     // 1. Buscar transação
     const { data: transaction, error: txError } = await supabase
       .from('transactions')
@@ -27,7 +35,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     // Validar que quem confirma é o credor (touserid)
     // Nota: Em produção, verificaríamos o JWT do req para garantir que 'userId' é quem diz ser.
-    if (transaction.touserid !== userId) {
+    if (transaction.touserid !== user.id) {
         return res.status(403).json({ error: 'Apenas o recebedor pode confirmar.' });
     }
 
@@ -119,6 +127,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(200).json({ success: true });
 
   } catch (error: any) {
+    if (error?.message === 'Unauthorized') {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
     console.error('Confirm Payment Error:', error);
     return res.status(500).json({ error: error.message });
   }
