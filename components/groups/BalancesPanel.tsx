@@ -1,151 +1,98 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 
-type Balance = {
-  userid: string;
-  email: string;
-  paid_cents: number;
-  owed_cents: number;
-  net_cents: number;
-};
-
-type Transfer = {
+export interface Transfer {
   fromUserId: string;
   toUserId: string;
+  amount_cents: number;
   fromEmail: string;
   toEmail: string;
-  amount_cents: number;
-};
+}
 
-export function BalancesPanel({ divvyId }: { divvyId: string }) {
-  const [loading, setLoading] = useState(true);
-  const [currency, setCurrency] = useState('BRL');
-  const [balances, setBalances] = useState<Balance[]>([]);
-  const [transfers, setTransfers] = useState<Transfer[]>([]);
-  const [error, setError] = useState<string | null>(null);
+interface BalancesPanelProps {
+  transfers: Transfer[];
+  currency: string;
+  fmt: (currency: string, amountCents: number) => string;
+}
 
-  async function load() {
-    setLoading(true);
-    setError(null);
+export default function BalancesPanel({ transfers, currency, fmt }: BalancesPanelProps) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const [banner, setBanner] = useState<string | null>(null);
 
-    const res = await fetch(`/api/groups/${divvyId}/balances`);
-    const data = await res.json();
+  function goToPayment(t: Transfer) {
+    const sp = new URLSearchParams(searchParams.toString());
+    sp.set('tab', 'payments');
+    sp.set('pay_from', t.fromUserId);
+    sp.set('pay_to', t.toUserId);
+    sp.set('pay_amount_cents', String(t.amount_cents));
+    sp.set('pay_note', 'Acerto sugerido');
+    router.replace(`${pathname}?${sp.toString()}`);
+  }
 
-    if (!res.ok) {
-      setError(data.error ?? 'Erro ao carregar saldos');
-      setLoading(false);
-      return;
-    }
-
-    setCurrency(data.currency ?? 'BRL');
-    setBalances(data.balances ?? []);
-    setTransfers(data.transfers ?? []);
-    setLoading(false);
+  function cleanMsgParam() {
+    const sp = new URLSearchParams(searchParams.toString());
+    sp.delete('msg');
+    router.replace(`${pathname}?${sp.toString()}`);
   }
 
   useEffect(() => {
-    load();
-  }, [divvyId]);
+    const msg = searchParams.get('msg');
 
-  const totals = useMemo(() => {
-    const totalPaid = balances.reduce((a, b) => a + (b.paid_cents ?? 0), 0);
-    const totalOwed = balances.reduce((a, b) => a + (b.owed_cents ?? 0), 0);
-    return { totalPaid, totalOwed };
-  }, [balances]);
+    if (msg === 'payment_saved') {
+      setBanner('Pagamento registrado com sucesso. Saldos atualizados.');
 
-  if (loading) return <div>Carregando...</div>;
+      // some sozinho depois de 3s
+      const t = setTimeout(() => setBanner(null), 3000);
 
-  if (error) {
-    return (
-      <div className="border rounded p-4">
-        <div className="font-semibold">Saldos</div>
-        <div className="opacity-70 text-sm mt-1">{error}</div>
-        <button className="border rounded px-3 py-1 mt-3" onClick={load}>
-          Tentar novamente
-        </button>
-      </div>
-    );
-  }
+      // limpa o msg do URL para não repetir
+      cleanMsgParam();
+
+      return () => clearTimeout(t);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams.toString()]);
 
   return (
-    <div className="space-y-4">
-      <div className="border rounded p-4 space-y-1">
-        <div className="flex items-center justify-between">
-          <div className="font-semibold">Saldos</div>
-          <button className="border rounded px-3 py-1" onClick={load}>
-            Recarregar
+    <div className="space-y-3">
+      {banner && (
+        <div className="border rounded p-3 text-sm" role="status" aria-live="polite">
+          {banner}
+          <button
+            className="border rounded px-2 py-1 ml-3 text-xs"
+            onClick={() => setBanner(null)}
+            type="button"
+          >
+            ok
           </button>
         </div>
-        <div className="text-sm opacity-70">
-          Total pago: <b>{fmt(currency, totals.totalPaid)}</b> • Total devido:{' '}
-          <b>{fmt(currency, totals.totalOwed)}</b>
-        </div>
-      </div>
-
-      <div className="border rounded p-4 space-y-2">
-        <div className="font-semibold">Por pessoa</div>
-        <div className="space-y-2">
-          {balances
-            .slice()
-            .sort((a, b) => a.net_cents - b.net_cents)
-            .map((b) => (
-              <div
-                key={b.userid}
-                className="border rounded p-3 flex items-center justify-between gap-3"
-              >
-                <div className="min-w-0">
-                  <div className="font-medium truncate">{b.email}</div>
-                  <div className="text-xs opacity-70">
-                    pagou {fmt(currency, b.paid_cents)} • deve {fmt(currency, b.owed_cents)}
-                  </div>
-                </div>
-                <div className="text-right">
-                  <div className="text-xs opacity-70">saldo</div>
-                  <div className="font-semibold">
-                    {b.net_cents >= 0 ? '+' : '-'}
-                    {fmt(currency, Math.abs(b.net_cents))}
-                  </div>
-                </div>
+      )}
+      <h3 className="text-base font-semibold">Sugestão de acertos</h3>
+      <div className="space-y-2">
+        {transfers.map((t, idx) => (
+          <div key={idx} className="border rounded p-3 flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <div className="truncate">
+                <b>{t.fromEmail}</b> paga <b>{t.toEmail}</b>
               </div>
-            ))}
-          {balances.length === 0 && <div className="opacity-70">Sem dados ainda.</div>}
-        </div>
-      </div>
+            </div>
 
-      <div className="border rounded p-4 space-y-2">
-        <div className="font-semibold">Sugestão de acertos</div>
-        {transfers.length === 0 ? (
-          <div className="opacity-70">Nada a acertar (ou faltam splits).</div>
-        ) : (
-          <div className="space-y-2">
-            {transfers.map((t, idx) => (
-              <div
-                key={idx}
-                className="border rounded p-3 flex items-center justify-between gap-3"
+            <div className="flex items-center gap-2">
+              <div className="font-semibold">{fmt(currency, t.amount_cents)}</div>
+              <button
+                className="border rounded px-3 py-1"
+                onClick={() => goToPayment(t)}
+                title="Abrir Pagamentos com o formulário preenchido"
               >
-                <div className="min-w-0">
-                  <div className="truncate">
-                    <b>{t.fromEmail}</b> paga <b>{t.toEmail}</b>
-                  </div>
-                </div>
-                <div className="font-semibold">{fmt(currency, t.amount_cents)}</div>
-              </div>
-            ))}
+                Registrar
+              </button>
+            </div>
           </div>
-        )}
+        ))}
       </div>
-
-      <p className="text-xs opacity-70">
-        Observação: “Sugestão de acertos” é uma simplificação ótima para quitar dívidas com poucas
-        transferências.
-      </p>
     </div>
   );
-}
-
-function fmt(currency: string, cents: number) {
-  const v = (cents / 100).toFixed(2).replace('.', ',');
-  if (currency === 'BRL') return `R$ ${v}`;
-  return `${currency} ${v}`;
 }

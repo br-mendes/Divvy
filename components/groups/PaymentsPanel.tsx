@@ -1,218 +1,134 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 
-type Member = { userid: string; email: string; role: string };
+interface PaymentsPanelProps {
+  load?: () => Promise<void>;
+  onSubmit?: (data: { fromUserId: string; toUserId: string; amount: string; note: string }) => void | Promise<void>;
+}
 
-type Payment = {
-  id: string;
-  createdby: string;
-  from_userid: string;
-  to_userid: string;
-  amount_cents: number;
-  currency: string;
-  paid_at: string;
-  note: string | null;
-  createdat: string;
-};
-
-export function PaymentsPanel({ divvyId }: { divvyId: string }) {
-  const [members, setMembers] = useState<Member[]>([]);
-  const [payments, setPayments] = useState<Payment[]>([]);
-  const [loading, setLoading] = useState(true);
-
+export default function PaymentsPanel({ load, onSubmit }: PaymentsPanelProps) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const [prefillBanner, setPrefillBanner] = useState<string | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
   const [fromUserId, setFromUserId] = useState('');
   const [toUserId, setToUserId] = useState('');
   const [amount, setAmount] = useState('');
-  const [paidAt, setPaidAt] = useState('');
   const [note, setNote] = useState('');
 
-  const emailById = useMemo(() => {
-    const map = new Map<string, string>();
-    members.forEach((member) => map.set(member.userid, member.email));
-    return map;
-  }, [members]);
-
-  async function load() {
-    setLoading(true);
-
-    const [groupRes, payRes] = await Promise.all([
-      fetch(`/api/groups/${divvyId}`),
-      fetch(`/api/groups/${divvyId}/payments`)
-    ]);
-
-    const groupData = await groupRes.json();
-    const payData = await payRes.json();
-
-    if (groupRes.ok) {
-      const groupMembers = groupData.members ?? [];
-      setMembers(groupMembers);
-
-      if (!fromUserId && groupMembers.length) setFromUserId(groupMembers[0].userid);
-      if (!toUserId && groupMembers.length > 1) setToUserId(groupMembers[1].userid);
-    }
-
-    if (payRes.ok) setPayments(payData.payments ?? []);
-    setLoading(false);
+  function replaceUrl(params: URLSearchParams) {
+    router.replace(`${pathname}?${params.toString()}`);
   }
 
   useEffect(() => {
-    load();
-  }, [divvyId]);
+    const from = searchParams.get('pay_from');
+    const to = searchParams.get('pay_to');
+    const centsStr = searchParams.get('pay_amount_cents');
+    const noteParam = searchParams.get('pay_note');
 
-  async function createPayment(e: React.FormEvent) {
-    e.preventDefault();
-    const amountCents = Math.round(Number(amount.replace(',', '.')) * 100);
+    if (!from || !to || !centsStr) return;
 
-    const res = await fetch(`/api/groups/${divvyId}/payments`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        fromUserId,
-        toUserId,
-        amountCents,
-        paidAt: paidAt || undefined,
-        note: note || undefined
-      })
-    });
+    const cents = Number(centsStr);
+    if (!Number.isFinite(cents) || cents <= 0) return;
 
-    const data = await res.json();
-    if (!res.ok) return alert(data.error ?? 'Erro ao registrar pagamento');
+    // Preenche (sem depender do load)
+    setFromUserId(from);
+    setToUserId(to);
+    setAmount((cents / 100).toFixed(2).replace('.', ','));
 
-    setAmount('');
-    setPaidAt('');
-    setNote('');
-    await load();
-    alert('Pagamento registrado.');
-  }
+    if (noteParam) setNote(noteParam);
 
-  async function removePayment(paymentId: string) {
-    const ok = window.confirm('Excluir este pagamento?');
-    if (!ok) return;
+    setPrefillBanner('Formulário preenchido a partir de uma sugestão de acerto.');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams.toString()]);
 
-    const res = await fetch(`/api/groups/${divvyId}/payments/${paymentId}`, { method: 'DELETE' });
-    const data = await res.json();
-    if (!res.ok) return alert(data.error ?? 'Erro ao excluir');
+  const createPayment = async (event: React.FormEvent) => {
+    event.preventDefault();
+    await onSubmit?.({ fromUserId, toUserId, amount, note });
+    await load?.();
 
-    await load();
-  }
+    // limpa pay_* e volta pra balances
+    const sp = new URLSearchParams(searchParams.toString());
+    sp.delete('pay_from');
+    sp.delete('pay_to');
+    sp.delete('pay_amount_cents');
+    sp.delete('pay_note');
 
-  if (loading) return <div>Carregando...</div>;
+    // volta para saldos
+    sp.set('tab', 'balances');
+    sp.set('msg', 'payment_saved');
+    replaceUrl(sp);
+
+    // feedback amigável (sem alert)
+    setToast('Pagamento registrado! Saldos atualizados.');
+  };
 
   return (
-    <div className="space-y-4">
-      <form onSubmit={createPayment} className="border rounded p-4 space-y-2">
-        <div className="font-semibold">Registrar pagamento</div>
-
-        <div className="grid gap-2 md:grid-cols-2">
-          <select
-            className="border rounded px-3 py-2"
-            value={fromUserId}
-            onChange={(e) => setFromUserId(e.target.value)}
+    <div className="space-y-3">
+      {toast && (
+        <div className="border rounded p-3 text-sm" role="status" aria-live="polite">
+          {toast}
+          <button
+            className="border rounded px-2 py-1 ml-3 text-xs"
+            onClick={() => setToast(null)}
+            type="button"
           >
-            <option value="" disabled>
-              Quem pagou?
-            </option>
-            {members.map((member) => (
-              <option key={member.userid} value={member.userid}>
-                {member.email}
-              </option>
-            ))}
-          </select>
-
-          <select
-            className="border rounded px-3 py-2"
-            value={toUserId}
-            onChange={(e) => setToUserId(e.target.value)}
-          >
-            <option value="" disabled>
-              Para quem?
-            </option>
-            {members.map((member) => (
-              <option key={member.userid} value={member.userid}>
-                {member.email}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <div className="grid gap-2 md:grid-cols-3">
-          <input
-            className="border rounded px-3 py-2"
-            placeholder="Valor (ex: 50,00)"
-            value={amount}
-            onChange={(e) => setAmount(e.target.value)}
-          />
-
-          <input
-            className="border rounded px-3 py-2"
-            type="date"
-            value={paidAt}
-            onChange={(e) => setPaidAt(e.target.value)}
-          />
-
-          <input
-            className="border rounded px-3 py-2"
-            placeholder="Nota (opcional)"
-            value={note}
-            onChange={(e) => setNote(e.target.value)}
-          />
-        </div>
-
-        <button className="border rounded px-4 py-2">Salvar pagamento</button>
-      </form>
-
-      <div className="border rounded p-4 space-y-3">
-        <div className="flex items-center justify-between">
-          <div className="font-semibold">Pagamentos</div>
-          <button className="border rounded px-3 py-1" onClick={load}>
-            Recarregar
+            ok
           </button>
         </div>
-
-        {payments.length === 0 ? (
-          <div className="opacity-70">Nenhum pagamento registrado.</div>
-        ) : (
-          <div className="space-y-2">
-            {payments.map((payment) => (
-              <div
-                key={payment.id}
-                className="border rounded p-3 flex items-center justify-between gap-3"
-              >
-                <div className="min-w-0">
-                  <div className="truncate">
-                    <b>{emailById.get(payment.from_userid) ?? payment.from_userid}</b> pagou{' '}
-                    <b>{emailById.get(payment.to_userid) ?? payment.to_userid}</b>
-                  </div>
-                  <div className="text-xs opacity-70">
-                    {payment.paid_at} {payment.note ? `• ${payment.note}` : ''}
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <div className="font-semibold">{fmt(payment.currency, payment.amount_cents)}</div>
-                  <button
-                    className="border rounded px-3 py-1"
-                    onClick={() => removePayment(payment.id)}
-                  >
-                    Excluir
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      <p className="text-xs opacity-70">
-        Depois de registrar pagamentos, volte em “Saldos” para ver o saldo ajustado.
-      </p>
+      )}
+      {prefillBanner && (
+        <div className="border rounded p-3 text-sm">
+          {prefillBanner}
+          <button
+            className="border rounded px-2 py-1 ml-3 text-xs"
+            onClick={() => setPrefillBanner(null)}
+            type="button"
+          >
+            ok
+          </button>
+        </div>
+      )}
+      <form className="space-y-3" onSubmit={createPayment}>
+        <label className="flex flex-col gap-1">
+          <span className="text-sm font-medium">De</span>
+          <input
+            className="border rounded px-3 py-2"
+            value={fromUserId}
+            onChange={(event) => setFromUserId(event.target.value)}
+          />
+        </label>
+        <label className="flex flex-col gap-1">
+          <span className="text-sm font-medium">Para</span>
+          <input
+            className="border rounded px-3 py-2"
+            value={toUserId}
+            onChange={(event) => setToUserId(event.target.value)}
+          />
+        </label>
+        <label className="flex flex-col gap-1">
+          <span className="text-sm font-medium">Valor</span>
+          <input
+            className="border rounded px-3 py-2"
+            value={amount}
+            onChange={(event) => setAmount(event.target.value)}
+          />
+        </label>
+        <label className="flex flex-col gap-1">
+          <span className="text-sm font-medium">Observação</span>
+          <input
+            className="border rounded px-3 py-2"
+            value={note}
+            onChange={(event) => setNote(event.target.value)}
+          />
+        </label>
+        <button className="border rounded px-3 py-2" type="submit">
+          Registrar
+        </button>
+      </form>
     </div>
   );
-}
-
-function fmt(currency: string, cents: number) {
-  const value = (cents / 100).toFixed(2).replace('.', ',');
-  if (currency === 'BRL') return `R$ ${value}`;
-  return `${currency} ${value}`;
 }
