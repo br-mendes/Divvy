@@ -1,5 +1,3 @@
-// utils/balanceCalculator.ts
-
 interface Expense {
   id: string;
   payer_id: string;
@@ -138,7 +136,8 @@ export const simplifyTransactions = (
 export const formatBalance = (amount: number): string => {
   if (amount > 0) {
     return `Você deve receber R$ ${(amount / 100).toFixed(2)}`;
-  } else if (amount < 0) {
+  }
+  if (amount < 0) {
     return `Você deve pagar R$ ${Math.abs(amount / 100).toFixed(2)}`;
   }
   return 'Sem saldo pendente';

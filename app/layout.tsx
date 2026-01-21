@@ -1,15 +1,12 @@
 import '../index.css';
+import type { ReactNode } from 'react';
 
 export const metadata = {
   title: 'Divvy',
-  description: 'Divvy app dashboard',
+  description: 'Divvy dashboard',
 };
 
-export default function RootLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="pt-BR">
       <body>{children}</body>
