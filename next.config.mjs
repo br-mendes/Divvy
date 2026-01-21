@@ -10,10 +10,12 @@ const nextConfig = {
   basePath,
   assetPrefix: basePath ? `${basePath}/` : undefined,
 
-  // SSR na Vercel: NÃO force output export / trailingSlash
+  // SSR na Vercel: Não forçar trailingSlash ou output export para manter compatibilidade com SSR
+  // trailingSlash: true,
+
   images: { unoptimized: true },
 
-  // temporário pra destravar pipeline
+  // Temporário para destravar pipeline
   typescript: { ignoreBuildErrors: true },
   eslint: { ignoreDuringBuilds: true },
 };
