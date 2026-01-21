@@ -8,6 +8,7 @@ import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import DivvyLogo from './branding/DivvyLogo';
 import Notifications from './ui/Notifications';
+import StaticPageLinks from './common/StaticPageLinks';
 import { 
   LogOut, 
   LayoutDashboard,
@@ -159,6 +160,13 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
       <main className="flex-1 overflow-y-auto bg-gray-50 dark:bg-dark-950 transition-colors duration-300 scroll-smooth">
         <div className="max-w-6xl mx-auto px-4 py-6 md:px-8 md:py-10">
           {children}
+          <footer className="mt-12 border-t border-gray-200 dark:border-dark-800 pt-6">
+            <StaticPageLinks
+              className="text-sm text-gray-500 dark:text-gray-400"
+              linkClassName="hover:text-brand-600 dark:hover:text-brand-400"
+            />
+            <p className="mt-4 text-center text-xs text-gray-400 dark:text-gray-500">© 2026 Divvy. Todos os direitos reservados.</p>
+          </footer>
         </div>
       </main>
     </div>

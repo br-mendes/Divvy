@@ -8,6 +8,7 @@ import AnimatedTagline from '../components/home/AnimatedTagline';
 import Link from 'next/link';
 import DivvyLogo from '../components/branding/DivvyLogo';
 import { Moon, Sun, Menu, X, ArrowRight, ShieldCheck, PieChart, Users, DollarSign, Calculator, Send, CheckCircle } from 'lucide-react';
+import StaticPageLinks from '../components/common/StaticPageLinks';
 
 export default function HomePage() {
   const router = useRouter();
@@ -191,13 +192,7 @@ export default function HomePage() {
             <span className="font-bold text-lg">Divvy</span>
           </div>
           <p className="text-gray-500 dark:text-gray-400 text-sm mb-8">Gestão inteligente de despesas para roommates, viagens e grupos.</p>
-          <div className="flex flex-wrap justify-center gap-6 text-sm text-gray-400 font-medium">
-             <Link href="/about" className="hover:text-brand-600 transition-colors">Sobre</Link>
-             <Link href="/faq" className="hover:text-brand-600 transition-colors">FAQ</Link>
-             <Link href="/support" className="hover:text-brand-600 transition-colors">Contato</Link>
-             <Link href="/terms" className="hover:text-brand-600 transition-colors">Termos</Link>
-             <Link href="/privacy" className="hover:text-brand-600 transition-colors">Privacidade</Link>
-          </div>
+          <StaticPageLinks className="text-sm text-gray-400 font-medium" linkClassName="hover:text-brand-600 transition-colors" />
           <p className="mt-12 text-xs text-gray-400">© 2026 Divvy. Todos os direitos reservados.</p>
         </div>
       </footer>

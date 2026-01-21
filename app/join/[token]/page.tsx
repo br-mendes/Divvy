@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/Button';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import toast from 'react-hot-toast';
 import { CheckCircle, AlertTriangle, ArrowRight, LogIn, UserPlus } from 'lucide-react';
+import StaticPageLinks from '../../components/common/StaticPageLinks';
 
 export default function JoinDivvy() {
   const router = useRouter();
@@ -121,17 +122,18 @@ export default function JoinDivvy() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-dark-950 px-4 transition-colors">
-      <div className="max-w-md w-full bg-white dark:bg-dark-900 p-8 rounded-3xl shadow-xl border border-gray-100 dark:border-dark-800 animate-fade-in-up">
-        <div className="text-center mb-8">
-          <div className="w-20 h-20 bg-gradient-to-br from-brand-100 to-brand-50 dark:from-brand-900/40 dark:to-brand-800/20 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-inner transform rotate-3">
-            <span className="text-4xl filter drop-shadow-md">📩</span>
+      <div className="max-w-md w-full">
+        <div className="bg-white dark:bg-dark-900 p-8 rounded-3xl shadow-xl border border-gray-100 dark:border-dark-800 animate-fade-in-up">
+          <div className="text-center mb-8">
+            <div className="w-20 h-20 bg-gradient-to-br from-brand-100 to-brand-50 dark:from-brand-900/40 dark:to-brand-800/20 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-inner transform rotate-3">
+               <span className="text-4xl filter drop-shadow-md">📩</span>
+            </div>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-3">Você foi convidado!</h1>
+            <p className="text-gray-600 dark:text-gray-400 leading-relaxed">
+              <strong className="text-gray-900 dark:text-white">{inviteData?.inviter_name}</strong> quer que você participe do grupo <br/>
+              <span className="text-brand-600 dark:text-brand-400 font-black text-lg block mt-1">{inviteData?.divvy_name}</span>
+            </p>
           </div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-3">Você foi convidado!</h1>
-          <p className="text-gray-600 dark:text-gray-400 leading-relaxed">
-            <strong className="text-gray-900 dark:text-white">{inviteData?.inviter_name}</strong> quer que você participe do grupo <br />
-            <span className="text-brand-600 dark:text-brand-400 font-black text-lg block mt-1">{inviteData?.divvy_name}</span>
-          </p>
-        </div>
 
         {user ? (
           <div className="space-y-4 animate-fade-in">
@@ -187,6 +189,10 @@ export default function JoinDivvy() {
             </Link>
           </div>
         )}
+        </div>
+        <div className="mt-6">
+          <StaticPageLinks className="text-xs text-gray-500 dark:text-gray-400" linkClassName="hover:text-brand-600 dark:hover:text-brand-400" />
+        </div>
       </div>
     </div>
   );

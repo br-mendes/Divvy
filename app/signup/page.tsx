@@ -2,13 +2,9 @@
 
 import React, { useState } from 'react';
 import Link from 'next/link';
-import { useRouter, useSearchParams } from 'next/navigation';
-import { supabase } from '@/lib/supabase';
-import { Button } from '@/components/ui/Button';
-import { Input } from '@/components/ui/Input';
-import toast from 'react-hot-toast';
-import DivvyLogo from '@/components/branding/DivvyLogo';
-import { getURL } from '@/lib/getURL';
+import DivvyLogo from '../components/branding/DivvyLogo';
+import { getURL } from '../lib/getURL';
+import StaticPageLinks from '../components/common/StaticPageLinks';
 
 export default function Signup() {
   const router = useRouter();
@@ -100,12 +96,13 @@ export default function Signup() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
-      <div className="w-full max-w-md bg-white p-8 rounded-lg shadow-md">
-        <div className="text-center mb-8">
-          <DivvyLogo className="mx-auto w-16 h-16" />
-          <h1 className="text-2xl font-bold mt-4">Criar Conta</h1>
-        </div>
-
+      <div className="w-full max-w-md">
+        <div className="bg-white p-8 rounded-lg shadow-md">
+          <div className="text-center mb-8">
+            <DivvyLogo className="mx-auto w-16 h-16" />
+            <h1 className="text-2xl font-bold mt-4">Criar Conta</h1>
+          </div>
+        
         <form onSubmit={handleSignup} className="space-y-4">
           <Input
             label="Nome Completo"
@@ -199,15 +196,13 @@ export default function Signup() {
           Cadastrar com Google
         </Button>
 
-        <p className="mt-6 text-center text-sm text-gray-600">
-          Já tem conta?{' '}
-          <Link
-            href={`/login${redirectParam ? `?redirect=${redirectParam}` : ''}`}
-            className="text-brand-600 font-bold hover:underline"
-          >
-            Fazer login
-          </Link>
-        </p>
+          <p className="mt-6 text-center text-sm text-gray-600">
+            Já tem conta? <Link href={`/login${router.query.redirect ? `?redirect=${router.query.redirect}` : ''}`} className="text-brand-600 font-bold hover:underline">Fazer login</Link>
+          </p>
+        </div>
+        <div className="mt-6">
+          <StaticPageLinks className="text-xs text-gray-500" linkClassName="hover:text-brand-600" />
+        </div>
       </div>
     </div>
   );

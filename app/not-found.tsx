@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { Button } from '@/components/ui/Button';
 import { Home, Map } from 'lucide-react';
+import StaticPageLinks from '../components/common/StaticPageLinks';
 
 export default function NotFound() {
   return (
@@ -22,6 +23,9 @@ export default function NotFound() {
           Voltar para o Início
         </Button>
       </Link>
+      <div className="mt-8">
+        <StaticPageLinks className="text-xs text-gray-500 dark:text-gray-400" linkClassName="hover:text-brand-600 dark:hover:text-brand-400" />
+      </div>
     </div>
   );
 }

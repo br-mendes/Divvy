@@ -7,7 +7,8 @@ import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import DivvyLogo from '@/components/branding/DivvyLogo';
 import toast from 'react-hot-toast';
-import { getURL } from '@/lib/getURL';
+import { getURL } from '../../lib/getURL';
+import StaticPageLinks from '../../components/common/StaticPageLinks';
 
 export default function ResetPassword() {
   const [email, setEmail] = useState('');
@@ -39,14 +40,15 @@ export default function ResetPassword() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
-      <div className="w-full max-w-md bg-white p-8 rounded-lg shadow-md border border-gray-100">
-        <div className="text-center mb-8">
-          <DivvyLogo className="mx-auto w-16 h-16" />
-          <h1 className="text-2xl font-bold mt-4 text-gray-900">Recuperar Senha</h1>
-          <p className="text-gray-500 text-sm mt-1">
-            Informe seu email para receber o link de redefinição.
-          </p>
-        </div>
+      <div className="w-full max-w-md">
+        <div className="bg-white p-8 rounded-lg shadow-md border border-gray-100">
+          <div className="text-center mb-8">
+            <DivvyLogo className="mx-auto w-16 h-16" />
+            <h1 className="text-2xl font-bold mt-4 text-gray-900">Recuperar Senha</h1>
+            <p className="text-gray-500 text-sm mt-1">
+              Informe seu email para receber o link de redefinição.
+            </p>
+          </div>
 
         {!submitted ? (
           <form onSubmit={handleReset} className="space-y-4">
@@ -76,10 +78,14 @@ export default function ResetPassword() {
           </div>
         )}
 
-        <div className="mt-6 text-center">
-          <Link href="/login" className="text-sm text-brand-600 font-bold hover:underline">
-            Voltar para o Login
-          </Link>
+          <div className="mt-6 text-center">
+            <Link href="/login" className="text-sm text-brand-600 font-bold hover:underline">
+              Voltar para o Login
+            </Link>
+          </div>
+        </div>
+        <div className="mt-6">
+          <StaticPageLinks className="text-xs text-gray-500" linkClassName="hover:text-brand-600" />
         </div>
       </div>
     </div>
