@@ -31,33 +31,17 @@ export default function ExpenseForm({ divvyId, members, onSuccess, onCancel, ini
   const [manualAmounts, setManualAmounts] = useState<Record<string, string>>({});
   const [manualPercentages, setManualPercentages] = useState<Record<string, string>>({});
   
-  const [receiptUrl, setReceiptUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  
-  const formatCurrencyInput = (value: string) => {
-    const digits = value.replace(/\D/g, '');
-    if (!digits) return '';
-    const padded = digits.padStart(3, '0');
-    const integerPart = padded.slice(0, -2);
-    const decimalPart = padded.slice(-2);
-    return `${parseInt(integerPart, 10)},${decimalPart}`;
-  };
-
-  const parseCurrencyInput = (value: string) => {
-    if (!value) return 0;
-    const normalized = value.replace(/\./g, '').replace(',', '.');
-    return Number(normalized) || 0;
-  };
+  const amountValue = amount ? parseInt(amount, 10) / 100 : 0;
 
   // Load Initial Data for Editing
   useEffect(() => {
     if (initialData) {
       setDescription(initialData.description);
-      setAmount(formatCurrencyInput(initialData.amount.toFixed(2)));
+      setAmount(Math.round(initialData.amount * 100).toString());
       setCategory(initialData.category);
       setDate(initialData.date.split('T')[0]);
       setPayerId(initialData.paidbyuserid);
-      setReceiptUrl(initialData.receiptphotourl || null);
 
       // Fetch Splits for this expense to populate form
       const fetchSplits = async () => {
@@ -115,7 +99,7 @@ export default function ExpenseForm({ divvyId, members, onSuccess, onCancel, ini
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const val = parseCurrencyInput(amount);
+    const val = amountValue;
     
     if (isNaN(val) || val <= 0 || !description.trim() || !payerId) {
         toast.error("Preencha os campos obrigatórios.");
@@ -158,10 +142,7 @@ export default function ExpenseForm({ divvyId, members, onSuccess, onCancel, ini
           if (Math.abs(totalPct - 100) > 0.5) throw new Error("A soma das porcentagens deve ser 100%.");
       }
 
-      // 2. Preserve existing receipt URL when editing
-      const finalReceiptUrl = receiptUrl;
-
-      // 3. Send to API
+      // 2. Send to API
       const endpoint = initialData ? `/api/expenses/${initialData.id}` : '/api/expenses';
       const method = initialData ? 'PUT' : 'POST';
 
@@ -175,7 +156,6 @@ export default function ExpenseForm({ divvyId, members, onSuccess, onCancel, ini
               category,
               description,
               date,
-              receiptPhotoUrl: finalReceiptUrl,
               splits: splitsPayload
           })
       });
@@ -204,15 +184,20 @@ export default function ExpenseForm({ divvyId, members, onSuccess, onCancel, ini
             <Input label="Descrição *" value={description} onChange={e => setDescription(e.target.value)} placeholder="Ex: Jantar Pizza" required />
          </div>
          
-         <Input
-            label="Valor (R$) *"
+         <div>
+          <Input
+            label="Valor (somente números) *"
             type="text"
             inputMode="numeric"
             value={amount}
-            onChange={e => setAmount(formatCurrencyInput(e.target.value))}
+            onChange={e => setAmount(e.target.value.replace(/\D/g, ''))}
             required
-            placeholder="0,00"
-         />
+            placeholder="Ex: 15000 = R$ 150,00"
+          />
+          <p className="mt-1 text-xs text-gray-500">
+            {amount ? `Total: ${formatMoney(amountValue)}` : 'Digite apenas números, sem vírgula ou ponto.'}
+          </p>
+         </div>
          
          <Input label="Data" type="date" value={date} onChange={e => setDate(e.target.value)} />
          
@@ -292,8 +277,8 @@ export default function ExpenseForm({ divvyId, members, onSuccess, onCancel, ini
                      
                      {splitType === 'equal' && (
                          <span className="text-xs font-mono text-gray-500">
-                             {selectedParticipants.has(m.userid) 
-                                ? formatMoney(parseCurrencyInput(amount) / selectedParticipants.size) 
+                             {selectedParticipants.has(m.userid)
+                                ? formatMoney(selectedParticipants.size ? amountValue / selectedParticipants.size : 0)
                                 : '-'}
                          </span>
                      )}
@@ -312,7 +297,7 @@ export default function ExpenseForm({ divvyId, members, onSuccess, onCancel, ini
                      {splitType === 'percentage' && (
                          <div className="flex items-center gap-2">
                              <span className="text-xs text-gray-400 font-mono">
-                                 {formatMoney((parseCurrencyInput(amount) * (parseFloat(manualPercentages[m.userid] || '0'))) / 100)}
+                                 {formatMoney((amountValue * (parseFloat(manualPercentages[m.userid] || '0'))) / 100)}
                              </span>
                              <div className="relative">
                                 <input 

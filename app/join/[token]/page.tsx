@@ -170,8 +170,8 @@ export default function JoinDivvy() {
             <div className="p-4 bg-blue-50 dark:bg-blue-900/10 border border-blue-100 dark:border-blue-900/30 rounded-xl text-sm text-blue-800 dark:text-blue-200 mb-6 text-center">
               Para entrar no grupo, você precisa acessar sua conta.
             </div>
-
-            <Link href={`/login?redirect=${redirectParam}`}>
+            
+            <Link href={`/auth/login?redirect=${redirectParam}`}>
               <Button variant="primary" fullWidth size="lg" className="h-12 text-base shadow-lg shadow-brand-500/20">
                 <LogIn size={18} className="mr-2" /> Fazer Login
               </Button>
@@ -182,7 +182,7 @@ export default function JoinDivvy() {
               <div className="relative flex justify-center text-xs text-gray-400 uppercase"><span className="bg-white dark:bg-dark-900 px-2">Ou</span></div>
             </div>
 
-            <Link href={`/signup?redirect=${redirectParam}`}>
+            <Link href={`/auth/signup?redirect=${redirectParam}`}>
               <Button variant="outline" fullWidth size="lg" className="h-12 text-base">
                 <UserPlus size={18} className="mr-2" /> Criar Conta Grátis
               </Button>

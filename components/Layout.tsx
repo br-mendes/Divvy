@@ -58,7 +58,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
                 const data = await res.json();
                 if (mounted && data) {
                     setLiveProfile(data);
-                    if (data.is_super_admin || user.email === 'falecomdivvy@gmail.com') {
+                    if (data.is_admin) {
                         setIsAdmin(true);
                     }
                 }
@@ -67,10 +67,6 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
             console.error("Layout profile fetch error", e);
         }
         
-        // Fallback admin check
-        if (user.email === 'falecomdivvy@gmail.com' && mounted) {
-            setIsAdmin(true);
-        }
     };
     fetchLiveProfile();
     return () => { mounted = false; };

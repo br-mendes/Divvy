@@ -81,7 +81,6 @@ export interface Expense {
   category: ExpenseCategory;
   description: string;
   date: string; // YYYY-MM-DD
-  receiptphotourl?: string;
   locked: boolean;
   lockedreason?: string;
   lockedat?: string;

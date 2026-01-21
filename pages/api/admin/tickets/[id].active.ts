@@ -1,15 +1,15 @@
 
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { createServerSupabaseClient } from '@/lib/supabaseServer';
-import { authorizeUser } from '@/lib/serverAuth';
-import { isAdminUser } from '@/lib/adminAuth';
+import { createServerSupabaseClient } from '../../../../lib/supabaseServer';
+import { authorizeUser } from '../../../../lib/serverAuth';
+import { isAdminUser } from '../../../../lib/adminAuth';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  const { id } = req.query;
+  
   if (req.method !== 'DELETE') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
-
-  const { id } = req.query;
 
   try {
     const user = await authorizeUser(req, res);
@@ -23,7 +23,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     const { error } = await supabase
-      .from('broadcastmessages')
+      .from('supporttickets')
       .delete()
       .eq('id', id);
 

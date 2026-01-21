@@ -1,9 +1,11 @@
 "use client";
 
 import React from 'react';
-import { AuthProvider } from '@/context/AuthContext';
-import { ThemeProvider } from '@/context/ThemeContext';
-import ErrorBoundary from '@/components/ui/ErrorBoundary';
+import type { AppProps } from 'next/app';
+import Head from 'next/head';
+import { AuthProvider } from '../context/AuthContext';
+import { ThemeProvider } from '../context/ThemeContext';
+import ErrorBoundary from '../components/ui/ErrorBoundary';
 import { Toaster } from 'react-hot-toast';
 
 export default function Providers({ children }: { children: React.ReactNode }) {
@@ -11,8 +13,11 @@ export default function Providers({ children }: { children: React.ReactNode }) {
     <ErrorBoundary>
       <AuthProvider>
         <ThemeProvider>
-          <Toaster
-            position="top-right"
+          <Head>
+            <title>Divvy</title>
+          </Head>
+          <Toaster 
+            position="top-right" 
             toastOptions={{
               className: 'dark:bg-gray-800 dark:text-white',
               style: {

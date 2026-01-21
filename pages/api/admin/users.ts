@@ -1,15 +1,13 @@
 
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { createServerSupabaseClient } from '@/lib/supabaseServer';
-import { authorizeUser } from '@/lib/serverAuth';
-import { isAdminUser } from '@/lib/adminAuth';
+import { createServerSupabaseClient } from '../../../lib/supabaseServer';
+import { authorizeUser } from '../../../lib/serverAuth';
+import { isAdminUser } from '../../../lib/adminAuth';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (req.method !== 'DELETE') {
+  if (req.method !== 'GET') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
-
-  const { id } = req.query;
 
   try {
     const user = await authorizeUser(req, res);
@@ -22,14 +20,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         return res.status(403).json({ error: 'Forbidden' });
     }
 
-    const { error } = await supabase
-      .from('broadcastmessages')
-      .delete()
-      .eq('id', id);
+    const { data: users, error } = await supabase
+      .from('userprofiles')
+      .select('*')
+      .order('createdat', { ascending: false });
 
     if (error) throw error;
 
-    return res.status(200).json({ success: true });
+    return res.status(200).json(users);
   } catch (error: any) {
     return res.status(500).json({ error: error.message });
   }

@@ -14,9 +14,7 @@ export const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ childr
 
   useEffect(() => {
     if (!loading && !user) {
-      const queryString = searchParams?.toString();
-      const fullPath = queryString ? `${pathname}?${queryString}` : pathname;
-      router.push(`/login?redirect=${encodeURIComponent(fullPath)}`);
+      router.push(`/auth/login?redirect=${encodeURIComponent(router.asPath)}`);
     }
   }, [user, loading, router, pathname, searchParams]);
 

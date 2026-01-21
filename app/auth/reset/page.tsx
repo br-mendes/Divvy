@@ -78,14 +78,10 @@ export default function ResetPassword() {
           </div>
         )}
 
-          <div className="mt-6 text-center">
-            <Link href="/login" className="text-sm text-brand-600 font-bold hover:underline">
-              Voltar para o Login
-            </Link>
-          </div>
-        </div>
-        <div className="mt-6">
-          <StaticPageLinks className="text-xs text-gray-500" linkClassName="hover:text-brand-600" />
+        <div className="mt-6 text-center">
+          <Link href="/auth/login" className="text-sm text-brand-600 font-bold hover:underline">
+            Voltar para o Login
+          </Link>
         </div>
       </div>
     </div>
