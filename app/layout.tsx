@@ -1,39 +1,27 @@
 import type { Metadata } from 'next';
+import { Inter } from 'next/font/google';
 import './globals.css';
-import Providers from './providers';
+import { ClientToaster } from '../components/common/ClientToaster';
+
+const inter = Inter({ subsets: ['latin'] });
 
 export const metadata: Metadata = {
-  title: 'Divvy',
-  description: 'Divisão de despesas em grupo simplificada.',
-  applicationName: 'Divvy',
-  themeColor: '#8b5cf6',
-  icons: {
-    icon: '/favicon.svg',
-  },
+  title: 'Divvy – Divida Despesas de Forma Justa',
+  description:
+    'Aplicativo web para dividir despesas compartilhadas entre grupos. Sem confusão, sem atritos.',
+  keywords: 'dividir despesas, grupos, transações, viagens, república',
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   return (
-    <html lang="pt-BR" className="scroll-smooth">
-      <body className="bg-gray-50 dark:bg-dark-950 text-gray-900 dark:text-gray-100 transition-colors duration-300">
-        <script
-          dangerouslySetInnerHTML={{
-            __html: `
-              (function() {
-                try {
-                  var storage = localStorage.getItem('divvy-theme');
-                  var supportDarkMode = window.matchMedia('(prefers-color-scheme: dark)').matches;
-                  if (storage === 'dark' || (!storage && supportDarkMode)) {
-                    document.documentElement.classList.add('dark');
-                  } else {
-                    document.documentElement.classList.remove('dark');
-                  }
-                } catch (e) {}
-              })();
-            `,
-          }}
-        />
-        <Providers>{children}</Providers>
+    <html lang="pt-BR">
+      <body className={inter.className}>
+        <ClientToaster />
+        {children}
       </body>
     </html>
   );

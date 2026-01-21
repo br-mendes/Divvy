@@ -1,112 +1,229 @@
-"use client";
+'use client';
 
-import React from 'react';
 import Link from 'next/link';
-import DivvyLogo from '@/components/branding/DivvyLogo';
-import { Button } from '@/components/ui/Button';
-import { Moon, Sun } from 'lucide-react';
-import { useTheme } from '@/context/ThemeContext';
+import { motion } from 'framer-motion';
+import Button from '@/components/common/Button';
+
+const team = [
+  {
+    name: 'João Silva',
+    role: 'Founder & Full-Stack',
+    avatar: '',
+    bio: 'Desenvolvedor experiente em SaaS com foco em fintech.',
+  },
+  {
+    name: 'Maria Santos',
+    role: 'Product Manager',
+    avatar: '',
+    bio: 'Apaixonada por resolver problemas reais com tecnologia.',
+  },
+  {
+    name: 'Pedro Costa',
+    role: 'Design Lead',
+    avatar: '',
+    bio: 'Criador de interfaces intuitivas e acessíveis.',
+  },
+];
+
+const values = [
+  {
+    icon: '',
+    title: 'Simplicidade',
+    description:
+      'Dividir despesas não deve ser complicado. Interface clara e intuitiva.',
+  },
+  {
+    icon: '',
+    title: 'Segurança',
+    description:
+      'Seus dados financeiros são criptografados e nunca compartilhados.',
+  },
+  {
+    icon: '',
+    title: 'Inovação',
+    description:
+      'Constantemente melhorando com base no feedback dos usuários.',
+  },
+  {
+    icon: '',
+    title: 'Acessibilidade',
+    description: 'Disponível em múltiplas línguas e dispositivos.',
+  },
+];
 
 export default function AboutPage() {
-  const { theme, toggleTheme } = useTheme();
-
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-dark-950 transition-colors duration-300">
-      <header className="sticky top-0 z-50 border-b border-gray-100 dark:border-dark-700 bg-white/80 dark:bg-dark-950/80 backdrop-blur-md">
-        <div className="max-w-7xl mx-auto px-4 py-3 flex justify-between items-center h-16 sm:h-20">
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-50 dark:from-slate-900 dark:via-slate-950 dark:to-slate-900">
+      {/* Header */}
+      <header className="sticky top-0 z-40 border-b border-gray-200 dark:border-slate-700 bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm">
+        <div className="max-w-7xl mx-auto px-4 py-3 sm:py-4 flex justify-between items-center min-h-[60px]">
           <Link href="/" className="flex items-center gap-2">
-            <DivvyLogo className="w-8 h-8" animated={false} />
-            <span className="text-xl font-bold tracking-tight text-gray-900 dark:text-white">Divvy</span>
+            <span className="text-2xl"></span>
+            <span className="font-bold text-lg text-gray-900 dark:text-white">
+              Divvy
+            </span>
           </Link>
-          <div className="flex items-center gap-4">
-            <button onClick={toggleTheme} className="p-2 text-gray-500 dark:text-gray-400 rounded-full">
-              {theme === 'dark' ? <Sun size={20} /> : <Moon size={20} />}
-            </button>
-            <Link href="/login">
-              <Button variant="outline" size="sm">Entrar</Button>
+          <nav className="hidden sm:flex gap-6 text-sm">
+            <Link
+              href="/"
+              className="text-gray-600 dark:text-gray-400 hover:text-blue-600"
+            >
+              Home
             </Link>
-          </div>
+            <Link
+              href="/faq"
+              className="text-gray-600 dark:text-gray-400 hover:text-blue-600"
+            >
+              FAQ
+            </Link>
+            <Link
+              href="/support"
+              className="text-gray-600 dark:text-gray-400 hover:text-blue-600"
+            >
+              Suporte
+            </Link>
+          </nav>
         </div>
       </header>
 
-      <main className="max-w-4xl mx-auto px-4 py-16">
-        <div className="text-center mb-16">
-          <h1 className="text-4xl md:text-5xl font-extrabold text-gray-900 dark:text-white mb-6">
-            Sobre o Divvy
-          </h1>
-          <p className="text-xl text-gray-600 dark:text-gray-300 max-w-2xl mx-auto leading-relaxed">
-            Simplificando a forma como grupos, amigos e famílias lidam com despesas compartilhadas.
-          </p>
+      {/* Hero */}
+      <section className="max-w-7xl mx-auto px-4 py-16 sm:py-24 text-center">
+        <motion.h1
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="text-4xl sm:text-5xl font-bold text-gray-900 dark:text-white mb-4"
+        >
+          Sobre o Divvy
+        </motion.h1>
+        <motion.p
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.1 }}
+          className="text-lg text-gray-600 dark:text-gray-400 max-w-2xl mx-auto"
+        >
+          Somos uma equipe apaixonada por resolver o problema real de dividir
+          despesas compartilhadas de forma justa e transparente.
+        </motion.p>
+      </section>
+
+      {/* Mission & Vision */}
+      <section className="max-w-7xl mx-auto px-4 py-16">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-12">
+          <motion.div
+            initial={{ opacity: 0, x: -20 }}
+            animate={{ opacity: 1, x: 0 }}
+            className="bg-white dark:bg-slate-800 rounded-xl p-8 shadow-md"
+          >
+            <h2 className="text-2xl font-bold mb-4 text-gray-900 dark:text-white">
+              Nossa Missão
+            </h2>
+            <p className="text-gray-600 dark:text-gray-400 leading-relaxed">
+              Simplificar a divisão de despesas compartilhadas, eliminando
+              confusão e atritos financeiros entre amigos, famílias e colegas.
+              Queremos que todos tenham clareza total sobre quem deve a quem.
+            </p>
+          </motion.div>
+
+          <motion.div
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ delay: 0.1 }}
+            className="bg-white dark:bg-slate-800 rounded-xl p-8 shadow-md"
+          >
+            <h2 className="text-2xl font-bold mb-4 text-gray-900 dark:text-white">
+              Nossa Visão
+            </h2>
+            <p className="text-gray-600 dark:text-gray-400 leading-relaxed">
+              Ser a aplicação padrão global para dividir despesas compartilhadas.
+              Uma plataforma onde a confiança é construída sobre transparência e
+              segurança, e onde ninguém precisa se preocupar com contas mal
+              calculadas.
+            </p>
+          </motion.div>
         </div>
+      </section>
 
-        <section className="mb-16">
-          <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-6">Nossa Missão</h2>
-          <div className="bg-white dark:bg-dark-900 p-8 rounded-2xl border border-gray-100 dark:border-dark-800 shadow-sm">
-            <p className="text-lg text-gray-600 dark:text-gray-300 leading-relaxed">
-              O Divvy nasceu da necessidade de eliminar o atrito financeiro nas relações sociais.
-              Seja em uma viagem dos sonhos, dividindo apartamento ou organizando um churrasco,
-              acreditamos que a parte financeira deve ser transparente, justa e, acima de tudo, simples.
-              Nosso objetivo é garantir que você foque nas experiências e momentos, não nas planilhas.
-            </p>
-          </div>
-        </section>
+      {/* Values */}
+      <section className="max-w-7xl mx-auto px-4 py-16">
+        <h2 className="text-3xl font-bold text-center mb-12 text-gray-900 dark:text-white">
+          Nossos Valores
+        </h2>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
+          {values.map((value, idx) => (
+            <motion.div
+              key={idx}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: idx * 0.1 }}
+              className="bg-white dark:bg-slate-800 rounded-lg p-6 text-center shadow-sm"
+            >
+              <div className="text-4xl mb-4">{value.icon}</div>
+              <h3 className="font-semibold text-lg text-gray-900 dark:text-white mb-2">
+                {value.title}
+              </h3>
+              <p className="text-sm text-gray-600 dark:text-gray-400">
+                {value.description}
+              </p>
+            </motion.div>
+          ))}
+        </div>
+      </section>
 
-        <section className="mb-16">
-          <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-8">Nossos Valores</h2>
-          <div className="grid md:grid-cols-3 gap-6">
-            {[
-              {
-                emoji: '🔒',
-                title: 'Segurança',
-                desc: 'Seus dados são criptografados e protegidos com os mais altos padrões de segurança.',
-              },
-              {
-                emoji: '💡',
-                title: 'Simplicidade',
-                desc: 'Interface intuitiva que qualquer um pode usar. Sem complicações ou jargão técnico.',
-              },
-              {
-                emoji: '✨',
-                title: 'Transparência',
-                desc: 'Todos veem os mesmos saldos. Sem surpresas, sem truques. Confiança total.',
-              },
-            ].map((value, idx) => (
-              <div key={idx} className="bg-white dark:bg-dark-900 p-6 rounded-xl border border-gray-100 dark:border-dark-800">
-                <div className="text-4xl mb-4">{value.emoji}</div>
-                <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-2">{value.title}</h3>
-                <p className="text-sm text-gray-600 dark:text-gray-400">{value.desc}</p>
-              </div>
-            ))}
-          </div>
-        </section>
+      {/* Team */}
+      <section className="max-w-7xl mx-auto px-4 py-16 sm:py-24">
+        <h2 className="text-3xl font-bold text-center mb-12 text-gray-900 dark:text-white">
+          Nosso Time
+        </h2>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-8">
+          {team.map((member, idx) => (
+            <motion.div
+              key={idx}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: idx * 0.1 }}
+              className="bg-white dark:bg-slate-800 rounded-xl p-8 shadow-md text-center"
+            >
+              <div className="text-6xl mb-4">{member.avatar}</div>
+              <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-1">
+                {member.name}
+              </h3>
+              <p className="text-blue-600 dark:text-blue-400 text-sm font-medium mb-4">
+                {member.role}
+              </p>
+              <p className="text-gray-600 dark:text-gray-400 text-sm">
+                {member.bio}
+              </p>
+            </motion.div>
+          ))}
+        </div>
+      </section>
 
-        <section>
-          <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-6">Tecnologia & Open Source</h2>
-          <div className="bg-gradient-to-br from-brand-50 to-white dark:from-dark-900 dark:to-dark-950 p-8 rounded-2xl border border-brand-100 dark:border-dark-800">
-            <p className="text-gray-600 dark:text-gray-300 mb-6">
-              O Divvy é construído com tecnologias modernas para garantir performance e escalabilidade.
-              Somos defensores da transparência não apenas nas finanças, mas também no código.
-            </p>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm font-semibold text-gray-500 dark:text-gray-400">
-              <div className="flex items-center gap-2"><span className="w-2 h-2 bg-blue-500 rounded-full"></span> React / Next.js</div>
-              <div className="flex items-center gap-2"><span className="w-2 h-2 bg-teal-500 rounded-full"></span> Supabase</div>
-              <div className="flex items-center gap-2"><span className="w-2 h-2 bg-sky-500 rounded-full"></span> Tailwind CSS</div>
-              <div className="flex items-center gap-2"><span className="w-2 h-2 bg-purple-500 rounded-full"></span> TypeScript</div>
-            </div>
-          </div>
-        </section>
-
-        <div className="mt-16 text-center">
-          <Link href="/signup">
-            <Button size="lg" className="px-8 shadow-xl shadow-brand-500/20">
-              Começar a usar o Divvy
+      {/* CTA */}
+      <section className="max-w-7xl mx-auto px-4 py-16">
+        <div className="bg-blue-600 rounded-2xl p-12 text-center text-white">
+          <h2 className="text-3xl font-bold mb-4">
+            Quer Fazer Parte da Nossa Jornada?
+          </h2>
+          <p className="text-lg opacity-90 mb-8">
+            Junte-se a milhares de usuários que confiam no Divvy.
+          </p>
+          <Link href="/auth/signup">
+            <Button
+              variant="primary"
+              size="lg"
+              className="bg-white text-blue-600 hover:bg-gray-100"
+            >
+              Começar Grátis
             </Button>
           </Link>
         </div>
-      </main>
+      </section>
 
-      <footer className="py-8 border-t border-gray-100 dark:border-dark-700 text-center text-gray-500 dark:text-gray-400 text-sm">
-        <p>© 2026 AMX Solutions. Todos os direitos reservados.</p>
+      {/* Footer */}
+      <footer className="border-t border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-900 py-8">
+        <div className="max-w-7xl mx-auto px-4 text-center text-sm text-gray-600 dark:text-gray-400">
+          <p>&copy; 2026 Divvy. Todos os direitos reservados.</p>
+        </div>
       </footer>
     </div>
   );
