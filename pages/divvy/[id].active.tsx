@@ -14,8 +14,8 @@ import BalanceView from '../../components/balance/BalanceView';
 import LoadingSpinner from '../../components/ui/LoadingSpinner';
 import EmptyState from '../../components/ui/EmptyState';
 import { 
-  Plus, UserPlus, Receipt, PieChart, Users, Lock, LockOpen, 
-  Wallet, Archive, LucideIcon, Trash2, Shield, Calendar, Download, LogOut, RefreshCw
+  Plus, UserPlus, Receipt, PieChart, Users, Lock, Unlock, 
+  Wallet, Archive, LucideIcon, Trash2, Shield, Calendar, Download, LogOut, Maximize2, RefreshCw
 } from 'lucide-react';
 import { ProtectedRoute } from '../../components/ProtectedRoute';
 import toast from 'react-hot-toast';

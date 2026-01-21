@@ -3,33 +3,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
-import { useAuth } from '@/hooks/useAuth';
-import Button from '@/components/common/Button';
-import Input from '@/components/common/Input';
-import { Divvy, Expense, DivvyMember, Balance } from '@/types';
-import { toast } from 'react-hot-toast';
-
-type Tab = 'expenses' | 'balances' | 'members';
-
-const categoryIcons: Record<string, string> = {
-  food: '🍽️',
-  transport: '🚗',
-  accommodation: '🏨',
-  activity: '🎟️',
-  utilities: '💡',
-  shopping: '🛍️',
-  other: '🧾',
-  settlement: '✅',
-};
-
-export default function DivvyDetailPage() {
-  const params = useParams();
-  const id = Array.isArray(params.id) ? params.id[0] : params.id;
-  const { user } = useAuth();
-
-  const [divvy, setDivvy] = useState<Divvy | null>(null);
-  const [expenses, setExpenses] = useState<Expense[]>([]);
-  const [members, setMembers] = useState<DivvyMember[]>([]);
+import { Button } from '@/components/common/Button';
+import LogoAnimated from '@/components/common/LogoAnimated';
 
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<Tab>('expenses');

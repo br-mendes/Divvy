@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
+import { useTheme } from '../context/ThemeContext';
 import { Button } from '../components/common/Button';
-import LogoAnimated from '../components/common/LogoAnimated';
+import AnimatedTagline from '../components/home/AnimatedTagline';
 import Link from 'next/link';
 
 export default function HomePage() {

@@ -2,6 +2,7 @@
 
 'use client';
 
+import Link from 'next/link';
 import { useEffect, useState } from 'react';
 
 export default function DashboardPage() {
@@ -59,10 +60,14 @@ export default function DashboardPage() {
       ) : (
         <div className="space-y-3">
           {divvies.map((d) => (
-            <div key={d.id} className="border rounded p-4">
+            <Link
+              key={d.id}
+              href={`/groups/${d.id}`}
+              className="block border rounded p-4 hover:opacity-90"
+            >
               <div className="font-semibold">{d.name}</div>
               <div className="text-sm opacity-70">{d.type}</div>
-            </div>
+            </Link>
           ))}
           {divvies.length === 0 && <p className="opacity-70">Nenhum grupo ainda.</p>}
         </div>
