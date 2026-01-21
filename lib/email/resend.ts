@@ -20,7 +20,13 @@ export function getAppUrl() {
 
 export function getFromEmail() {
   // suportar chaves antigas e novas
-  return process.env.RESEND_FROM || process.env.NEXT_PUBLIC_RESEND_FROM_EMAIL || process.env.FROM_EMAIL || 'Divvy <no-reply@divvy.local>';
+  return (
+    process.env.RESEND_FROM ||
+    process.env.RESEND_FROM_EMAIL ||
+    process.env.NEXT_PUBLIC_RESEND_FROM_EMAIL ||
+    process.env.FROM_EMAIL ||
+    'Divvy <no-reply@divvy.local>'
+  );
 }
 
 export function getResendClient() {
