@@ -1,69 +1,29 @@
-import React, { useState } from 'react';
-import styles from './Input.module.css';
+'use client';
 
-interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
+import * as React from 'react';
+
+export type InputProps = React.InputHTMLAttributes<HTMLInputElement> & {
   label?: string;
-  error?: string;
-  helperText?: string;
-  icon?: React.ReactNode;
-  showPasswordToggle?: boolean;
-}
+};
 
-export const Input = React.forwardRef<HTMLInputElement, InputProps>(
-  ({
-    label,
-    error,
-    helperText,
-    icon,
-    showPasswordToggle = false,
-    type = 'text',
-    className = '',
-    ...props
-  }, ref) => {
-    const [showPassword, setShowPassword] = useState(false);
+export const Input = React.forwardRef<HTMLInputElement, InputProps>(function Input(
+  { className = '', label, ...props },
+  ref
+) {
+  return (
+    <label className={'block ' + (label ? 'space-y-1 ' : '')}>
+      {label ? <span className='text-sm text-gray-600'>{label}</span> : null}
+      <input
+        ref={ref}
+        className={
+          'w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm outline-none ' +
+          'focus:ring-2 focus:ring-black/10 focus:border-gray-400 ' +
+          className
+        }
+        {...props}
+      />
+    </label>
+  );
+});
 
-    const inputType = showPasswordToggle && showPassword ? 'text' : type;
-    const hasError = !!error;
-
-    return (
-      <div className={`${styles.wrapper} ${className}`}>
-        {label && (
-          <label className={styles.label}>
-            {label}
-            {props.required && <span className={styles.required}>*</span>}
-          </label>
-        )}
-        <div className={styles.inputWrapper}>
-          {icon && <span className={styles.icon}>{icon}</span>}
-          <input
-            ref={ref}
-            type={inputType}
-            className={`${styles.input} ${hasError ? styles.error : ''} ${icon ? styles.withIcon : ''}`}
-            aria-describedby={error ? `${props.id}-error` : undefined}
-            {...props}
-          />
-          {showPasswordToggle && type === 'password' && (
-            <button
-              type="button"
-              className={styles.togglePassword}
-              onClick={() => setShowPassword(!showPassword)}
-              tabIndex={-1}
-            >
-              {showPassword ? '' : ''}
-            </button>
-          )}
-        </div>
-        {(error || helperText) && (
-          <div
-            className={`${styles.helperText} ${error ? styles.errorText : ''}`}
-            id={`${props.id}-error`}
-          >
-            {error || helperText}
-          </div>
-        )}
-      </div>
-    );
-  }
-);
-
-Input.displayName = 'Input';
+export default Input;

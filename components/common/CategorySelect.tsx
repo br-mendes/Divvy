@@ -1,80 +1,43 @@
 import React from 'react';
-import styles from './CategorySelect.module.css';
-
-type Category = 'food' | 'transport' | 'accommodation' | 'entertainment' | 'other';
-
-interface CategorySelectProps {
-  value: Category;
-  onChange: (category: Category) => void;
-}
 
 const categories = [
-  { value: 'food' as Category, label: ' Comida', emoji: '' },
-  { value: 'transport' as Category, label: ' Transporte', emoji: '' },
-  { value: 'accommodation' as Category, label: ' Hospedagem', emoji: '' },
-  { value: 'entertainment' as Category, label: ' Entretenimento', emoji: '' },
-  { value: 'other' as Category, label: ' Outro', emoji: '' },
+  { value: 'food', label: 'Alimentação' },
+  { value: 'transport', label: 'Transporte' },
+  { value: 'accommodation', label: 'Hospedagem' },
+  { value: 'entertainment', label: 'Entretenimento' },
+  { value: 'other', label: 'Outros' },
 ];
-
-export const CategorySelect: React.FC<CategorySelectProps> = ({ value, onChange }) => {
-  return (
-    <div className={styles.container}>
-      <label className={styles.label}>Categoria</label>
-      <div className={styles.grid}>
-        {categories.map((cat) => (
-          <button
-            key={cat.value}
-            type="button"
-            className={`${styles.categoryButton} ${value === cat.value ? styles.selected : ''}`}
-            onClick={() => onChange(cat.value)}
-            title={cat.label}
-          >
-            <span className={styles.emoji}>{cat.emoji}</span>
-            <span className={styles.name}>{cat.label.split(' ')[1]}</span>
-          </button>
-        ))}
-      </div>
-    </div>
-  );
-};
-// components/common/CategorySelect.tsx
-
-import React from 'react';
-import styles from './CategorySelect.module.css';
-
-type Category = 'food' | 'transport' | 'accommodation' | 'entertainment' | 'other';
 
 interface CategorySelectProps {
-  value: Category;
-  onChange: (category: Category) => void;
+  value: string;
+  onChange: (value: string) => void;
+  className?: string;
 }
 
-const categories = [
-  { value: 'food' as Category, label: ' Comida', emoji: '' },
-  { value: 'transport' as Category, label: ' Transporte', emoji: '' },
-  { value: 'accommodation' as Category, label: ' Hospedagem', emoji: '' },
-  { value: 'entertainment' as Category, label: ' Entretenimento', emoji: '' },
-  { value: 'other' as Category, label: ' Outro', emoji: '' },
-];
-
-export const CategorySelect: React.FC<CategorySelectProps> = ({ value, onChange }) => {
+export function CategorySelect({
+  value,
+  onChange,
+  className = '',
+}: CategorySelectProps) {
   return (
-    <div className={styles.container}>
-      <label className={styles.label}>Categoria</label>
-      <div className={styles.grid}>
-        {categories.map((cat) => (
-          <button
-            key={cat.value}
-            type="button"
-            className={`${styles.categoryButton} ${value === cat.value ? styles.selected : ''}`}
-            onClick={() => onChange(cat.value)}
-            title={cat.label}
-          >
-            <span className={styles.emoji}>{cat.emoji}</span>
-            <span className={styles.name}>{cat.label.split(' ')[1]}</span>
-          </button>
+    <div className={className}>
+      <label className="block text-sm font-medium text-dark mb-2" htmlFor="category">
+        Categoria
+      </label>
+      <select
+        id="category"
+        className="w-full px-4 py-2 border border-gray-200 rounded-lg bg-white text-dark focus:outline-none focus:ring-2 focus:ring-primary/50"
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+      >
+        {categories.map((category) => (
+          <option key={category.value} value={category.value}>
+            {category.label}
+          </option>
         ))}
-      </div>
+      </select>
     </div>
   );
-};
+}
+
+export default CategorySelect;

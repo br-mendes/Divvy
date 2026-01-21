@@ -11,6 +11,9 @@ node_modules
 dist
 dist-ssr
 *.local
+.env*
+!.env.example
+!.env.production.example
 
 # Editor directories and files
 .vscode/*
@@ -25,3 +28,16 @@ dist-ssr
 .env*
 !.env.example
 !.env.production.example
+
+# local merge artifacts
+prs.json
+prs.txt
+
+
+# Next.js build output
+.next
+
+out
+*.bak.*
+__backups/
+_pages_legacy/

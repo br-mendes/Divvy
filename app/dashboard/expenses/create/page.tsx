@@ -1,13 +1,11 @@
-// app/dashboard/expenses/create/page.tsx
-
 'use client';
 
-import { useState } from 'react';
+import { useState, type ChangeEvent, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { Button } from '@/components/common/Button';
-import { Input } from '@/components/common/Input';
-import { CategorySelect } from '@/components/common/CategorySelect';
+import Button from '@/components/common/Button';
+import Input from '@/components/common/Input';
+import CategorySelect from '@/components/common/CategorySelect';
 import { formatCurrency } from '@/utils/format';
 import styles from './page.module.css';
 
@@ -28,7 +26,7 @@ export default function CreateExpensePage() {
   const [description, setDescription] = useState('');
   const [amount, setAmount] = useState('');
   const [category, setCategory] = useState<Category>('food');
-  const [payer, setPayer] = useState('you');
+  const [payer, setPayer] = useState('you@example.com');
   const [splitType, setSplitType] = useState<SplitType>('equal');
   const [participants, setParticipants] = useState<Participant[]>([
     { name: 'Você', email: 'you@example.com', share: 0 },
@@ -38,16 +36,24 @@ export default function CreateExpensePage() {
 
   const [errors, setErrors] = useState<Record<string, string>>({});
 
-  const handleAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value;
+  const handleAmountChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const value = event.target.value;
     setAmount(value);
 
     // Auto-calculate equal split
-    if (splitType === 'equal' && value) {
+    if (splitType === 'equal') {
+      if (!value) {
+        setParticipants((current) => current.map((participant) => ({
+          ...participant,
+          share: 0,
+        })));
+        return;
+      }
+
       const total = parseFloat(value);
       const share = total / participants.length;
-      const newParticipants = participants.map((p) => ({
-        ...p,
+      const newParticipants = participants.map((participant) => ({
+        ...participant,
         share,
       }));
       setParticipants(newParticipants);
@@ -61,7 +67,7 @@ export default function CreateExpensePage() {
   };
 
   const calculateTotalShare = () => {
-    return participants.reduce((sum, p) => sum + p.share, 0);
+    return participants.reduce((sum, participant) => sum + participant.share, 0);
   };
 
   const validateForm = (): boolean => {
@@ -81,7 +87,7 @@ export default function CreateExpensePage() {
       const totalShare = calculateTotalShare();
       const expectedAmount = parseFloat(amount) || 0;
       if (Math.abs(totalShare - expectedAmount) > 0.01) {
-        newErrors.split = `Total da divisão (R$ ${(totalShare / 100).toFixed(2)}) deve ser igual ao valor (R$ ${(expectedAmount).toFixed(2)})`;
+        newErrors.split = `Total da divisão (${formatCurrency(Math.round(totalShare * 100))}) deve ser igual ao valor (${formatCurrency(Math.round(expectedAmount * 100))})`;
       }
     }
 
@@ -89,8 +95,8 @@ export default function CreateExpensePage() {
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSubmit = async (event: FormEvent) => {
+    event.preventDefault();
 
     if (!validateForm()) {
       return;
@@ -139,7 +145,7 @@ export default function CreateExpensePage() {
             type="text"
             placeholder="Ex: Jantar no restaurante"
             value={description}
-            onChange={(e) => setDescription(e.target.value)}
+            onChange={(event: ChangeEvent<HTMLInputElement>) => setDescription(event.target.value)}
             error={errors.description}
             required
           />
@@ -157,7 +163,7 @@ export default function CreateExpensePage() {
           />
 
           {/* Category */}
-          <CategorySelect value={category} onChange={setCategory} />
+          <CategorySelect value={category} onChange={(value) => setCategory(value as Category)} />
 
           {/* Payer */}
           <div>
@@ -168,11 +174,11 @@ export default function CreateExpensePage() {
               id="payer"
               className={styles.select}
               value={payer}
-              onChange={(e) => setPayer(e.target.value)}
+              onChange={(event) => setPayer(event.target.value)}
             >
-              {participants.map((p, i) => (
-                <option key={i} value={p.email}>
-                  {p.name}
+              {participants.map((participant) => (
+                <option key={participant.email} value={participant.email}>
+                  {participant.name}
                 </option>
               ))}
             </select>
@@ -190,22 +196,22 @@ export default function CreateExpensePage() {
                   if (amount) {
                     const total = parseFloat(amount);
                     const share = total / participants.length;
-                    const newParticipants = participants.map((p) => ({
-                      ...p,
+                    const newParticipants = participants.map((participant) => ({
+                      ...participant,
                       share,
                     }));
                     setParticipants(newParticipants);
                   }
                 }}
               >
-                ➗ Igual
+                Igual
               </button>
               <button
                 type="button"
                 className={`${styles.splitButton} ${splitType === 'custom' ? styles.active : ''}`}
                 onClick={() => setSplitType('custom')}
               >
-                ⚙️ Customizado
+                Customizado
               </button>
             </div>
           </div>
@@ -215,7 +221,7 @@ export default function CreateExpensePage() {
             <h3>Divisão entre participantes</h3>
             <div className={styles.participantsList}>
               {participants.map((participant, index) => (
-                <div key={index} className={styles.participantItem}>
+                <div key={participant.email} className={styles.participantItem}>
                   <div className={styles.participantInfo}>
                     <p className={styles.participantName}>{participant.name}</p>
                     <p className={styles.participantEmail}>{participant.email}</p>
@@ -226,7 +232,7 @@ export default function CreateExpensePage() {
                       placeholder="0.00"
                       step="0.01"
                       value={participant.share}
-                      onChange={(e) => handleShareChange(index, e.target.value)}
+                      onChange={(event) => handleShareChange(index, event.target.value)}
                       disabled={splitType === 'equal'}
                       className={styles.shareInput}
                     />
@@ -251,7 +257,7 @@ export default function CreateExpensePage() {
               </div>
               {!isBalanced && (
                 <p className={styles.unbalancedWarning}>
-                   Os valores não batem. Verifique a divisão.
+                  Os valores não batem. Verifique a divisão.
                 </p>
               )}
             </div>
@@ -269,7 +275,6 @@ export default function CreateExpensePage() {
               variant="primary"
               size="md"
               fullWidth
-              loading={loading}
               disabled={loading}
             >
               {loading ? 'Adicionando...' : 'Adicionar Despesa'}

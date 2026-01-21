@@ -1,5 +1,7 @@
+"use client";
+
 import React, { useEffect } from 'react';
-import { useRouter } from 'next/router';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '../context/AuthContext';
 import { Layout } from './Layout';
 import LoadingSpinner from './ui/LoadingSpinner';
@@ -7,12 +9,14 @@ import LoadingSpinner from './ui/LoadingSpinner';
 export const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user, loading } = useAuth();
   const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
 
   useEffect(() => {
     if (!loading && !user) {
-      router.push(`/login?redirect=${encodeURIComponent(router.asPath)}`);
+      router.push(`/auth/login?redirect=${encodeURIComponent(router.asPath)}`);
     }
-  }, [user, loading, router]);
+  }, [user, loading, router, pathname, searchParams]);
 
   if (loading) {
     return (

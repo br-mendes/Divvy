@@ -1,46 +1,39 @@
-import React from 'react';
-import styles from './Button.module.css';
+'use client';
 
-interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
-  variant?: 'primary' | 'secondary' | 'outline' | 'ghost' | 'danger';
-  size?: 'sm' | 'md' | 'lg';
+import * as React from 'react';
+
+export type ButtonProps = React.ButtonHTMLAttributes<HTMLButtonElement> & {
   loading?: boolean;
-  icon?: React.ReactNode;
-  fullWidth?: boolean;
-  children: React.ReactNode;
+  variant?: 'primary' | 'secondary' | 'ghost';
+};
+
+export function Button({
+  className = '',
+  loading = false,
+  variant = 'primary',
+  disabled,
+  children,
+  ...props
+}: ButtonProps) {
+  const base =
+    'inline-flex items-center justify-center rounded-md px-4 py-2 text-sm font-medium transition ' +
+    'disabled:opacity-60 disabled:cursor-not-allowed';
+
+  const variants: Record<string, string> = {
+    primary: 'bg-black text-white hover:opacity-90',
+    secondary: 'border border-gray-300 text-gray-800 hover:bg-gray-50',
+    ghost: 'text-gray-800 hover:bg-gray-100',
+  };
+
+  return (
+    <button
+      className={[base, variants[variant], className].join(' ')}
+      disabled={disabled || loading}
+      {...props}
+    >
+      {loading ? 'Carregando...' : children}
+    </button>
+  );
 }
 
-export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
-  ({
-    variant = 'primary',
-    size = 'md',
-    loading = false,
-    icon,
-    fullWidth = false,
-    className = '',
-    disabled,
-    children,
-    ...props
-  }, ref) => {
-    const baseClass = styles.button;
-    const variantClass = styles[variant];
-    const sizeClass = styles[size];
-    const fullWidthClass = fullWidth ? styles.fullWidth : '';
-    const loadingClass = loading ? styles.loading : '';
-
-    return (
-      <button
-        ref={ref}
-        className={`${baseClass} ${variantClass} ${sizeClass} ${fullWidthClass} ${loadingClass} ${className}`}
-        disabled={disabled || loading}
-        {...props}
-      >
-        {loading && <span className={styles.spinner} />}
-        {icon && <span className={styles.icon}>{icon}</span>}
-        <span>{children}</span>
-      </button>
-    );
-  }
-);
-
-Button.displayName = 'Button';
+export default Button;
