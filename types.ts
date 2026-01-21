@@ -30,7 +30,8 @@ export interface Divvy {
   archivesuggestedat?: string;
   lastglobalconfirmationat?: string; // Data da última confirmação global
   members?: DivvyMember[]; // Join manual
-  member_count?: number; 
+  member_count?: number;
+  member_totals?: DivvyMemberTotals[];
 }
 
 export interface DivvyMember {
@@ -41,6 +42,14 @@ export interface DivvyMember {
   role: 'admin' | 'member';
   joinedat: string;
   userprofiles?: UserProfile; // Join manual
+}
+
+export interface DivvyMemberTotals {
+  userid: string;
+  paid: number;
+  owed: number;
+  email?: string;
+  userprofiles?: UserProfile;
 }
 
 export interface DivvyInvite {
@@ -164,12 +173,4 @@ export interface PaymentMethod {
   banks?: Bank;
   created_at?: string;
   updated_at?: string;
-}
-
-export interface BalancePair {
-  from: string;
-  to: string;
-  amount: number;
-  fromDisplayName: string | null;
-  toDisplayName: string | null;
 }
