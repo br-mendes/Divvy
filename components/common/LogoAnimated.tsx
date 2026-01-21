@@ -15,13 +15,14 @@ export default function LogoAnimated() {
       onMouseLeave={() => setIsHovered(false)}
     >
       <span
-        className={`text-2xl transition-transform duration-300 ${
+        className={`text-2xl inline-block animate-bounce transition-transform duration-300 ${
           isHovered ? 'scale-110 rotate-12' : 'scale-100 rotate-0'
         }`}
-      > 
-         
-      </span> 
-      <span className="font-bold text-xl text-[#208085]">Divvy</span> 
+        aria-hidden="true"
+      >
+        💸
+      </span>
+      <span className="font-bold text-xl text-[#208085]">Divvy</span>
     </Link> 
   ); 
 } 

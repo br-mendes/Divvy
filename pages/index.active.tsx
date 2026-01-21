@@ -38,8 +38,13 @@ export default function HomePage() {
     <div className="min-h-screen bg-gradient-to-br from-purple-50 via-white to-blue-50">
       {/* Header */}
       <header className="sticky top-0 z-40 border-b border-gray-200 bg-white/80 backdrop-blur-sm">
-        <div className="max-w-7xl mx-auto px-4 py-4 flex justify-between items-center">
+        <div className="max-w-7xl mx-auto px-4 py-4 flex flex-wrap justify-between items-center gap-4">
           <LogoAnimated />
+
+          <nav className="flex items-center gap-6 text-sm font-medium text-gray-600">
+            <a href="#features" className="hover:text-[#208085]">Features</a>
+            <a href="#usecases" className="hover:text-[#208085]">Use Cases</a>
+          </nav>
 
           <div className="flex items-center gap-3 flex-nowrap">
             {user ? (
@@ -48,10 +53,10 @@ export default function HomePage() {
               </Link>
             ) : (
               <>
-                <Link href="/auth/login">
+                <Link href="/login">
                   <Button variant="outline" className="whitespace-nowrap h-11">Entrar</Button>
                 </Link>
-                <Link href="/auth/signup">
+                <Link href="/signup">
                   <Button variant="primary" className="whitespace-nowrap h-11">Criar Conta</Button>
                 </Link>
               </>
@@ -82,7 +87,7 @@ export default function HomePage() {
 
             {/* BOTÕES NA MESMA LINHA */}
             <div className="flex flex-wrap gap-4 pt-4">
-              <Link href={user ? '/dashboard' : '/auth/signup'}>
+              <Link href={user ? '/dashboard' : '/signup'}>
                 <Button variant="primary" size="lg" className="whitespace-nowrap">
                   {user ? 'Começar Agora' : 'Criar Conta Grátis'} →
                 </Button>
@@ -164,7 +169,7 @@ export default function HomePage() {
       </section>
 
       {/* Use Cases Section - 4 CARDS */}
-      <section className="py-16 md:py-20">
+      <section id="usecases" className="bg-gray-50 py-16 md:py-20">
         <div className="max-w-7xl mx-auto px-4">
           <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
             {[
@@ -193,7 +198,7 @@ export default function HomePage() {
           <p className="text-lg md:text-xl mb-8 opacity-90">
             Grátis. Sem cartão de crédito. Sem complicações.
           </p>
-          <Link href={user ? '/dashboard' : '/auth/signup'}>
+          <Link href={user ? '/dashboard' : '/signup'}>
             <Button variant="primary" size="lg" className="bg-white text-[#208085] hover:bg-gray-100">
               {user ? 'Ir ao Dashboard' : 'Criar Conta Agora'} →
             </Button>

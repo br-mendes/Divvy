@@ -32,7 +32,7 @@ export const formatDate = (
 ): string => {
   const dateObj = typeof date === 'string' ? new Date(date) : date;
 
-  const options: Intl.DateTimeFormatOptions = {
+  const options: Record<'short' | 'long' | 'time' | 'full', Intl.DateTimeFormatOptions> = {
     short: { year: 'numeric', month: '2-digit', day: '2-digit' },
     long: { year: 'numeric', month: 'long', day: 'numeric' },
     time: { hour: '2-digit', minute: '2-digit' },
@@ -61,7 +61,7 @@ export const formatPercent = (value: number, decimals: number = 0): string => {
  * Valida email
  */
 export const isValidEmail = (email: string): boolean => {
-  const regex = /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/;
+  const regex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   return regex.test(email);
 };
 
