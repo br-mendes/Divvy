@@ -1,26 +1,19 @@
 import { Resend } from 'resend';
 
-/**
- * Compat layer:
- * Alguns arquivos importam:
- * - resend
- * - appUrl
- * - EMAIL_FROM
- * - getAppUrl / getFromEmail / getResendClient
- */
+export const appUrl =
+  process.env.NEXT_PUBLIC_APP_URL ||
+  (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : '') ||
+  'http://localhost:3000';
+
+export const EMAIL_FROM =
+  process.env.FROM_EMAIL || 'Divvy <no-reply@divvy.local>';
 
 export function getAppUrl() {
-  const fromEnv =
-    process.env.NEXT_PUBLIC_APP_URL ||
-    (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : '') ||
-    process.env.NEXT_PUBLIC_SITE_URL ||
-    '';
-  return fromEnv || 'http://localhost:3000';
+  return appUrl;
 }
 
 export function getFromEmail() {
-  // suportar chaves antigas e novas
-  return process.env.RESEND_FROM || process.env.NEXT_PUBLIC_RESEND_FROM_EMAIL || process.env.FROM_EMAIL || 'Divvy <no-reply@divvy.local>';
+  return EMAIL_FROM;
 }
 
 export function getResendClient() {
@@ -29,12 +22,8 @@ export function getResendClient() {
   return new Resend(key);
 }
 
-// exports “simples” que o resto do app costuma usar
-export const appUrl = getAppUrl();
-export const EMAIL_FROM = getFromEmail();
-
-// muitos lugares importam "resend" como named export
+// alguns pontos do projeto importam `resend` como named export
 export const resend = getResendClient();
 
-// manter também default export para compatibilidade
+// compat: se alguém usa default import
 export default resend;
