@@ -28,3 +28,8 @@ dist-ssr
 .env*
 !.env.example
 !.env.production.example
+
+# local merge artifacts
+prs.json
+prs.txt
+
