@@ -14,6 +14,8 @@ import BalanceView from '../../components/balance/BalanceView';
 import { PaymentsPanel } from '../../components/groups/PaymentsPanel';
 import LoadingSpinner from '../../components/ui/LoadingSpinner';
 import EmptyState from '../../components/ui/EmptyState';
+import { ExpenseAttachments } from '../../components/groups/ExpenseAttachments';
+import ImageViewerModal from '../../components/ui/ImageViewerModal';
 import { 
   Plus, UserPlus, Receipt, PieChart, Users, Lock, Unlock, 
   Wallet, Archive, LucideIcon, Trash2, Shield, Calendar, Download, LogOut, Maximize2, RefreshCw
@@ -535,6 +537,34 @@ const DivvyDetailContent: React.FC = () => {
                 )}
               </div>
             </div>
+
+            <ExpenseAttachments divvyId={divvyId} expenseId={viewingExpense.id} />
+
+            {viewingExpense.receiptphotourl && (
+                <div className="rounded-lg overflow-hidden border border-gray-200 dark:border-dark-700 relative group">
+                    <img 
+                      src={viewingExpense.receiptphotourl} 
+                      alt="Comprovante" 
+                      className="w-full object-cover max-h-64 cursor-zoom-in hover:brightness-95 transition-all"
+                      onClick={() => {
+                        setImageViewerSrc(viewingExpense.receiptphotourl!);
+                        setIsImageViewerOpen(true);
+                      }}
+                    />
+                    <button 
+                      className="absolute top-2 right-2 p-2 bg-black/50 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                      onClick={() => {
+                        setImageViewerSrc(viewingExpense.receiptphotourl!);
+                        setIsImageViewerOpen(true);
+                      }}
+                    >
+                      <Maximize2 size={16} />
+                    </button>
+                    <div className="p-2 bg-gray-50 dark:bg-dark-800 text-xs text-center text-gray-500">
+                        <a href={viewingExpense.receiptphotourl} target="_blank" rel="noreferrer" className="underline hover:text-brand-600">Ver original</a>
+                    </div>
+                </div>
+            )}
 
             {isLocked(viewingExpense) ? (
                 <div className="bg-red-50 dark:bg-red-900/20 p-3 rounded-lg border border-red-100 dark:border-red-800 flex items-start gap-3">
