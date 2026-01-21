@@ -1,19 +1,20 @@
 .wrapper {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
-  width: 100%;
+  gap: var(--spacing-sm);
 }
 
 .label {
-  font-size: 0.875rem;
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
   font-weight: 600;
+  font-size: 0.875rem;
   color: var(--text-primary);
 }
 
 .required {
   color: var(--danger);
-  margin-left: 0.25rem;
 }
 
 .inputWrapper {
@@ -22,45 +23,59 @@
   align-items: center;
 }
 
-.icon {
-  position: absolute;
-  left: 0.75rem;
-  display: inline-flex;
-  align-items: center;
-  color: var(--text-secondary);
-}
-
 .input {
   width: 100%;
   padding: 0.625rem 1rem;
+  border: 2px solid var(--border);
   border-radius: var(--radius-md);
-  border: 1px solid var(--border);
-  background-color: var(--bg-primary);
+  font-size: 0.875rem;
   color: var(--text-primary);
-  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
-}
-
-.withIcon {
-  padding-left: 2.5rem;
+  background-color: var(--bg-primary);
+  transition: all var(--transition-fast);
 }
 
 .input:focus {
-  outline: none;
   border-color: var(--primary);
   box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+  outline: none;
 }
 
-.error {
+.input.withIcon {
+  padding-left: 2.5rem;
+}
+
+.input.error {
   border-color: var(--danger);
+  background-color: rgba(239, 68, 68, 0.05);
+}
+
+.input.error:focus {
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.1);
+}
+
+.icon {
+  position: absolute;
+  left: var(--spacing-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-secondary);
+  pointer-events: none;
 }
 
 .togglePassword {
   position: absolute;
-  right: 0.75rem;
+  right: var(--spacing-md);
   background: none;
   border: none;
-  color: var(--text-secondary);
   cursor: pointer;
+  font-size: 1.25rem;
+  padding: 0;
+  transition: transform var(--transition-fast);
+}
+
+.togglePassword:hover {
+  transform: scale(1.1);
 }
 
 .helperText {
@@ -70,4 +85,5 @@
 
 .errorText {
   color: var(--danger);
+  font-weight: 500;
 }

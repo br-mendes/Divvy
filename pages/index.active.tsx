@@ -201,19 +201,6 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* CTA Final */}
-      <section className="py-20 bg-brand-50/60 dark:bg-brand-900/20 border-t border-brand-100 dark:border-brand-800">
-        <div className="max-w-5xl mx-auto px-4 text-center space-y-4">
-          <h2 className="text-3xl sm:text-4xl font-display font-bold text-gray-900 dark:text-white">Pronto para começar?</h2>
-          <p className="text-gray-600 dark:text-gray-300 text-lg">Grátis. Sem cartão.</p>
-          <Link href="/auth/signup">
-            <Button variant="primary" size="lg" className="inline-flex whitespace-nowrap">
-              Criar Conta Agora →
-            </Button>
-          </Link>
-        </div>
-      </section>
-
       {/* Footer */}
       <footer className="bg-gray-900 text-white py-12">
         <div className="max-w-7xl mx-auto px-4">
