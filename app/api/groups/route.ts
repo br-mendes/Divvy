@@ -5,7 +5,6 @@ import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs";
 export const dynamic = "force-dynamic";
 
 async function pickGroupsTable(supabase: any) {
-  // tenta "divvies" primeiro; se falhar por tabela inexistente, tenta "groups"
   const candidates = ["divvies", "groups"] as const;
 
   for (const table of candidates) {
@@ -13,19 +12,16 @@ async function pickGroupsTable(supabase: any) {
     if (!error) return table;
   }
 
-  // se nenhuma existir, devolve null
   return null;
 }
 
 async function listMembershipDivvyIds(supabase: any, userId: string) {
-  // membership table "divvy_members"
   const { data, error } = await supabase
     .from("divvy_members")
     .select("divvy_id, role, created_at")
     .eq("user_id", userId);
 
   if (error) {
-    // tabela inexistente ou policy/recursion etc
     return { ids: [] as string[], meta: { membershipError: error.message } };
   }
 
@@ -37,6 +33,7 @@ async function listMembershipDivvyIds(supabase: any, userId: string) {
 }
 
 async function insertGroup(supabase: any, payload: any) {
+  // tenta "divvies" primeiro; se não existir, tenta "groups"
   const tryTables = ["divvies", "groups"] as const;
 
   let lastErr: any = null;
@@ -48,7 +45,9 @@ async function insertGroup(supabase: any, payload: any) {
       .select("id")
       .single();
 
-    if (!error && data?.id) return { id: data.id as string, table };
+    if (!error && data?.id) {
+      return { id: data.id as string, table };
+    }
     lastErr = error;
   }
 
@@ -68,11 +67,11 @@ export async function GET() {
 
   const user = authData.user;
 
-  // 1) Descobre quais grupos o usuário pertence
+  // 1) memberships do usuário
   const membership = await listMembershipDivvyIds(supabase, user.id);
   const divvyIds = membership.ids;
 
-  // 2) Descobre a tabela real de grupos
+  // 2) tabela de grupos (divvies|groups)
   const groupsTable = await pickGroupsTable(supabase);
   if (!groupsTable) {
     return NextResponse.json({
@@ -85,7 +84,6 @@ export async function GET() {
     });
   }
 
-  // 3) Se não tem memberships, retorna vazio (sem erro)
   if (divvyIds.length === 0) {
     return NextResponse.json({
       ok: true,
@@ -97,7 +95,7 @@ export async function GET() {
     });
   }
 
-  // 4) Busca os grupos por id
+  // 3) busca grupos por id
   const { data: groups, error: groupsErr } = await supabase
     .from(groupsTable)
     .select("*")
@@ -146,16 +144,20 @@ export async function POST(req: Request) {
 
   const name = (body?.name ?? body?.title ?? "Novo grupo").toString().trim();
 
-  try {
-    const created = await insertGroup(supabase, { name });
+  // payload “tolerante”: evita passar colunas que podem não existir
+  const basePayload: any = { name };
 
-    //  garante membership do criador (RPC que você criou no SQL)
+  try {
+    const created = await insertGroup(supabase, basePayload);
+
+    // garante membership do criador
     const { error: rpcErr } = await supabase.rpc("ensure_divvy_membership", {
       p_divvy_id: created.id,
       p_role: "owner",
     });
 
     if (rpcErr) {
+      // não quebra o fluxo (grupo foi criado), apenas avisa
       return NextResponse.json({
         ok: true,
         group: { id: created.id },
