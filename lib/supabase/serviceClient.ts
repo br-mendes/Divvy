@@ -1,37 +1,25 @@
 import { createClient } from '@supabase/supabase-js';
 
-function pick(...vals: Array<string | undefined>) {
-  for (const v of vals) {
-    const s = (v ?? '').trim();
+function pickFirst(...values: Array<string | undefined | null>) {
+  for (const v of values) {
+    const s = (v ?? '').toString().trim();
     if (s) return s;
   }
   return '';
 }
 
-export function getSupabaseUrl() {
-  return pick(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_URL);
-}
-
-export function getSupabaseServiceRoleKey() {
-  return pick(process.env.SUPABASE_SERVICE_ROLE_KEY, process.env.SUPABASE_SERVICE_KEY);
-}
-
 /**
- * Server-only Supabase client with service role key.
- * Returns null when env is missing to avoid build-time crashes.
+ * Service-role Supabase client.
+ * IMPORTANT: nunca dar throw no import/build.
+ * Retorna null se faltar env.
  */
-export function createServiceSupabaseClient() {
-  const url = getSupabaseUrl();
-  const serviceKey = getSupabaseServiceRoleKey();
+export function createServiceSupabase() {
+  const url = pickFirst(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_URL);
+  const key = pickFirst(process.env.SUPABASE_SERVICE_ROLE_KEY);
 
-  if (!url || !serviceKey) {
-    return null;
-  }
+  if (!url || !key) return null;
 
-  return createClient(url, serviceKey, {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false,
-    },
+  return createClient(url, key, {
+    auth: { persistSession: false, autoRefreshToken: false },
   });
 }
