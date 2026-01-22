@@ -4,130 +4,175 @@ import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs";
 
 export const dynamic = "force-dynamic";
 
-type CreateGroupBody = {
-  name?: string;
-  description?: string;
-};
+async function pickGroupsTable(supabase: any) {
+  // tenta "divvies" primeiro; se falhar por tabela inexistente, tenta "groups"
+  const candidates = ["divvies", "groups"] as const;
+
+  for (const table of candidates) {
+    const { error } = await supabase.from(table).select("id").limit(1);
+    if (!error) return table;
+  }
+
+  // se nenhuma existir, devolve null
+  return null;
+}
+
+async function listMembershipDivvyIds(supabase: any, userId: string) {
+  // membership table "divvy_members"
+  const { data, error } = await supabase
+    .from("divvy_members")
+    .select("divvy_id, role, created_at")
+    .eq("user_id", userId);
+
+  if (error) {
+    // tabela inexistente ou policy/recursion etc
+    return { ids: [] as string[], meta: { membershipError: error.message } };
+  }
+
+  const ids = (data ?? [])
+    .map((r: any) => r?.divvy_id)
+    .filter(Boolean) as string[];
+
+  return { ids, meta: { memberships: data ?? [] } };
+}
+
+async function insertGroup(supabase: any, payload: any) {
+  const tryTables = ["divvies", "groups"] as const;
+
+  let lastErr: any = null;
+
+  for (const table of tryTables) {
+    const { data, error } = await supabase
+      .from(table)
+      .insert(payload)
+      .select("id")
+      .single();
+
+    if (!error && data?.id) return { id: data.id as string, table };
+    lastErr = error;
+  }
+
+  throw lastErr ?? new Error("Failed to insert group");
+}
 
 export async function GET() {
   const supabase = createRouteHandlerClient({ cookies });
 
-  const {
-    data: { user },
-    error: userErr,
-  } = await supabase.auth.getUser();
-
-  if (userErr || !user) {
+  const { data: authData, error: authErr } = await supabase.auth.getUser();
+  if (authErr || !authData?.user) {
     return NextResponse.json(
       { ok: false, code: "UNAUTHENTICATED", message: "You must be logged in" },
       { status: 401 }
     );
   }
 
-  // Busca grupos onde o usuário é owner OU membro
-  // 1) owner
-  const { data: owned, error: ownedErr } = await supabase
-    .from("divvies")
-    .select("id,name,description,owner_id,created_at")
-    .eq("owner_id", user.id)
+  const user = authData.user;
+
+  // 1) Descobre quais grupos o usuário pertence
+  const membership = await listMembershipDivvyIds(supabase, user.id);
+  const divvyIds = membership.ids;
+
+  // 2) Descobre a tabela real de grupos
+  const groupsTable = await pickGroupsTable(supabase);
+  if (!groupsTable) {
+    return NextResponse.json({
+      ok: true,
+      groups: [],
+      authMode: "cookie",
+      source: "none",
+      note: "No groups table found (checked: divvies, groups).",
+      meta: membership.meta,
+    });
+  }
+
+  // 3) Se não tem memberships, retorna vazio (sem erro)
+  if (divvyIds.length === 0) {
+    return NextResponse.json({
+      ok: true,
+      groups: [],
+      authMode: "cookie",
+      source: groupsTable,
+      note: "No memberships for this user.",
+      meta: membership.meta,
+    });
+  }
+
+  // 4) Busca os grupos por id
+  const { data: groups, error: groupsErr } = await supabase
+    .from(groupsTable)
+    .select("*")
+    .in("id", divvyIds)
     .order("created_at", { ascending: false });
 
-  if (ownedErr) {
+  if (groupsErr) {
     return NextResponse.json(
-      { ok: false, code: "DB_ERROR", message: ownedErr.message },
+      {
+        ok: false,
+        code: "DB_ERROR",
+        message: groupsErr.message,
+        debug: { table: groupsTable, divvyIdsCount: divvyIds.length },
+        meta: membership.meta,
+      },
       { status: 500 }
     );
   }
-
-  // 2) memberships -> divvies
-  const { data: memberRows, error: memErr } = await supabase
-    .from("divvy_members")
-    .select("divvy_id, role, divvies:divvy_id(id,name,description,owner_id,created_at)")
-    .eq("user_id", user.id);
-
-  if (memErr) {
-    return NextResponse.json(
-      { ok: false, code: "DB_ERROR", message: memErr.message },
-      { status: 500 }
-    );
-  }
-
-  const memberDivvies =
-    (memberRows ?? [])
-      .map((r: any) => r.divvies)
-      .filter(Boolean) ?? [];
-
-  // Merge unique por id
-  const map = new Map<string, any>();
-  for (const g of owned ?? []) map.set(g.id, g);
-  for (const g of memberDivvies) map.set(g.id, g);
-
-  const groups = Array.from(map.values()).sort((a, b) => {
-    const da = new Date(a.created_at).getTime();
-    const db = new Date(b.created_at).getTime();
-    return db - da;
-  });
 
   return NextResponse.json({
     ok: true,
-    groups,
+    groups: groups ?? [],
     authMode: "cookie",
-    source: "divvies/divvy_members",
+    source: groupsTable,
+    meta: membership.meta,
   });
 }
 
 export async function POST(req: Request) {
   const supabase = createRouteHandlerClient({ cookies });
 
-  const {
-    data: { user },
-    error: userErr,
-  } = await supabase.auth.getUser();
-
-  if (userErr || !user) {
+  const { data: authData, error: authErr } = await supabase.auth.getUser();
+  if (authErr || !authData?.user) {
     return NextResponse.json(
       { ok: false, code: "UNAUTHENTICATED", message: "You must be logged in" },
       { status: 401 }
     );
   }
 
-  let body: CreateGroupBody = {};
+  let body: any = {};
   try {
     body = await req.json();
   } catch {
     body = {};
   }
 
-  const name = (body.name ?? "").trim();
-  const description = (body.description ?? "").trim();
+  const name = (body?.name ?? body?.title ?? "Novo grupo").toString().trim();
 
-  if (!name) {
+  try {
+    const created = await insertGroup(supabase, { name });
+
+    //  garante membership do criador (RPC que você criou no SQL)
+    const { error: rpcErr } = await supabase.rpc("ensure_divvy_membership", {
+      p_divvy_id: created.id,
+      p_role: "owner",
+    });
+
+    if (rpcErr) {
+      return NextResponse.json({
+        ok: true,
+        group: { id: created.id },
+        table: created.table,
+        warning: { code: "MEMBERSHIP_NOT_CREATED", message: rpcErr.message },
+      });
+    }
+
+    return NextResponse.json({
+      ok: true,
+      group: { id: created.id },
+      table: created.table,
+    });
+  } catch (e: any) {
     return NextResponse.json(
-      { ok: false, code: "VALIDATION", message: "name is required" },
-      { status: 400 }
-    );
-  }
-
-  // Cria o grupo como owner
-  const { data: created, error: insErr } = await supabase
-    .from("divvies")
-    .insert({ name, description: description || null, owner_id: user.id })
-    .select("id,name,description,owner_id,created_at")
-    .single();
-
-  if (insErr || !created) {
-    return NextResponse.json(
-      { ok: false, code: "DB_ERROR", message: insErr?.message ?? "insert failed" },
+      { ok: false, code: "CREATE_GROUP_FAILED", message: e?.message ?? "Unknown error" },
       { status: 500 }
     );
   }
-
-  // Garante membership do owner (role=admin)
-  await supabase.from("divvy_members").insert({
-    divvy_id: created.id,
-    user_id: user.id,
-    role: "admin",
-  });
-
-  return NextResponse.json({ ok: true, group: created }, { status: 201 });
 }
