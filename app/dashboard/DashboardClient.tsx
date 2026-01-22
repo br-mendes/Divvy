@@ -26,14 +26,25 @@ export default function DashboardClient() {
         cache: 'no-store',
         headers: token ? { Authorization: `Bearer ${token}` } : undefined,
       });
-      const json = await res.json().catch(() => ({}));
-      setDebug(json);
 
-      if (!res.ok) {
-        throw new Error(json?.message || json?.error || `HTTP ${res.status}`);
+      const ct = res.headers.get('content-type') || '';
+      let payload: any = null;
+
+      if (ct.includes('application/json')) {
+        payload = await res.json().catch(() => ({}));
+      } else {
+        const text = await res.text().catch(() => '');
+        payload = { nonJson: true, contentType: ct, text: text.slice(0, 2000) };
       }
 
-      setGroups(json?.groups ?? []);
+      setDebug({ status: res.status, ok: res.ok, payload });
+
+      if (!res.ok) {
+        const msg = payload?.message || payload?.error || payload?.payload?.message || `HTTP ${res.status}`;
+        throw new Error(msg);
+      }
+
+      setGroups(payload?.groups ?? payload?.payload?.groups ?? []);
     } catch (e: any) {
       setGroups([]);
       setError(e?.message || 'Falha ao carregar grupos');
@@ -51,8 +62,8 @@ export default function DashboardClient() {
     <main className="mx-auto max-w-4xl p-6 space-y-6">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold">Dashboard</h1>
-          <p className="text-sm text-gray-600">Lista rápida dos seus grupos. (A UI de métricas volta na próxima etapa.)</p>
+          <h1 className="text-2xl font-bold">Meus grupos</h1>
+          <p className="text-sm text-gray-600">(Compat) Esta rota existe por legado: /dashboard/divvies. A tela principal é /groups.</p>
         </div>
         <div className="flex gap-2">
           <Link href="/groups" className="inline-flex items-center justify-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium hover:bg-gray-50">
