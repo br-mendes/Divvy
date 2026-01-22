@@ -1,34 +1,110 @@
 import { NextResponse } from 'next/server';
+import {
+  requireUser,
+  jsonError,
+  pickFirstWorkingTable,
+} from '@/app/api/_utils/supabase';
 
 export const dynamic = 'force-dynamic';
 
-/**
- * STUB AUTOMÁTICO PARA DESTRAVAR BUILD
- * - Evita qualquer throw em tempo de import durante 
-ext build
- * - Se faltar SUPABASE_SERVICE_ROLE_KEY, retorna 500 dentro do handler
- * - Usa req.url para pathname (evita problemas de backslash no Windows)
- */
+const GROUP_TABLE_CANDIDATES = ['divvies', 'groups'];
 
-function missingEnv(pathname: string) {
-  return NextResponse.json(
-    { ok: false, code: 'MISSING_ENV', message: 'Missing env SUPABASE_SERVICE_ROLE_KEY', pathname },
-    { status: 500 }
+export async function GET() {
+  const { supabase, user, error } = await requireUser();
+  if (error) return error;
+
+  const { table, lastError } = await pickFirstWorkingTable(
+    supabase,
+    GROUP_TABLE_CANDIDATES
   );
+  if (!table) {
+    return jsonError(
+      500,
+      'SCHEMA_NOT_FOUND',
+      'Could not find groups table (tried divvies, groups).',
+      { lastError }
+    );
+  }
+
+  // RLS should restrict to user memberships; if not configured, adjust later.
+  const { data, error: qErr } = await supabase
+    .from(table)
+    .select('*')
+    .order('created_at', { ascending: false })
+    .limit(50);
+
+  if (qErr) return jsonError(500, 'QUERY_FAILED', 'Failed to list groups.', { qErr });
+
+  return NextResponse.json({ ok: true, userId: user.id, table, groups: data ?? [] });
 }
 
-function ok(pathname: string, method: string) {
-  return NextResponse.json({ ok: true, pathname, method, note: 'stub' });
-}
+export async function POST(req: Request) {
+  const { supabase, user, error } = await requireUser();
+  if (error) return error;
 
-function gate(req: Request, method: string) {
-  const pathname = new URL(req.url).pathname;
-  if (!process.env.SUPABASE_SERVICE_ROLE_KEY) return missingEnv(pathname);
-  return ok(pathname, method);
-}
+  const { table, lastError } = await pickFirstWorkingTable(
+    supabase,
+    GROUP_TABLE_CANDIDATES
+  );
+  if (!table) {
+    return jsonError(
+      500,
+      'SCHEMA_NOT_FOUND',
+      'Could not find groups table (tried divvies, groups).',
+      { lastError }
+    );
+  }
 
-export async function GET(req: Request)    { return gate(req, 'GET'); }
-export async function POST(req: Request)   { return gate(req, 'POST'); }
-export async function PUT(req: Request)    { return gate(req, 'PUT'); }
-export async function PATCH(req: Request)  { return gate(req, 'PATCH'); }
-export async function DELETE(req: Request) { return gate(req, 'DELETE'); }
+  const body = await req.json().catch(() => ({}));
+  const name = (body?.name ?? '').toString().trim();
+  const description = (body?.description ?? '').toString().trim();
+
+  if (!name) return jsonError(400, 'VALIDATION', 'Field "name" is required.');
+
+  // Try common creator columns: created_by / owner_id / user_id (tolerant).
+  const candidates = [
+    { created_by: user.id },
+    { owner_id: user.id },
+    { user_id: user.id },
+  ];
+
+  let created: any = null;
+  let lastCreateErr: any = null;
+
+  for (const extra of candidates) {
+    const { data, error: insErr } = await supabase
+      .from(table)
+      .insert([{ name, description, ...extra }])
+      .select('*')
+      .single();
+
+    if (!insErr) {
+      created = data;
+      break;
+    }
+    lastCreateErr = insErr;
+  }
+
+  // If none worked, try without extra ownership column (maybe handled by trigger/default).
+  if (!created) {
+    const { data, error: insErr } = await supabase
+      .from(table)
+      .insert([{ name, description }])
+      .select('*')
+      .single();
+
+    if (insErr) lastCreateErr = insErr;
+    else created = data;
+  }
+
+  if (!created) {
+    return jsonError(
+      500,
+      'INSERT_FAILED',
+      'Failed to create group (schema mismatch likely).',
+      { lastCreateErr }
+    );
+  }
+
+  return NextResponse.json({ ok: true, table, group: created });
+}
