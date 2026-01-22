@@ -207,25 +207,50 @@ export async function POST(req: Request) {
 
   const name = (body?.name ?? body?.title ?? "Novo grupo").toString().trim();
 
-  // payload mínimo (evita erro por colunas inexistentes)
-  const payload: any = { name };
+  // 1) Caminho preferido: RPC (contorna RLS e já cria membership)
+  const { data: divvyId, error: rpcErr } = await supabase.rpc("create_divvy", { p_name: name });
 
+  if (!rpcErr && divvyId) {
+    return NextResponse.json({
+      ok: true,
+      group: { id: divvyId, name },
+      table: "divvies",
+      via: "rpc:create_divvy",
+      debug: { userId: user.id },
+    });
+  }
+
+  // 2) Fallback (caso a RPC ainda não exista por algum motivo)
+  // tenta insert direto incluindo owner_id para bater com policies que você possa criar
   try {
-    const created = await insertDivvy(supabase, payload);
+    const { data, error } = await supabase
+      .from("divvies")
+      .insert({ name, owner_id: user.id })
+      .select("id")
+      .single();
 
-    const membershipShape = await pickMembershipShape(supabase);
-    const ensured = await ensureMembership(supabase, created.id, user.id, membershipShape);
+    if (error) throw error;
+
+    // tenta garantir membership (se existir)
+    await supabase
+      .from("divvy_members")
+      .insert({ divvy_id: data.id, user_id: user.id, role: "owner" });
 
     return NextResponse.json({
       ok: true,
-      group: { id: created.id, name },
+      group: { id: data.id, name },
       table: "divvies",
-      membership: ensured,
-      debug: { userId: user.id, membershipShape },
+      via: "fallback:direct_insert",
+      warning: rpcErr ? rpcErr.message : null,
     });
   } catch (e: any) {
     return NextResponse.json(
-      { ok: false, code: "CREATE_GROUP_FAILED", message: e?.message ?? "Unknown error" },
+      {
+        ok: false,
+        code: "CREATE_GROUP_FAILED",
+        message: e?.message ?? "Unknown error",
+        rpcError: rpcErr?.message ?? null,
+      },
       { status: 500 }
     );
   }
