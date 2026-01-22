@@ -1,110 +1,97 @@
 import { NextResponse } from 'next/server';
-import {
-  requireUser,
-  jsonError,
-  pickFirstWorkingTable,
-} from '@/app/api/_utils/supabase';
+import { createServiceSupabase } from '@/lib/supabase/serviceClient';
+import { getUserFromRequest } from '@/app/api/_utils/auth';
 
 export const dynamic = 'force-dynamic';
+export const runtime = 'nodejs';
 
-const GROUP_TABLE_CANDIDATES = ['divvies', 'groups'];
-
-export async function GET() {
-  const { supabase, user, error } = await requireUser();
-  if (error) return error;
-
-  const { table, lastError } = await pickFirstWorkingTable(
-    supabase,
-    GROUP_TABLE_CANDIDATES
-  );
-  if (!table) {
-    return jsonError(
-      500,
-      'SCHEMA_NOT_FOUND',
-      'Could not find groups table (tried divvies, groups).',
-      { lastError }
-    );
+async function tryQuery<T>(fn: () => Promise<{ data: T | null; error: any }>) {
+  try {
+    const r = await fn();
+    if (!r.error) return { ok: true as const, data: r.data };
+    const msg = String(r.error?.message || '');
+    if (msg.toLowerCase().includes('does not exist') || msg.toLowerCase().includes('relation')) {
+      return { ok: false as const, data: null, retry: true as const, error: r.error };
+    }
+    return { ok: false as const, data: null, retry: false as const, error: r.error };
+  } catch (e: any) {
+    return { ok: false as const, data: null, retry: true as const, error: e };
   }
-
-  // RLS should restrict to user memberships; if not configured, adjust later.
-  const { data, error: qErr } = await supabase
-    .from(table)
-    .select('*')
-    .order('created_at', { ascending: false })
-    .limit(50);
-
-  if (qErr) return jsonError(500, 'QUERY_FAILED', 'Failed to list groups.', { qErr });
-
-  return NextResponse.json({ ok: true, userId: user.id, table, groups: data ?? [] });
 }
 
-export async function POST(req: Request) {
-  const { supabase, user, error } = await requireUser();
-  if (error) return error;
+export async function GET(req: Request) {
+  const auth = await getUserFromRequest(req);
 
-  const { table, lastError } = await pickFirstWorkingTable(
-    supabase,
-    GROUP_TABLE_CANDIDATES
+  if (!auth) {
+    return NextResponse.json(
+      { ok: false, code: 'UNAUTHENTICATED', message: 'You must be logged in' },
+      { status: 401 }
+    );
+  }
+
+  const service = createServiceSupabase();
+  if (!service) {
+    return NextResponse.json(
+      { ok: false, code: 'MISSING_ENV', message: 'Missing Supabase service envs for groups listing' },
+      { status: 500 }
+    );
+  }
+
+  const userId = auth.userId;
+
+  const q1 = await tryQuery(() =>
+    service
+      .from('divvy_members')
+      .select('divvy_id, role, divvies(*)')
+      .eq('user_id', userId)
   );
-  if (!table) {
-    return jsonError(
-      500,
-      'SCHEMA_NOT_FOUND',
-      'Could not find groups table (tried divvies, groups).',
-      { lastError }
-    );
+
+  if (q1.ok && Array.isArray(q1.data)) {
+    const groups = (q1.data as any[]).map((r) => ({
+      id: r.divvy_id,
+      role: r.role ?? null,
+      ...(r.divvies ?? {}),
+    }));
+    return NextResponse.json({ ok: true, groups, authMode: auth.mode });
+  }
+  if (!q1.ok && (q1 as any).retry === false) {
+    return NextResponse.json({ ok: false, message: (q1 as any).error?.message ?? 'Failed' }, { status: 500 });
   }
 
-  const body = await req.json().catch(() => ({}));
-  const name = (body?.name ?? '').toString().trim();
-  const description = (body?.description ?? '').toString().trim();
+  const q2 = await tryQuery(() =>
+    service
+      .from('group_members')
+      .select('group_id, role, groups(*)')
+      .eq('user_id', userId)
+  );
 
-  if (!name) return jsonError(400, 'VALIDATION', 'Field "name" is required.');
+  if (q2.ok && Array.isArray(q2.data)) {
+    const groups = (q2.data as any[]).map((r) => ({
+      id: r.group_id,
+      role: r.role ?? null,
+      ...(r.groups ?? {}),
+    }));
+    return NextResponse.json({ ok: true, groups, authMode: auth.mode });
+  }
+  if (!q2.ok && (q2 as any).retry === false) {
+    return NextResponse.json({ ok: false, message: (q2 as any).error?.message ?? 'Failed' }, { status: 500 });
+  }
 
-  // Try common creator columns: created_by / owner_id / user_id (tolerant).
-  const candidates = [
-    { created_by: user.id },
-    { owner_id: user.id },
-    { user_id: user.id },
-  ];
-
-  let created: any = null;
-  let lastCreateErr: any = null;
-
-  for (const extra of candidates) {
-    const { data, error: insErr } = await supabase
-      .from(table)
-      .insert([{ name, description, ...extra }])
+  const q3 = await tryQuery(() =>
+    service
+      .from('divvies')
       .select('*')
-      .single();
+      .eq('owner_id', userId)
+  );
 
-    if (!insErr) {
-      created = data;
-      break;
-    }
-    lastCreateErr = insErr;
+  if (q3.ok && Array.isArray(q3.data)) {
+    return NextResponse.json({ ok: true, groups: q3.data, authMode: auth.mode });
   }
 
-  // If none worked, try without extra ownership column (maybe handled by trigger/default).
-  if (!created) {
-    const { data, error: insErr } = await supabase
-      .from(table)
-      .insert([{ name, description }])
-      .select('*')
-      .single();
-
-    if (insErr) lastCreateErr = insErr;
-    else created = data;
-  }
-
-  if (!created) {
-    return jsonError(
-      500,
-      'INSERT_FAILED',
-      'Failed to create group (schema mismatch likely).',
-      { lastCreateErr }
-    );
-  }
-
-  return NextResponse.json({ ok: true, table, group: created });
+  return NextResponse.json({
+    ok: true,
+    groups: [],
+    authMode: auth.mode,
+    note: 'No membership tables matched (checked: divvy_members/group_members/divvies.owner_id).'
+  });
 }
