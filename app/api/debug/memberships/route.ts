@@ -14,13 +14,12 @@ export async function GET() {
 
   const userId = authData.user.id;
 
-  // tenta ler memberships (divvy_members)
   const { data, error } = await supabase
     .from("divvy_members")
-    .select("divvy_id, role, created_at")
+    .select("divvy_id, user_id, role, created_at")
     .eq("user_id", userId)
     .order("created_at", { ascending: false })
-    .limit(20);
+    .limit(50);
 
   return NextResponse.json({
     ok: true,
