@@ -1,34 +1,47 @@
 import { NextResponse } from 'next/server';
+import {
+  requireUser,
+  jsonError,
+  pickFirstWorkingTable,
+} from '@/app/api/_utils/supabase';
 
 export const dynamic = 'force-dynamic';
 
-/**
- * STUB AUTOMÁTICO PARA DESTRAVAR BUILD
- * - Evita qualquer throw em tempo de import durante 
-ext build
- * - Se faltar SUPABASE_SERVICE_ROLE_KEY, retorna 500 dentro do handler
- * - Usa req.url para pathname (evita problemas de backslash no Windows)
- */
+const GROUP_TABLE_CANDIDATES = ['divvies', 'groups'];
 
-function missingEnv(pathname: string) {
-  return NextResponse.json(
-    { ok: false, code: 'MISSING_ENV', message: 'Missing env SUPABASE_SERVICE_ROLE_KEY', pathname },
-    { status: 500 }
+export async function GET(
+  _req: Request,
+  { params }: { params: { divvyId: string } }
+) {
+  const { supabase, user, error } = await requireUser();
+  if (error) return error;
+
+  const divvyId = params.divvyId;
+  if (!divvyId) return jsonError(400, 'VALIDATION', 'Missing divvyId param.');
+
+  const { table, lastError } = await pickFirstWorkingTable(
+    supabase,
+    GROUP_TABLE_CANDIDATES
   );
-}
+  if (!table) {
+    return jsonError(
+      500,
+      'SCHEMA_NOT_FOUND',
+      'Could not find groups table (tried divvies, groups).',
+      { lastError }
+    );
+  }
 
-function ok(pathname: string, method: string) {
-  return NextResponse.json({ ok: true, pathname, method, note: 'stub' });
-}
+  const { data, error: qErr } = await supabase
+    .from(table)
+    .select('*')
+    .eq('id', divvyId)
+    .single();
+  if (qErr) {
+    return jsonError(404, 'NOT_FOUND', 'Group not found or not accessible.', {
+      qErr,
+    });
+  }
 
-function gate(req: Request, method: string) {
-  const pathname = new URL(req.url).pathname;
-  if (!process.env.SUPABASE_SERVICE_ROLE_KEY) return missingEnv(pathname);
-  return ok(pathname, method);
+  return NextResponse.json({ ok: true, userId: user.id, table, group: data });
 }
-
-export async function GET(req: Request)    { return gate(req, 'GET'); }
-export async function POST(req: Request)   { return gate(req, 'POST'); }
-export async function PUT(req: Request)    { return gate(req, 'PUT'); }
-export async function PATCH(req: Request)  { return gate(req, 'PATCH'); }
-export async function DELETE(req: Request) { return gate(req, 'DELETE'); }
