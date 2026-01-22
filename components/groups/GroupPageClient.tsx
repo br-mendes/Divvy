@@ -1,333 +1,264 @@
 'use client';
 
+import Link from 'next/link';
 import * as React from 'react';
-import GroupTabs, { GroupTabKey } from '@/components/groups/GroupTabs';
-import Input from '@/components/common/Input';
-import Button from '@/components/common/Button';
 
-type ApiOk<T> = { ok: true } & T;
-type ApiErr = { ok: false; code?: string; message?: string; extra?: any };
+type AnyObj = Record<string, any>;
 
-async function apiFetch<T>(url: string, init?: RequestInit): Promise<ApiOk<T>> {
-  const res = await fetch(url, {
-    ...init,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(init?.headers ?? {}),
-    },
-    cache: 'no-store',
-  });
-
-  const data = (await res.json().catch(() => null)) as ApiOk<T> | ApiErr | null;
-
-  if (!res.ok || !data || (data as ApiErr).ok === false) {
-    const err = data as ApiErr | null;
-    const msg = err?.message || `Request failed (${res.status})`;
-    throw new Error(msg);
+function pick(obj: AnyObj | null | undefined, ...keys: string[]) {
+  if (!obj) return undefined;
+  for (const k of keys) {
+    const v = obj[k];
+    if (v !== undefined && v !== null) return v;
   }
-
-  return data as ApiOk<T>;
+  return undefined;
 }
 
-function formatMoneyBRL(value: number) {
-  try {
-    return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
-  } catch {
-    return `R$ ${value.toFixed(2)}`;
-  }
+function getTabFromLocation() {
+  if (typeof window === 'undefined') return 'expenses';
+  const sp = new URLSearchParams(window.location.search);
+  return sp.get('tab') || 'expenses';
 }
 
-type Props = {
-  divvyId: string;
-};
+function setTabInLocation(next: string) {
+  const sp = new URLSearchParams(window.location.search);
+  sp.set('tab', next);
+  window.history.replaceState({}, '', `${window.location.pathname}?${sp.toString()}`);
+}
 
-export default function GroupPageClient({ divvyId }: Props) {
-  const [tab, setTab] = React.useState<GroupTabKey>('expenses');
+const TABS = [
+  { key: 'expenses', label: 'Despesas' },
+  { key: 'categories', label: 'Categorias' },
+  { key: 'balances', label: 'Saldos' },
+  { key: 'members', label: 'Membros' },
+  { key: 'debug', label: 'Debug' },
+] as const;
+
+export default function GroupPageClient({ divvyId }: { divvyId: string }) {
+  const [tab, setTab] = React.useState<string>(() => getTabFromLocation());
 
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
 
-  const [group, setGroup] = React.useState<any>(null);
-  const [categories, setCategories] = React.useState<any[]>([]);
-  const [expenses, setExpenses] = React.useState<any[]>([]);
-
-  const [newCategoryName, setNewCategoryName] = React.useState('');
-  const [creatingCategory, setCreatingCategory] = React.useState(false);
-
-  const [newExpenseDesc, setNewExpenseDesc] = React.useState('');
-  const [newExpenseAmount, setNewExpenseAmount] = React.useState('');
-  const [newExpenseCategoryId, setNewExpenseCategoryId] = React.useState('');
-  const [creatingExpense, setCreatingExpense] = React.useState(false);
+  const [groupRaw, setGroupRaw] = React.useState<any>(null);
+  const [expensesRaw, setExpensesRaw] = React.useState<any>(null);
+  const [categoriesRaw, setCategoriesRaw] = React.useState<any>(null);
+  const [balancesRaw, setBalancesRaw] = React.useState<any>(null);
 
   React.useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const sp = new URLSearchParams(window.location.search);
-    const q = sp.get('tab') as GroupTabKey | null;
-    if (q) setTab(q);
+    const onPop = () => setTab(getTabFromLocation());
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
   }, []);
 
-  const setTabAndUrl = React.useCallback((next: GroupTabKey) => {
-    setTab(next);
-    if (typeof window === 'undefined') return;
-    const sp = new URLSearchParams(window.location.search);
-    sp.set('tab', next);
-    const nextUrl = `${window.location.pathname}?${sp.toString()}`;
-    window.history.replaceState({}, '', nextUrl);
-  }, []);
+  React.useEffect(() => {
+    let mounted = true;
 
-  const loadAll = React.useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const g = await apiFetch<{ table: string; group: any }>(`/api/groups/${divvyId}`);
-      setGroup(g.group);
+    async function loadAll() {
+      setLoading(true);
+      setError(null);
 
-      const [c, e] = await Promise.all([
-        apiFetch<{ table: string; categories: any[] }>(`/api/groups/${divvyId}/categories`),
-        apiFetch<{ table: string; expenses: any[] }>(`/api/groups/${divvyId}/expenses`),
-      ]);
+      try {
+        const [gRes, eRes, cRes, bRes] = await Promise.all([
+          fetch(`/api/groups/${divvyId}`, { cache: 'no-store' }),
+          fetch(`/api/groups/${divvyId}/expenses`, { cache: 'no-store' }),
+          fetch(`/api/groups/${divvyId}/categories`, { cache: 'no-store' }),
+          fetch(`/api/groups/${divvyId}/balances`, { cache: 'no-store' }),
+        ]);
 
-      setCategories(c.categories ?? []);
-      setExpenses(e.expenses ?? []);
-    } catch (err: any) {
-      setError(err?.message ?? 'Falha ao carregar dados do grupo.');
-    } finally {
-      setLoading(false);
+        const [gJson, eJson, cJson, bJson] = await Promise.all([
+          gRes.json().catch(() => ({})),
+          eRes.json().catch(() => ({})),
+          cRes.json().catch(() => ({})),
+          bRes.json().catch(() => ({})),
+        ]);
+
+        if (!mounted) return;
+
+        setGroupRaw({ status: gRes.status, ok: gRes.ok, body: gJson });
+        setExpensesRaw({ status: eRes.status, ok: eRes.ok, body: eJson });
+        setCategoriesRaw({ status: cRes.status, ok: cRes.ok, body: cJson });
+        setBalancesRaw({ status: bRes.status, ok: bRes.ok, body: bJson });
+
+        if (!gRes.ok) {
+          setError(gJson?.message || gJson?.error || `Falha ao carregar grupo (HTTP ${gRes.status})`);
+        }
+      } catch (e: any) {
+        if (!mounted) return;
+        setError(e?.message || 'Erro desconhecido ao carregar dados do grupo');
+      } finally {
+        if (!mounted) return;
+        setLoading(false);
+      }
     }
+
+    loadAll();
+    return () => {
+      mounted = false;
+    };
   }, [divvyId]);
 
-  React.useEffect(() => {
-    void loadAll();
-  }, [loadAll]);
+  const group = (groupRaw?.body?.group || groupRaw?.body?.data || groupRaw?.body) as AnyObj | null;
+  const groupName = (pick(group, 'name', 'title') as string) || 'Grupo';
+  const groupDesc = (pick(group, 'description', 'details') as string) || '';
+  const createdAt = pick(group, 'created_at') as string | undefined;
 
-  async function onCreateCategory(e: React.FormEvent) {
-    e.preventDefault();
-    const name = newCategoryName.trim();
-    if (!name) return;
-
-    setCreatingCategory(true);
-    setError(null);
-    try {
-      await apiFetch<{ category: any }>(`/api/groups/${divvyId}/categories`, {
-        method: 'POST',
-        body: JSON.stringify({ name }),
-      });
-      setNewCategoryName('');
-      await loadAll();
-      setTabAndUrl('categories');
-    } catch (err: any) {
-      setError(err?.message ?? 'Falha ao criar categoria.');
-    } finally {
-      setCreatingCategory(false);
-    }
+  function go(next: string) {
+    setTabInLocation(next);
+    setTab(next);
   }
-
-  async function onCreateExpense(e: React.FormEvent) {
-    e.preventDefault();
-
-    const description = newExpenseDesc.trim();
-    const amount = Number((newExpenseAmount ?? '').toString().replace(',', '.'));
-
-    if (!description) return;
-    if (!Number.isFinite(amount) || amount <= 0) return;
-
-    setCreatingExpense(true);
-    setError(null);
-    try {
-      await apiFetch<{ expense: any }>(`/api/groups/${divvyId}/expenses`, {
-        method: 'POST',
-        body: JSON.stringify({
-          description,
-          amount,
-          category_id: newExpenseCategoryId || undefined,
-        }),
-      });
-
-      setNewExpenseDesc('');
-      setNewExpenseAmount('');
-      setNewExpenseCategoryId('');
-      await loadAll();
-      setTabAndUrl('expenses');
-    } catch (err: any) {
-      setError(err?.message ?? 'Falha ao criar despesa.');
-    } finally {
-      setCreatingExpense(false);
-    }
-  }
-
-  const total = React.useMemo(() => {
-    return (expenses ?? []).reduce((acc, it) => acc + Number(it?.amount ?? 0), 0);
-  }, [expenses]);
 
   return (
-    <main className="max-w-5xl mx-auto p-6 space-y-6">
-      <header className="flex items-start justify-between gap-4">
+    <main className="max-w-6xl mx-auto p-6 space-y-6">
+      <header className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
-          <h1 className="text-2xl font-bold text-gray-900">{group?.name ?? 'Grupo'}</h1>
-          <p className="text-sm text-gray-600 mt-1 break-all">
-            ID: <span className="font-mono">{divvyId}</span>
-          </p>
-          {group?.description ? (
-            <p className="text-sm text-gray-600 mt-2">{group.description}</p>
+          <div className="flex items-center gap-3">
+            <Link className="text-sm underline text-gray-700" href="/groups">
+              ← Voltar
+            </Link>
+            <span className="rounded bg-gray-100 px-2 py-1 text-xs font-mono text-gray-600">{divvyId}</span>
+          </div>
+
+          <h1 className="mt-2 truncate text-2xl font-bold text-gray-900">{groupName}</h1>
+
+          {groupDesc ? <p className="mt-1 text-sm text-gray-600">{groupDesc}</p> : null}
+
+          {createdAt ? (
+            <p className="mt-2 text-xs text-gray-500">
+              Criado em {new Date(createdAt).toLocaleDateString('pt-BR')}
+            </p>
           ) : null}
         </div>
 
-        <div className="shrink-0">
-          <Button variant="secondary" onClick={() => void loadAll()} disabled={loading}>
-            Atualizar
-          </Button>
+        <div className="flex gap-2">
+          <Link
+            href={`/api/groups/${divvyId}/expenses/export.csv`}
+            className="inline-flex items-center justify-center rounded-md border border-gray-300 bg-white px-3 py-2 text-sm hover:bg-gray-50"
+          >
+            Exportar CSV
+          </Link>
+          <Link
+            href="/dashboard/expenses/create"
+            className="inline-flex items-center justify-center rounded-md bg-black px-3 py-2 text-sm text-white hover:opacity-90"
+          >
+            + Nova despesa
+          </Link>
         </div>
       </header>
 
-      {error ? (
-        <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
-          {error}
+      {loading ? (
+        <div className="rounded-lg border border-gray-200 bg-white p-6 text-gray-600">Carregando dados do grupo…</div>
+      ) : error ? (
+        <div className="space-y-3 rounded-lg border border-red-200 bg-red-50 p-6">
+          <div className="font-semibold text-red-800">Erro</div>
+          <div className="text-sm text-red-700">{error}</div>
+          <details className="text-xs text-red-800">
+            <summary className="cursor-pointer">Debug</summary>
+            <pre className="mt-2 whitespace-pre-wrap break-words">{JSON.stringify(groupRaw, null, 2)}</pre>
+          </details>
         </div>
       ) : null}
 
-      <GroupTabs value={tab} onChange={setTabAndUrl} />
+      <nav className="flex flex-wrap gap-2 border-b border-gray-200 pb-2">
+        {TABS.map((t) => (
+          <button
+            key={t.key}
+            onClick={() => go(t.key)}
+            className={[
+              'rounded px-3 py-1 text-sm transition',
+              tab === t.key ? 'bg-black text-white' : 'border border-gray-300 bg-white text-gray-700 hover:bg-gray-50',
+            ].join(' ')}
+          >
+            {t.label}
+          </button>
+        ))}
+      </nav>
 
-      {loading ? (
-        <div className="rounded-lg border border-gray-200 bg-white p-6 text-gray-600">
-          Carregando…
-        </div>
-      ) : (
-        <>
-          <section className="grid md:grid-cols-3 gap-4">
-            <div className="rounded-lg border border-gray-200 bg-white p-4">
-              <div className="text-xs uppercase tracking-wide text-gray-500">Despesas</div>
-              <div className="mt-1 text-2xl font-bold text-gray-900">{expenses.length}</div>
-            </div>
-            <div className="rounded-lg border border-gray-200 bg-white p-4">
-              <div className="text-xs uppercase tracking-wide text-gray-500">Categorias</div>
-              <div className="mt-1 text-2xl font-bold text-gray-900">{categories.length}</div>
-            </div>
-            <div className="rounded-lg border border-gray-200 bg-white p-4">
-              <div className="text-xs uppercase tracking-wide text-gray-500">Total</div>
-              <div className="mt-1 text-2xl font-bold text-gray-900">{formatMoneyBRL(total)}</div>
-            </div>
-          </section>
+      {tab === 'expenses' ? (
+        <section className="rounded-lg border border-gray-200 bg-white p-6">
+          <h2 className="text-lg font-semibold text-gray-900">Despesas</h2>
+          <p className="mt-1 text-sm text-gray-600">
+            Esta tela está no modo “compatível” e depende do payload atual da API.
+          </p>
 
-          {tab === 'expenses' ? (
-            <section className="space-y-4">
-              <div className="rounded-lg border border-gray-200 bg-white p-4">
-                <h2 className="font-semibold text-gray-900">Adicionar despesa</h2>
-                <form className="mt-3 grid gap-3 md:grid-cols-5" onSubmit={onCreateExpense}>
-                  <div className="md:col-span-2">
-                    <Input
-                      placeholder="Descrição (ex: Uber)"
-                      value={newExpenseDesc}
-                      onChange={(e) => setNewExpenseDesc((e.target as HTMLInputElement).value)}
-                    />
-                  </div>
-                  <div>
-                    <Input
-                      placeholder="Valor (ex: 25.90)"
-                      value={newExpenseAmount}
-                      onChange={(e) => setNewExpenseAmount((e.target as HTMLInputElement).value)}
-                    />
-                  </div>
-                  <div>
-                    <select
-                      className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
-                      value={newExpenseCategoryId}
-                      onChange={(e) => setNewExpenseCategoryId(e.target.value)}
-                    >
-                      <option value="">Sem categoria</option>
-                      {categories.map((c) => (
-                        <option key={c.id} value={c.id}>
-                          {c.name ?? c.title ?? c.slug ?? c.id}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="md:col-span-1">
-                    <Button type="submit" loading={creatingExpense} className="w-full">
-                      Adicionar
-                    </Button>
-                  </div>
-                </form>
-              </div>
+          <details className="mt-4 text-sm">
+            <summary className="cursor-pointer text-gray-700">Ver resposta /api/groups/{divvyId}/expenses</summary>
+            <pre className="mt-2 whitespace-pre-wrap break-words text-xs text-gray-800">
+{JSON.stringify(expensesRaw, null, 2)}
+            </pre>
+          </details>
+        </section>
+      ) : null}
 
-              <div className="rounded-lg border border-gray-200 bg-white overflow-hidden">
-                <div className="px-4 py-3 border-b border-gray-200 bg-gray-50">
-                  <h3 className="font-semibold text-gray-800">Últimas despesas</h3>
-                </div>
-                {expenses.length === 0 ? (
-                  <div className="p-6 text-sm text-gray-600">Nenhuma despesa ainda.</div>
-                ) : (
-                  <ul className="divide-y divide-gray-200">
-                    {expenses.map((exp) => (
-                      <li key={exp.id} className="p-4 flex items-center justify-between gap-3">
-                        <div className="min-w-0">
-                          <div className="font-medium text-gray-900 truncate">
-                            {exp.description ?? exp.title ?? 'Sem descrição'}
-                          </div>
-                          <div className="text-xs text-gray-500 mt-1">
-                            {exp.created_at ? new Date(exp.created_at).toLocaleString('pt-BR') : '—'}
-                          </div>
-                        </div>
-                        <div className="shrink-0 font-bold text-gray-900">
-                          {formatMoneyBRL(Number(exp.amount ?? 0))}
-                        </div>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-            </section>
-          ) : null}
+      {tab === 'categories' ? (
+        <section className="rounded-lg border border-gray-200 bg-white p-6">
+          <h2 className="text-lg font-semibold text-gray-900">Categorias</h2>
+          <p className="mt-1 text-sm text-gray-600">Vamos reativar CRUD completo na próxima etapa.</p>
 
-          {tab === 'categories' ? (
-            <section className="space-y-4">
-              <div className="rounded-lg border border-gray-200 bg-white p-4">
-                <h2 className="font-semibold text-gray-900">Criar categoria</h2>
-                <form className="mt-3 flex gap-3" onSubmit={onCreateCategory}>
-                  <div className="flex-1">
-                    <Input
-                      placeholder="Nome da categoria"
-                      value={newCategoryName}
-                      onChange={(e) => setNewCategoryName((e.target as HTMLInputElement).value)}
-                    />
-                  </div>
-                  <Button type="submit" loading={creatingCategory}>
-                    Criar
-                  </Button>
-                </form>
-              </div>
+          <details className="mt-4 text-sm">
+            <summary className="cursor-pointer text-gray-700">Ver resposta /api/groups/{divvyId}/categories</summary>
+            <pre className="mt-2 whitespace-pre-wrap break-words text-xs text-gray-800">
+{JSON.stringify(categoriesRaw, null, 2)}
+            </pre>
+          </details>
+        </section>
+      ) : null}
 
-              <div className="rounded-lg border border-gray-200 bg-white overflow-hidden">
-                <div className="px-4 py-3 border-b border-gray-200 bg-gray-50">
-                  <h3 className="font-semibold text-gray-800">Categorias</h3>
-                </div>
-                {categories.length === 0 ? (
-                  <div className="p-6 text-sm text-gray-600">Nenhuma categoria ainda.</div>
-                ) : (
-                  <ul className="divide-y divide-gray-200">
-                    {categories.map((c) => (
-                      <li key={c.id} className="p-4 flex items-center justify-between">
-                        <div className="font-medium text-gray-900">
-                          {c.name ?? c.title ?? c.slug ?? c.id}
-                        </div>
-                        <div className="text-xs text-gray-500 font-mono">{c.id}</div>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-            </section>
-          ) : null}
+      {tab === 'balances' ? (
+        <section className="rounded-lg border border-gray-200 bg-white p-6">
+          <h2 className="text-lg font-semibold text-gray-900">Saldos</h2>
+          <p className="mt-1 text-sm text-gray-600">Vamos ligar a UI real depois que a base estiver estável.</p>
 
-          {tab !== 'expenses' && tab !== 'categories' ? (
-            <section className="rounded-lg border border-gray-200 bg-white p-6 text-gray-600">
-              Aba <span className="font-mono">{tab}</span> ainda não restaurada no B2.
-              <div className="mt-2 text-sm text-gray-500">
-                (Vamos reativar por etapas sem quebrar o deploy.)
-              </div>
-            </section>
-          ) : null}
-        </>
-      )}
+          <details className="mt-4 text-sm">
+            <summary className="cursor-pointer text-gray-700">Ver resposta /api/groups/{divvyId}/balances</summary>
+            <pre className="mt-2 whitespace-pre-wrap break-words text-xs text-gray-800">
+{JSON.stringify(balancesRaw, null, 2)}
+            </pre>
+          </details>
+        </section>
+      ) : null}
+
+      {tab === 'members' ? (
+        <section className="rounded-lg border border-gray-200 bg-white p-6">
+          <h2 className="text-lg font-semibold text-gray-900">Membros</h2>
+          <p className="mt-1 text-sm text-gray-600">
+            A listagem final pode vir do endpoint do grupo ou de um endpoint dedicado — por enquanto mantemos debug.
+          </p>
+
+          <details className="mt-4 text-sm">
+            <summary className="cursor-pointer text-gray-700">Ver resposta /api/groups/{divvyId}</summary>
+            <pre className="mt-2 whitespace-pre-wrap break-words text-xs text-gray-800">
+{JSON.stringify(groupRaw, null, 2)}
+            </pre>
+          </details>
+        </section>
+      ) : null}
+
+      {tab === 'debug' ? (
+        <section className="space-y-4 rounded-lg border border-gray-200 bg-white p-6">
+          <h2 className="text-lg font-semibold text-gray-900">Debug completo</h2>
+
+          <details className="text-sm">
+            <summary className="cursor-pointer text-gray-700">Grupo</summary>
+            <pre className="mt-2 whitespace-pre-wrap break-words text-xs text-gray-800">{JSON.stringify(groupRaw, null, 2)}</pre>
+          </details>
+
+          <details className="text-sm">
+            <summary className="cursor-pointer text-gray-700">Despesas</summary>
+            <pre className="mt-2 whitespace-pre-wrap break-words text-xs text-gray-800">{JSON.stringify(expensesRaw, null, 2)}</pre>
+          </details>
+
+          <details className="text-sm">
+            <summary className="cursor-pointer text-gray-700">Categorias</summary>
+            <pre className="mt-2 whitespace-pre-wrap break-words text-xs text-gray-800">{JSON.stringify(categoriesRaw, null, 2)}</pre>
+          </details>
+
+          <details className="text-sm">
+            <summary className="cursor-pointer text-gray-700">Saldos</summary>
+            <pre className="mt-2 whitespace-pre-wrap break-words text-xs text-gray-800">{JSON.stringify(balancesRaw, null, 2)}</pre>
+          </details>
+        </section>
+      ) : null}
     </main>
   );
 }
