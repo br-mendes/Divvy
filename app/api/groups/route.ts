@@ -1,17 +1,31 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs";
+import { createClient } from "@supabase/supabase-js";
 
 export const dynamic = "force-dynamic";
 
+function getAdminClient() {
+  const url =
+    process.env.NEXT_PUBLIC_SUPABASE_URL ||
+    process.env.SUPABASE_URL ||
+    "";
+
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
+
+  if (!url || !key) return null;
+
+  return createClient(url, key, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+}
+
 async function pickGroupsTable(supabase: any) {
   const candidates = ["divvies", "groups"] as const;
-
   for (const table of candidates) {
     const { error } = await supabase.from(table).select("id").limit(1);
     if (!error) return table;
   }
-
   return null;
 }
 
@@ -32,10 +46,46 @@ async function listMembershipDivvyIds(supabase: any, userId: string) {
   return { ids, meta: { memberships: data ?? [] } };
 }
 
-async function insertGroup(supabase: any, payload: any) {
-  // tenta "divvies" primeiro; se não existir, tenta "groups"
-  const tryTables = ["divvies", "groups"] as const;
+async function ensureMembership(opts: {
+  supabase: any; // cookie client
+  admin: any | null; // service role client
+  userId: string;
+  divvyId: string;
+  role: string;
+}) {
+  const { supabase, admin, userId, divvyId, role } = opts;
 
+  // 1) tenta via RPC (se existir)
+  const { error: rpcErr } = await supabase.rpc("ensure_divvy_membership", {
+    p_divvy_id: divvyId,
+    p_role: role,
+  });
+
+  if (!rpcErr) return { ok: true, mode: "rpc" as const };
+
+  // 2) fallback: insert direto usando service role (não depende de RLS)
+  if (admin) {
+    const { error: insErr } = await admin
+      .from("divvy_members")
+      .insert({ divvy_id: divvyId, user_id: userId, role })
+      .select("divvy_id")
+      .single();
+
+    if (!insErr) return { ok: true, mode: "admin_insert" as const };
+    return { ok: false, mode: "admin_insert" as const, error: insErr.message, rpcError: rpcErr.message };
+  }
+
+  // 3) sem service role: tenta insert normal (pode falhar por RLS)
+  const { error: insErr2 } = await supabase
+    .from("divvy_members")
+    .insert({ divvy_id: divvyId, user_id: userId, role });
+
+  if (!insErr2) return { ok: true, mode: "insert" as const };
+  return { ok: false, mode: "insert" as const, error: insErr2.message, rpcError: rpcErr.message };
+}
+
+async function insertGroup(supabase: any, payload: any) {
+  const tryTables = ["divvies", "groups"] as const;
   let lastErr: any = null;
 
   for (const table of tryTables) {
@@ -45,9 +95,7 @@ async function insertGroup(supabase: any, payload: any) {
       .select("id")
       .single();
 
-    if (!error && data?.id) {
-      return { id: data.id as string, table };
-    }
+    if (!error && data?.id) return { id: data.id as string, table };
     lastErr = error;
   }
 
@@ -56,6 +104,7 @@ async function insertGroup(supabase: any, payload: any) {
 
 export async function GET() {
   const supabase = createRouteHandlerClient({ cookies });
+  const admin = getAdminClient();
 
   const { data: authData, error: authErr } = await supabase.auth.getUser();
   if (authErr || !authData?.user) {
@@ -67,12 +116,13 @@ export async function GET() {
 
   const user = authData.user;
 
-  // 1) memberships do usuário
-  const membership = await listMembershipDivvyIds(supabase, user.id);
+  // usa admin para leitura (se existir) -> não depende de RLS/policies
+  const readClient = admin ?? supabase;
+
+  const membership = await listMembershipDivvyIds(readClient, user.id);
   const divvyIds = membership.ids;
 
-  // 2) tabela de grupos (divvies|groups)
-  const groupsTable = await pickGroupsTable(supabase);
+  const groupsTable = await pickGroupsTable(readClient);
   if (!groupsTable) {
     return NextResponse.json({
       ok: true,
@@ -95,8 +145,7 @@ export async function GET() {
     });
   }
 
-  // 3) busca grupos por id
-  const { data: groups, error: groupsErr } = await supabase
+  const { data: groups, error: groupsErr } = await readClient
     .from(groupsTable)
     .select("*")
     .in("id", divvyIds)
@@ -126,6 +175,7 @@ export async function GET() {
 
 export async function POST(req: Request) {
   const supabase = createRouteHandlerClient({ cookies });
+  const admin = getAdminClient();
 
   const { data: authData, error: authErr } = await supabase.auth.getUser();
   if (authErr || !authData?.user) {
@@ -134,6 +184,8 @@ export async function POST(req: Request) {
       { status: 401 }
     );
   }
+
+  const user = authData.user;
 
   let body: any = {};
   try {
@@ -144,25 +196,34 @@ export async function POST(req: Request) {
 
   const name = (body?.name ?? body?.title ?? "Novo grupo").toString().trim();
 
-  // payload “tolerante”: evita passar colunas que podem não existir
+  // payload tolerante
   const basePayload: any = { name };
 
   try {
-    const created = await insertGroup(supabase, basePayload);
+    // cria grupo usando admin se existir (evita RLS quebrar create)
+    const createClient = admin ?? supabase;
+    const created = await insertGroup(createClient, basePayload);
 
-    // garante membership do criador
-    const { error: rpcErr } = await supabase.rpc("ensure_divvy_membership", {
-      p_divvy_id: created.id,
-      p_role: "owner",
+    // garante membership do criador (robusto)
+    const membershipRes = await ensureMembership({
+      supabase,
+      admin,
+      userId: user.id,
+      divvyId: created.id,
+      role: "owner",
     });
 
-    if (rpcErr) {
-      // não quebra o fluxo (grupo foi criado), apenas avisa
+    if (!membershipRes.ok) {
       return NextResponse.json({
         ok: true,
         group: { id: created.id },
         table: created.table,
-        warning: { code: "MEMBERSHIP_NOT_CREATED", message: rpcErr.message },
+        warning: {
+          code: "MEMBERSHIP_NOT_CREATED",
+          message: membershipRes.error ?? "membership failed",
+          rpcError: membershipRes.rpcError,
+          mode: membershipRes.mode,
+        },
       });
     }
 
@@ -170,6 +231,7 @@ export async function POST(req: Request) {
       ok: true,
       group: { id: created.id },
       table: created.table,
+      membership: { ok: true, mode: membershipRes.mode },
     });
   } catch (e: any) {
     return NextResponse.json(
