@@ -6,18 +6,6 @@ export const dynamic = "force-dynamic";
 
 type SupabaseAny = any;
 
-async function tableExists(supabase: SupabaseAny, table: string) {
-  const { error } = await supabase.from(table).select("id").limit(1);
-  return !error;
-}
-
-async function pickGroupsTable(supabase: SupabaseAny) {
-  for (const t of ["divvies", "groups"] as const) {
-    if (await tableExists(supabase, t)) return t;
-  }
-  return null;
-}
-
 type MembershipShape = {
   table: string;
   groupIdCol: string;
@@ -26,12 +14,11 @@ type MembershipShape = {
 };
 
 async function pickMembershipShape(supabase: SupabaseAny): Promise<MembershipShape | null> {
-  // tenta combinações comuns sem assumir schema
   const candidates: MembershipShape[] = [
     { table: "divvy_members", groupIdCol: "divvy_id", userIdCol: "user_id", roleCol: "role" },
     { table: "divvy_members", groupIdCol: "group_id", userIdCol: "user_id", roleCol: "role" },
-    { table: "group_members", groupIdCol: "group_id", userIdCol: "user_id", roleCol: "role" },
     { table: "divvymembers", groupIdCol: "divvy_id", userIdCol: "user_id", roleCol: "role" },
+    { table: "group_members", groupIdCol: "divvy_id", userIdCol: "user_id", roleCol: "role" },
   ];
 
   for (const c of candidates) {
@@ -64,51 +51,36 @@ async function listMembershipIds(supabase: SupabaseAny, shape: MembershipShape, 
   };
 }
 
-async function ownerFallbackGroups(
-  supabase: SupabaseAny,
-  groupsTable: string,
-  userId: string
-): Promise<{ groups: any[]; note: string }> {
-  // tenta colunas “donas” comuns sem quebrar
+async function ownerFallbackGroups(supabase: SupabaseAny, userId: string) {
+  // tenta colunas “donas” comuns em divvies
   const ownerCols = ["created_by", "owner_id", "user_id", "createdBy"] as const;
 
   for (const col of ownerCols) {
     const { data, error } = await supabase
-      .from(groupsTable)
+      .from("divvies")
       .select("*")
       .eq(col as any, userId)
       .order("created_at", { ascending: false });
 
     if (!error) {
-      return { groups: data ?? [], note: `Fallback by ${groupsTable}.${col}` };
+      return { groups: data ?? [], note: `Fallback by divvies.${col}` };
     }
   }
 
   return { groups: [], note: "No memberships and no owner-column fallback matched." };
 }
 
-async function insertGroup(supabase: SupabaseAny, payload: any) {
-  const tryTables = ["divvies", "groups"] as const;
-  let lastErr: any = null;
-
-  for (const table of tryTables) {
-    const { data, error } = await supabase.from(table).insert(payload).select("id").single();
-    if (!error && data?.id) return { id: data.id as string, table };
-    lastErr = error;
-  }
-
-  throw lastErr ?? new Error("Failed to insert group");
+async function insertDivvy(supabase: SupabaseAny, payload: any) {
+  const { data, error } = await supabase.from("divvies").insert(payload).select("id").single();
+  if (error) throw error;
+  if (!data?.id) throw new Error("Insert succeeded but no id returned");
+  return { id: data.id as string };
 }
 
-async function ensureMembership(
-  supabase: SupabaseAny,
-  groupId: string,
-  userId: string,
-  shape: MembershipShape | null
-) {
+async function ensureMembership(supabase: SupabaseAny, divvyId: string, userId: string, shape: MembershipShape | null) {
   // 1) tenta RPC (se existir)
   const { error: rpcErr } = await supabase.rpc("ensure_divvy_membership", {
-    p_divvy_id: groupId,
+    p_divvy_id: divvyId,
     p_role: "owner",
   });
 
@@ -117,13 +89,14 @@ async function ensureMembership(
   // 2) fallback: insert direto na tabela (se existir)
   if (shape) {
     const row: any = {
-      [shape.groupIdCol]: groupId,
+      [shape.groupIdCol]: divvyId,
       [shape.userIdCol]: userId,
     };
     if (shape.roleCol) row[shape.roleCol] = "owner";
 
     const { error: insErr } = await supabase.from(shape.table).insert(row);
     if (!insErr) return { ok: true, via: "direct_insert" as const };
+
     return { ok: false, via: "direct_insert" as const, error: insErr.message, rpcError: rpcErr.message };
   }
 
@@ -143,41 +116,35 @@ export async function GET() {
 
   const user = authData.user;
 
-  const groupsTable = await pickGroupsTable(supabase);
-  const membershipShape = await pickMembershipShape(supabase);
-
-  if (!groupsTable) {
+  // garante que "divvies" realmente existe (se não existir, retorna vazio sem quebrar)
+  const { error: probeErr } = await supabase.from("divvies").select("id").limit(1);
+  if (probeErr) {
     return NextResponse.json({
       ok: true,
       groups: [],
       authMode: "cookie",
       source: "none",
-      note: "No groups table found (checked: divvies, groups).",
+      note: `Groups table not found: ${probeErr.message}`,
       meta: { membershipError: null, membershipTable: null, membershipCount: 0 },
-      debug: { admin: true, userId: user.id, groupsTable: null, membershipShape },
+      debug: { userId: user.id, groupsTable: "divvies" },
     });
   }
 
-  // Se existe membership table, usamos ela como fonte principal
+  const membershipShape = await pickMembershipShape(supabase);
+
   if (membershipShape) {
     const membership = await listMembershipIds(supabase, membershipShape, user.id);
 
     if (membership.ids.length > 0) {
       const { data: groups, error: groupsErr } = await supabase
-        .from(groupsTable)
+        .from("divvies")
         .select("*")
         .in("id", membership.ids)
         .order("created_at", { ascending: false });
 
       if (groupsErr) {
         return NextResponse.json(
-          {
-            ok: false,
-            code: "DB_ERROR",
-            message: groupsErr.message,
-            debug: { table: groupsTable, membershipCount: membership.ids.length },
-            meta: membership.meta,
-          },
+          { ok: false, code: "DB_ERROR", message: groupsErr.message, meta: membership.meta },
           { status: 500 }
         );
       }
@@ -186,35 +153,35 @@ export async function GET() {
         ok: true,
         groups: groups ?? [],
         authMode: "cookie",
-        source: groupsTable,
+        source: "divvies",
         meta: membership.meta,
-        debug: { admin: true, userId: user.id, groupsTable, membershipShape },
+        debug: { userId: user.id, groupsTable: "divvies", membershipShape },
       });
     }
 
-    // membershipCount = 0 → tenta fallback por colunas de dono, pra não “sumir” grupo
-    const fb = await ownerFallbackGroups(supabase, groupsTable, user.id);
+    // membershipCount = 0 -> fallback por “dono”
+    const fb = await ownerFallbackGroups(supabase, user.id);
     return NextResponse.json({
       ok: true,
       groups: fb.groups,
       authMode: "cookie",
-      source: groupsTable,
-      note: membership.meta.membershipCount === 0 ? `No memberships for this user. ${fb.note}` : fb.note,
+      source: "divvies",
+      note: `No memberships for this user. ${fb.note}`,
       meta: membership.meta,
-      debug: { admin: true, userId: user.id, groupsTable, membershipShape },
+      debug: { userId: user.id, groupsTable: "divvies", membershipShape },
     });
   }
 
-  // Sem membership table → fallback por “dono”
-  const fb = await ownerFallbackGroups(supabase, groupsTable, user.id);
+  // Sem membership table -> fallback por “dono”
+  const fb = await ownerFallbackGroups(supabase, user.id);
   return NextResponse.json({
     ok: true,
     groups: fb.groups,
     authMode: "cookie",
-    source: groupsTable,
+    source: "divvies",
     note: `No membership table found. ${fb.note}`,
     meta: { membershipError: null, membershipTable: null, membershipCount: 0 },
-    debug: { admin: true, userId: user.id, groupsTable, membershipShape: null },
+    debug: { userId: user.id, groupsTable: "divvies", membershipShape: null },
   });
 }
 
@@ -239,10 +206,12 @@ export async function POST(req: Request) {
   }
 
   const name = (body?.name ?? body?.title ?? "Novo grupo").toString().trim();
+
+  // payload mínimo (evita erro por colunas inexistentes)
   const payload: any = { name };
 
   try {
-    const created = await insertGroup(supabase, payload);
+    const created = await insertDivvy(supabase, payload);
 
     const membershipShape = await pickMembershipShape(supabase);
     const ensured = await ensureMembership(supabase, created.id, user.id, membershipShape);
@@ -250,7 +219,7 @@ export async function POST(req: Request) {
     return NextResponse.json({
       ok: true,
       group: { id: created.id, name },
-      table: created.table,
+      table: "divvies",
       membership: ensured,
       debug: { userId: user.id, membershipShape },
     });
