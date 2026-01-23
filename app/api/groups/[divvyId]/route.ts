@@ -1,47 +1,60 @@
-import { NextResponse } from 'next/server';
-import {
-  requireUser,
-  jsonError,
-  pickFirstWorkingTable,
-} from '@/app/api/_utils/supabase';
+import { NextResponse } from "next/server";
+import { getAuthedSupabase } from "@/lib/supabase/server-auth";
 
-export const dynamic = 'force-dynamic';
+export const dynamic = "force-dynamic";
 
-const GROUP_TABLE_CANDIDATES = ['divvies', 'groups'];
+export async function GET(req: Request, ctx: { params: { divvyId: string } }) {
+  const auth = await getAuthedSupabase(req);
+  if (!auth.ok) return NextResponse.json(auth.body, { status: auth.status });
 
-export async function GET(
-  _req: Request,
-  { params }: { params: { divvyId: string } }
-) {
-  const { supabase, user, error } = await requireUser();
-  if (error) return error;
+  const { supabase, user, mode } = auth;
+  const divvyId = ctx.params.divvyId;
 
-  const divvyId = params.divvyId;
-  if (!divvyId) return jsonError(400, 'VALIDATION', 'Missing divvyId param.');
+  // Verifica membership (se existir tabela) — se falhar, ainda tenta buscar o grupo (pra debug)
+  let isMember = false;
+  const memTry = await supabase
+    .from("divvy_members")
+    .select("divvy_id")
+    .eq("divvy_id", divvyId)
+    .eq("user_id", user.id)
+    .maybeSingle();
 
-  const { table, lastError } = await pickFirstWorkingTable(
-    supabase,
-    GROUP_TABLE_CANDIDATES
-  );
-  if (!table) {
-    return jsonError(
-      500,
-      'SCHEMA_NOT_FOUND',
-      'Could not find groups table (tried divvies, groups).',
-      { lastError }
+  if (!memTry.error && memTry.data) isMember = true;
+
+  // Busca grupo na divvies
+  const { data: group, error: groupErr } = await supabase
+    .from("divvies")
+    .select("id, name, type, creatorid, created_at")
+    .eq("id", divvyId)
+    .maybeSingle();
+
+  if (groupErr) {
+    return NextResponse.json(
+      { ok: false, code: "DB_ERROR", message: groupErr.message },
+      { status: 500 }
     );
   }
 
-  const { data, error: qErr } = await supabase
-    .from(table)
-    .select('*')
-    .eq('id', divvyId)
-    .single();
-  if (qErr) {
-    return jsonError(404, 'NOT_FOUND', 'Group not found or not accessible.', {
-      qErr,
-    });
+  if (!group) {
+    return NextResponse.json(
+      { ok: false, code: "NOT_FOUND", message: "Group not found" },
+      { status: 404 }
+    );
   }
 
-  return NextResponse.json({ ok: true, userId: user.id, table, group: data });
+  // Se existe membership table e não é membro, bloqueia
+  // (se a tabela não existir ou deu erro, não bloqueia aqui — deixa RLS decidir)
+  if (!memTry.error && !isMember) {
+    return NextResponse.json(
+      { ok: false, code: "FORBIDDEN", message: "You are not a member of this group" },
+      { status: 403 }
+    );
+  }
+
+  return NextResponse.json({
+    ok: true,
+    group,
+    authMode: mode,
+    member: isMember,
+  });
 }
