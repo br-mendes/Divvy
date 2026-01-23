@@ -96,13 +96,13 @@ export async function GET(req: Request) {
 
   const groupsTable = (await pickGroupsTable(supabase)) ?? "divvies";
   const membershipShape = await pickMembershipTable(supabase);
-
-  const meta: any = {
+const meta: any = {
     membershipError: null as string | null,
     membershipTable: membershipShape?.table ?? null,
     membershipCount: 0,
   };
 
+  // 1) Tenta memberships -> grupos
   if (membershipShape) {
     const membership = await listGroupIdsByMembership(supabase, user.id, membershipShape);
     meta.membershipError = membership.error;
