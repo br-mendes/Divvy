@@ -1,34 +1,44 @@
-import { NextResponse } from 'next/server';
+import { NextResponse } from "next/server";
+import { cookies } from "next/headers";
+import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs";
 
-export const dynamic = 'force-dynamic';
+export const dynamic = "force-dynamic";
 
-/**
- * STUB AUTOMÁTICO PARA DESTRAVAR BUILD
- * - Evita qualquer throw em tempo de import durante 
-ext build
- * - Se faltar SUPABASE_SERVICE_ROLE_KEY, retorna 500 dentro do handler
- * - Usa req.url para pathname (evita problemas de backslash no Windows)
- */
-
-function missingEnv(pathname: string) {
-  return NextResponse.json(
-    { ok: false, code: 'MISSING_ENV', message: 'Missing env SUPABASE_SERVICE_ROLE_KEY', pathname },
-    { status: 500 }
-  );
+async function getUser(supabase: any) {
+  const { data, error } = await supabase.auth.getUser();
+  if (error || !data?.user) return null;
+  return data.user;
 }
 
-function ok(pathname: string, method: string) {
-  return NextResponse.json({ ok: true, pathname, method, note: 'stub' });
-}
+export async function GET(_: Request, ctx: { params: { divvyId: string; expenseId: string } }) {
+  const { divvyId, expenseId } = ctx.params;
+  const supabase = createRouteHandlerClient({ cookies });
 
-function gate(req: Request, method: string) {
-  const pathname = new URL(req.url).pathname;
-  if (!process.env.SUPABASE_SERVICE_ROLE_KEY) return missingEnv(pathname);
-  return ok(pathname, method);
-}
+  const user = await getUser(supabase);
+  if (!user) {
+    return NextResponse.json({ ok: false, code: "UNAUTHENTICATED", message: "You must be logged in" }, { status: 401 });
+  }
 
-export async function GET(req: Request)    { return gate(req, 'GET'); }
-export async function POST(req: Request)   { return gate(req, 'POST'); }
-export async function PUT(req: Request)    { return gate(req, 'PUT'); }
-export async function PATCH(req: Request)  { return gate(req, 'PATCH'); }
-export async function DELETE(req: Request) { return gate(req, 'DELETE'); }
+  // valida que a expense é do divvy (evita leak)
+  const { data: exp, error: expErr } = await supabase
+    .from("expenses")
+    .select("id,divvyid")
+    .eq("id", expenseId)
+    .eq("divvyid", divvyId)
+    .maybeSingle();
+
+  if (expErr) return NextResponse.json({ ok: false, code: "DB_ERROR", message: expErr.message }, { status: 500 });
+  if (!exp) return NextResponse.json({ ok: false, code: "NOT_FOUND", message: "Expense not found" }, { status: 404 });
+
+  const { data, error } = await supabase
+    .from("expensesplits")
+    .select("id,expenseid,userid,amount,paid,createdat,updatedat")
+    .eq("expenseid", expenseId)
+    .order("createdat", { ascending: true, nullsFirst: true });
+
+  if (error) {
+    return NextResponse.json({ ok: false, code: "DB_ERROR", message: error.message }, { status: 500 });
+  }
+
+  return NextResponse.json({ ok: true, divvyId, expenseId, splits: data ?? [] });
+}
