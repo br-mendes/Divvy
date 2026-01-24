@@ -13,7 +13,11 @@ function asNumber(v: any): number {
   return Number.isFinite(n) ? n : 0;
 }
 
-// tenta rodar um select mínimo pra ver se a tabela existe e é acessível
+function normalizeMoney(value: number, mode: "cents" | "units") {
+  if (!Number.isFinite(value)) return 0;
+  return mode === "cents" ? value / 100 : value;
+}
+
 async function tableExists(supabase: any, table: string) {
   const { error } = await supabase.from(table).select("id").limit(1);
   return !error;
@@ -35,9 +39,50 @@ function pickField(row: AnyRow, candidates: string[]) {
   return null;
 }
 
-function normalizeMoney(value: number, mode: "cents" | "units") {
-  if (!Number.isFinite(value)) return 0;
-  return mode === "cents" ? value / 100 : value;
+/**
+ * Descobre qual coluna na tabela expenses referencia o grupo (divvy).
+ * Estratégia:
+ * - tenta fazer um select eq(col, divvyId) limit 1
+ * - se não der erro (ou der erro de RLS/permission mas NÃO de coluna inexistente), assume que a coluna existe
+ * - se der "column ... does not exist", tenta a próxima
+ */
+async function detectGroupIdColumn(
+  supabase: any,
+  expensesTable: string,
+  divvyId: string
+) {
+  const candidates = [
+    "divvy_id",
+    "divvyid",
+    "divvyId",
+    "group_id",
+    "groupid",
+    "groupId",
+    "divvy",
+    "group",
+  ];
+
+  for (const col of candidates) {
+    // eslint-disable-next-line no-await-in-loop
+    const { error } = await supabase
+      .from(expensesTable)
+      .select("id")
+      .eq(col, divvyId)
+      .limit(1);
+
+    if (!error) return col;
+
+    const msg = String(error.message || "");
+    // se o problema é "coluna não existe", tenta próxima
+    if (msg.toLowerCase().includes("does not exist") && msg.includes(col)) {
+      continue;
+    }
+
+    // qualquer outro erro (RLS, permission, etc) => coluna provavelmente existe
+    return col;
+  }
+
+  return null;
 }
 
 export async function GET(
@@ -57,7 +102,7 @@ export async function GET(
   const userId = authData.user.id;
   const divvyId = params.divvyId;
 
-  // 1) membership check (evita RLS confusa em outras tabelas)
+  // 1) membership check
   const membershipTable = "divvy_members";
   const { data: myMembership, error: memErr } = await supabase
     .from(membershipTable)
@@ -68,16 +113,10 @@ export async function GET(
 
   if (memErr) {
     return NextResponse.json(
-      {
-        ok: false,
-        code: "DB_ERROR",
-        message: memErr.message,
-        where: "membership_check",
-      },
+      { ok: false, code: "DB_ERROR", message: memErr.message, where: "membership_check" },
       { status: 500 }
     );
   }
-
   if (!myMembership) {
     return NextResponse.json(
       { ok: false, code: "FORBIDDEN", message: "Not a member of this group" },
@@ -85,7 +124,7 @@ export async function GET(
     );
   }
 
-  // 2) listar membros (pra fallback de split igual)
+  // 2) listar membros
   const { data: members, error: membersErr } = await supabase
     .from(membershipTable)
     .select("user_id,role,created_at")
@@ -93,49 +132,29 @@ export async function GET(
 
   if (membersErr) {
     return NextResponse.json(
-      {
-        ok: false,
-        code: "DB_ERROR",
-        message: membersErr.message,
-        where: "members_list",
-      },
+      { ok: false, code: "DB_ERROR", message: membersErr.message, where: "members_list" },
       { status: 500 }
     );
   }
 
-  const memberIds = (members ?? [])
-    .map((m: any) => m?.user_id)
-    .filter(Boolean) as string[];
+  const memberIds = (members ?? []).map((m: any) => m?.user_id).filter(Boolean) as string[];
 
-  // 3) descobrir tabela de despesas / splits (tolerante)
+  // 3) descobrir tabela de despesas / splits
   const expensesTable = await pickFirstExistingTable(supabase, [
     "expenses",
     "divvy_expenses",
     "group_expenses",
   ]);
 
-  // se ainda não tem despesas implementadas, devolve saldo “zerado” com base nos membros
   if (!expensesTable) {
-    const balances = memberIds.map((id) => ({
-      userId: id,
-      paid: 0,
-      owed: 0,
-      balance: 0,
-    }));
-
+    const balances = memberIds.map((id) => ({ userId: id, paid: 0, owed: 0, balance: 0 }));
     return NextResponse.json({
       ok: true,
       divvyId,
       balances,
       note: "No expenses table found yet (checked: expenses/divvy_expenses/group_expenses).",
       authMode: "cookie",
-      debug: {
-        userId,
-        membershipTable,
-        expensesTable: null,
-        splitsTable: null,
-        members: memberIds.length,
-      },
+      debug: { userId, membershipTable, expensesTable: null, splitsTable: null, members: memberIds.length },
     });
   }
 
@@ -145,11 +164,25 @@ export async function GET(
     "divvy_splits",
   ]);
 
-  // 4) buscar despesas do grupo
+  // 4) detectar coluna do groupId na tabela de despesas
+  const groupIdCol = await detectGroupIdColumn(supabase, expensesTable, divvyId);
+  if (!groupIdCol) {
+    return NextResponse.json(
+      {
+        ok: false,
+        code: "SCHEMA_NOT_SUPPORTED",
+        message: `Could not detect group id column in ${expensesTable}.`,
+        meta: { expensesTable },
+      },
+      { status: 500 }
+    );
+  }
+
+  // 5) buscar despesas do grupo (com coluna detectada)
   const { data: expenses, error: expErr } = await supabase
     .from(expensesTable)
     .select("*")
-    .eq("divvy_id", divvyId);
+    .eq(groupIdCol, divvyId);
 
   if (expErr) {
     return NextResponse.json(
@@ -158,7 +191,7 @@ export async function GET(
         code: "DB_ERROR",
         message: expErr.message,
         where: "expenses_list",
-        meta: { expensesTable },
+        meta: { expensesTable, groupIdCol },
       },
       { status: 500 }
     );
@@ -167,50 +200,22 @@ export async function GET(
   const expRows = (expenses ?? []) as AnyRow[];
 
   if (expRows.length === 0) {
-    const balances = memberIds.map((id) => ({
-      userId: id,
-      paid: 0,
-      owed: 0,
-      balance: 0,
-    }));
-
+    const balances = memberIds.map((id) => ({ userId: id, paid: 0, owed: 0, balance: 0 }));
     return NextResponse.json({
       ok: true,
       divvyId,
       balances,
       note: "No expenses for this group yet.",
       authMode: "cookie",
-      debug: {
-        userId,
-        membershipTable,
-        expensesTable,
-        splitsTable,
-        members: memberIds.length,
-        expenses: 0,
-      },
+      debug: { userId, membershipTable, expensesTable, splitsTable, groupIdCol, members: memberIds.length, expenses: 0 },
     });
   }
 
-  // 5) inferir colunas (super tolerante)
+  // 6) inferir colunas essenciais em expenses
   const sample = expRows[0] ?? {};
-
   const expenseIdCol = pickField(sample, ["id", "expense_id"]);
-  const amountCol = pickField(sample, [
-    "amount",
-    "total",
-    "value",
-    "amount_cents",
-    "total_cents",
-    "value_cents",
-  ]);
-  const paidByCol = pickField(sample, [
-    "paid_by",
-    "payer_id",
-    "paidby",
-    "created_by",
-    "creatorid",
-    "user_id",
-  ]);
+  const amountCol = pickField(sample, ["amount", "total", "value", "amount_cents", "total_cents", "value_cents"]);
+  const paidByCol = pickField(sample, ["paid_by", "payer_id", "paidby", "created_by", "creatorid", "user_id"]);
 
   const amountMode: "cents" | "units" =
     amountCol && amountCol.toLowerCase().includes("cents") ? "cents" : "units";
@@ -220,10 +225,10 @@ export async function GET(
       {
         ok: false,
         code: "SCHEMA_NOT_SUPPORTED",
-        message:
-          "Could not infer expense schema (need id + amount + paid_by fields).",
+        message: "Could not infer expense schema (need id + amount + paid_by fields).",
         meta: {
           expensesTable,
+          groupIdCol,
           inferred: { expenseIdCol, amountCol, paidByCol, amountMode },
           sampleKeys: Object.keys(sample),
         },
@@ -232,20 +237,19 @@ export async function GET(
     );
   }
 
-  // 6) inicializar acumuladores
+  // 7) acumuladores
   const paid: Record<string, number> = {};
   const owed: Record<string, number> = {};
-
   for (const id of memberIds) {
     paid[id] = 0;
     owed[id] = 0;
   }
 
-  // 7) carregar splits se existir
+  // 8) buscar splits se existir (best-effort)
   let splitsByExpense: Record<string, AnyRow[]> = {};
   if (splitsTable) {
     const expenseIds = expRows.map((e) => String(e[expenseIdCol])).filter(Boolean);
-    // tenta select amplo — se RLS impedir, a gente cai no fallback igualitário
+
     const { data: splits, error: splitsErr } = await supabase
       .from(splitsTable)
       .select("*")
@@ -259,12 +263,11 @@ export async function GET(
         splitsByExpense[eid].push(s);
       }
     } else {
-      // se falhar, ignora splitsTable e faz fallback
       splitsByExpense = {};
     }
   }
 
-  // 8) calcular saldos
+  // 9) calcular
   for (const exp of expRows) {
     const eid = String(exp[expenseIdCol] ?? "");
     const payer = String(exp[paidByCol] ?? "");
@@ -279,21 +282,11 @@ export async function GET(
     const splits = splitsByExpense[eid];
 
     if (splits && splits.length > 0) {
-      // inferir colunas de splits
       const s0 = splits[0] ?? {};
       const splitUserCol = pickField(s0, ["user_id", "member_id", "userid"]);
-      const splitAmountCol = pickField(s0, [
-        "amount",
-        "value",
-        "share",
-        "amount_cents",
-        "value_cents",
-        "share_cents",
-      ]);
+      const splitAmountCol = pickField(s0, ["amount", "value", "share", "amount_cents", "value_cents", "share_cents"]);
       const splitMode: "cents" | "units" =
-        splitAmountCol && splitAmountCol.toLowerCase().includes("cents")
-          ? "cents"
-          : "units";
+        splitAmountCol && splitAmountCol.toLowerCase().includes("cents") ? "cents" : "units";
 
       if (splitUserCol && splitAmountCol) {
         for (const s of splits) {
@@ -308,11 +301,10 @@ export async function GET(
         }
         continue;
       }
-      // se não conseguir inferir splits, cai no split igualitário
+      // se não inferir, cai no fallback igualitário
     }
 
-    // fallback: dividir igual entre membros do grupo
-    const participants = memberIds.length > 0 ? memberIds : payer ? [payer] : [];
+    const participants = memberIds.length > 0 ? memberIds : [payer];
     const each = participants.length > 0 ? amount / participants.length : 0;
 
     for (const uid of participants) {
@@ -328,11 +320,10 @@ export async function GET(
       userId: uid,
       paid: Number(p.toFixed(2)),
       owed: Number(o.toFixed(2)),
-      balance: Number((p - o).toFixed(2)), // positivo => “tem a receber”
+      balance: Number((p - o).toFixed(2)),
     };
   });
 
-  // ordena por maior “a receber”
   balances.sort((a, b) => b.balance - a.balance);
 
   return NextResponse.json({
@@ -349,6 +340,7 @@ export async function GET(
       membershipTable,
       expensesTable,
       splitsTable,
+      groupIdCol,
       inferred: { expenseIdCol, amountCol, paidByCol, amountMode },
       members: memberIds.length,
       expenses: expRows.length,
