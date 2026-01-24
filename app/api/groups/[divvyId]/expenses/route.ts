@@ -4,194 +4,194 @@ import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs";
 
 export const dynamic = "force-dynamic";
 
-type MembershipShape =
-  | { table: "divvy_members"; groupIdCol: "divvy_id"; userIdCol: "user_id" }
-  | { table: "divvymembers"; groupIdCol: "divvyid"; userIdCol: "userid" };
-
-async function getAuthedUser(supabase: any) {
-  const { data, error } = await supabase.auth.getUser();
-  if (error || !data?.user) return { user: null, error: error?.message ?? "UNAUTHENTICATED" };
-  return { user: data.user, error: null };
+// ---------- helpers ----------
+function json(ok: boolean, body: any, status = 200) {
+  return NextResponse.json(body, { status });
 }
 
-async function findMembershipShape(supabase: any): Promise<MembershipShape | null> {
-  // Tenta divvy_members
-  {
-    const { error } = await supabase.from("divvy_members").select("divvy_id").limit(1);
-    if (!error) return { table: "divvy_members", groupIdCol: "divvy_id", userIdCol: "user_id" };
-  }
-  // Tenta divvymembers (schema antigo do seu doc)
-  {
-    const { error } = await supabase.from("divvymembers").select("divvyid").limit(1);
-    if (!error) return { table: "divvymembers", groupIdCol: "divvyid", userIdCol: "userid" };
-  }
-  return null;
+function pickFirst<T>(...vals: Array<T | null | undefined>) {
+  for (const v of vals) if (v !== null && v !== undefined) return v;
+  return undefined;
 }
 
-async function isMemberOrCreator(supabase: any, divvyId: string, userId: string) {
-  const shape = await findMembershipShape(supabase);
-
-  // 1) membership table
-  if (shape) {
-    const { data, error } = await supabase
-      .from(shape.table)
-      .select("*")
-      .eq(shape.groupIdCol, divvyId)
-      .eq(shape.userIdCol, userId)
-      .limit(1);
-
-    if (!error && (data?.length ?? 0) > 0) {
-      return { ok: true, via: "membership" as const, membershipShape: shape, membershipError: null };
-    }
-
-    // se deu erro (RLS/policy), continua no fallback
-    if (error) {
-      // cai pro creator fallback abaixo
-      const creator = await isCreator(supabase, divvyId, userId);
-      if (creator.ok) return { ok: true, via: "creator" as const, membershipShape: shape, membershipError: error.message };
-      return { ok: false, via: "none" as const, membershipShape: shape, membershipError: error.message };
-    }
-  }
-
-  // 2) creator fallback
-  const creator = await isCreator(supabase, divvyId, userId);
-  if (creator.ok) return { ok: true, via: "creator" as const, membershipShape: shape, membershipError: null };
-
-  return { ok: false, via: "none" as const, membershipShape: shape, membershipError: null };
+function toNumber(v: any) {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : NaN;
 }
 
-async function isCreator(supabase: any, divvyId: string, userId: string) {
-  const { data, error } = await supabase
-    .from("divvies")
-    .select("id")
-    .eq("id", divvyId)
-    .eq("creatorid", userId)
-    .maybeSingle();
-
-  if (error) return { ok: false, error: error.message };
-  return { ok: !!data?.id, error: null };
+function normalizeCategory(v: any) {
+  const s = String(v ?? "").trim().toLowerCase();
+  const allowed = new Set([
+    "food",
+    "transport",
+    "accommodation",
+    "activity",
+    "utilities",
+    "shopping",
+    "other",
+  ]);
+  return allowed.has(s) ? s : "other";
 }
 
-function parseNumber(v: any): number | null {
-  if (v === null || v === undefined) return null;
-  const n = typeof v === "number" ? v : Number(String(v).replace(",", "."));
-  if (!Number.isFinite(n)) return null;
-  return n;
-}
-
-function normalizeISODateOnly(input: any): string | null {
-  // aceita "2026-01-24", Date, ISO, etc — devolve YYYY-MM-DD
-  if (!input) return null;
-  const s = String(input).trim();
-  if (!s) return null;
-  // se já é YYYY-MM-DD
+function normalizeDate(v: any) {
+  // Espera "YYYY-MM-DD". Se vier vazio, usa hoje.
+  const s = String(v ?? "").trim();
   if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
-  const d = new Date(s);
-  if (Number.isNaN(d.getTime())) return null;
+  const d = new Date();
   const yyyy = d.getUTCFullYear();
   const mm = String(d.getUTCMonth() + 1).padStart(2, "0");
   const dd = String(d.getUTCDate()).padStart(2, "0");
   return `${yyyy}-${mm}-${dd}`;
 }
 
-async function listMemberIds(supabase: any, divvyId: string, shape: MembershipShape | null) {
-  if (shape) {
-    const { data, error } = await supabase
-      .from(shape.table)
-      .select(shape.userIdCol)
-      .eq(shape.groupIdCol, divvyId);
+type MembersShape =
+  | { table: "divvy_members"; divvyCol: "divvy_id"; userCol: "user_id" }
+  | { table: "divvymembers"; divvyCol: "divvyid"; userCol: "userid" }
+  | null;
 
-    if (!error) {
-      const ids = (data ?? [])
-        .map((r: any) => r?.[shape.userIdCol])
-        .filter(Boolean) as string[];
-      return { ids, error: null };
-    }
-    return { ids: [] as string[], error: error.message };
+async function detectMembersShape(supabase: any): Promise<MembersShape> {
+  // Tenta divvy_members (seu patch)
+  {
+    const { error } = await supabase
+      .from("divvy_members")
+      .select("user_id,divvy_id")
+      .limit(1);
+    if (!error) return { table: "divvy_members", divvyCol: "divvy_id", userCol: "user_id" };
   }
-  // fallback: pelo menos o creator
-  return { ids: [] as string[], error: "NO_MEMBERSHIP_TABLE" };
+
+  // Fallback: schema original (divvymembers)
+  {
+    const { error } = await supabase
+      .from("divvymembers")
+      .select("userid,divvyid")
+      .limit(1);
+    if (!error) return { table: "divvymembers", divvyCol: "divvyid", userCol: "userid" };
+  }
+
+  return null;
 }
 
-function buildEqualSplits(userIds: string[], total: number) {
-  const n = userIds.length;
-  if (n <= 0) return [];
-
-  // arredonda para 2 casas, distribuindo resto
-  const cents = Math.round(total * 100);
-  const base = Math.floor(cents / n);
-  let remainder = cents - base * n;
-
-  return userIds.map((uid) => {
-    const extra = remainder > 0 ? 1 : 0;
-    remainder -= extra;
-    return { userid: uid, amount: (base + extra) / 100 };
-  });
+async function requireUser(supabase: any) {
+  const { data, error } = await supabase.auth.getUser();
+  if (error || !data?.user) return null;
+  return data.user;
 }
 
-export async function GET(_: Request, ctx: { params: { divvyId: string } }) {
-  const divvyId = ctx.params.divvyId;
+async function fetchPaidByProfiles(supabase: any, userIds: string[]) {
+  if (userIds.length === 0) return new Map<string, any>();
+
+  const { data, error } = await supabase
+    .from("userprofiles")
+    .select("id, fullname, displayname, email, avatarurl")
+    .in("id", userIds);
+
+  if (error || !data) return new Map<string, any>();
+
+  const map = new Map<string, any>();
+  for (const p of data) {
+    const fullName = pickFirst(p.displayname, p.fullname, p.email, "Usuário") as string;
+    map.set(p.id, {
+      id: p.id,
+      full_name: fullName,
+      avatar_url: p.avatarurl ?? null,
+      email: p.email ?? null,
+    });
+  }
+  return map;
+}
+
+// ---------- GET (list) ----------
+export async function GET(_req: Request, ctx: { params: { divvyId: string } }) {
+  const divvyId = String(ctx?.params?.divvyId ?? "").trim();
+  if (!divvyId) {
+    return json(false, { ok: false, code: "BAD_REQUEST", message: "Missing divvyId" }, 400);
+  }
+
   const supabase = createRouteHandlerClient({ cookies });
-
-  const { user, error } = await getAuthedUser(supabase);
+  const user = await requireUser(supabase);
   if (!user) {
-    return NextResponse.json({ ok: false, code: "UNAUTHENTICATED", message: "You must be logged in" }, { status: 401 });
+    return json(false, { ok: false, code: "UNAUTHENTICATED", message: "You must be logged in" }, 401);
   }
 
-  const gate = await isMemberOrCreator(supabase, divvyId, user.id);
-  if (!gate.ok) {
-    return NextResponse.json(
-      { ok: false, code: "FORBIDDEN", message: "You are not a member of this group", meta: { membershipError: gate.membershipError } },
-      { status: 403 }
-    );
-  }
-
-  // schema real: expenses.divvyid + createdat (não created_at)
-  const { data, error: dbErr } = await supabase
+  // colunas reais: divvyid, paidbyuserid, createdat... (sem created_at/title/divvy_id)
+  const { data: rows, error } = await supabase
     .from("expenses")
-    .select("id,divvyid,title,description,amount,currency,date,paidbyuserid,categoryid,splitmode,locked,deleted,createdat,updatedat")
+    .select(
+      "id, divvyid, paidbyuserid, amount, currency, category, description, date, receiptphotourl, locked, lockedreason, lockedat, createdat, updatedat"
+    )
     .eq("divvyid", divvyId)
-    .eq("deleted", false)
-    .order("date", { ascending: false, nullsFirst: false })
-    .order("createdat", { ascending: false, nullsFirst: false });
+    .order("date", { ascending: false })
+    .order("createdat", { ascending: false })
+    .limit(200);
 
-  if (dbErr) {
-    return NextResponse.json(
-      { ok: false, code: "DB_ERROR", message: dbErr.message, where: "expenses_list", meta: { membershipError: gate.membershipError } },
-      { status: 500 }
+  if (error) {
+    return json(
+      false,
+      {
+        ok: false,
+        code: "DB_ERROR",
+        message: error.message,
+        where: "expenses_list",
+        meta: { expensesTable: "expenses" },
+      },
+      500
     );
   }
 
-  return NextResponse.json({
+  const paidByIds = Array.from(
+    new Set((rows ?? []).map((r: any) => r?.paidbyuserid).filter(Boolean))
+  ) as string[];
+
+  const paidByMap = await fetchPaidByProfiles(supabase, paidByIds);
+
+  // Retorno compatível com a UI (aliases)
+  const expenses = (rows ?? []).map((e: any) => ({
+    id: e.id,
+    divvy_id: e.divvyid, // alias só pra debug/compat
+    paid_by_user_id: e.paidbyuserid,
+    amount: e.amount,
+    currency: e.currency ?? "BRL",
+    category: e.category ?? "other",
+    description: e.description ?? "",
+    date: e.date,
+    receipt_photo_url: e.receiptphotourl ?? null,
+    locked: !!e.locked,
+    locked_reason: e.lockedreason ?? null,
+    locked_at: e.lockedat ?? null,
+
+    // aliases esperados em trechos da UI
+    created_at: e.createdat ?? null,
+    updated_at: e.updatedat ?? null,
+
+    // objeto esperado: exp.paid_by?.full_name
+    paid_by: paidByMap.get(e.paidbyuserid) ?? null,
+  }));
+
+  return json(true, {
     ok: true,
     divvyId,
-    expenses: data ?? [],
-    note: "expenses-list",
+    expenses,
     authMode: "cookie",
-    meta: {
-      membershipError: gate.membershipError,
-      via: gate.via,
-      membershipTable: gate.membershipShape?.table ?? null,
-      count: (data ?? []).length,
+    debug: {
+      userId: user.id,
+      hasAuthHeader: false,
+      cookieMode: "auth-helpers",
+      count: expenses.length,
     },
   });
 }
 
+// ---------- POST (create) ----------
 export async function POST(req: Request, ctx: { params: { divvyId: string } }) {
-  const divvyId = ctx.params.divvyId;
-  const supabase = createRouteHandlerClient({ cookies });
-
-  const { user } = await getAuthedUser(supabase);
-  if (!user) {
-    return NextResponse.json({ ok: false, code: "UNAUTHENTICATED", message: "You must be logged in" }, { status: 401 });
+  const divvyId = String(ctx?.params?.divvyId ?? "").trim();
+  if (!divvyId) {
+    return json(false, { ok: false, code: "BAD_REQUEST", message: "Missing divvyId" }, 400);
   }
 
-  const gate = await isMemberOrCreator(supabase, divvyId, user.id);
-  if (!gate.ok) {
-    return NextResponse.json(
-      { ok: false, code: "FORBIDDEN", message: "You are not a member of this group", meta: { membershipError: gate.membershipError } },
-      { status: 403 }
-    );
+  const supabase = createRouteHandlerClient({ cookies });
+  const user = await requireUser(supabase);
+  if (!user) {
+    return json(false, { ok: false, code: "UNAUTHENTICATED", message: "You must be logged in" }, 401);
   }
 
   let body: any = {};
@@ -201,87 +201,119 @@ export async function POST(req: Request, ctx: { params: { divvyId: string } }) {
     body = {};
   }
 
-  const title = String(body?.title ?? body?.name ?? "Nova despesa").trim();
-  const amount = parseNumber(body?.amount);
-  const currency = String(body?.currency ?? "BRL").trim() || "BRL";
-  const date = normalizeISODateOnly(body?.date);
-  const description = body?.description != null ? String(body.description).trim() : null;
-  const categoryid = body?.categoryid ?? body?.categoryId ?? null;
+  const description = String(body?.description ?? "").trim();
+  const amount = toNumber(body?.amount);
+  const category = normalizeCategory(body?.category);
+  const currency = String(body?.currency ?? "BRL").trim().toUpperCase() || "BRL";
+  const date = normalizeDate(body?.date);
 
-  if (!title) {
-    return NextResponse.json({ ok: false, code: "VALIDATION", message: "title is required" }, { status: 400 });
+  if (!description) {
+    return json(false, { ok: false, code: "BAD_REQUEST", message: "description is required" }, 400);
   }
-  if (amount === null || amount <= 0) {
-    return NextResponse.json({ ok: false, code: "VALIDATION", message: "amount must be > 0" }, { status: 400 });
+  if (!Number.isFinite(amount) || amount <= 0) {
+    return json(false, { ok: false, code: "BAD_REQUEST", message: "amount must be > 0" }, 400);
   }
 
-  // Insert expense (schema real)
-  const expensePayload: any = {
+  const paidByUserId = String(body?.paid_by_user_id ?? body?.paidByUserId ?? user.id);
+
+  const insertPayload = {
     divvyid: divvyId,
-    title,
+    paidbyuserid: paidByUserId,
     amount,
     currency,
-    paidbyuserid: user.id,
-    splitmode: "equal",
+    category,
+    description,
+    date,
+    receiptphotourl: body?.receipt_photo_url ?? body?.receiptPhotoUrl ?? null,
   };
-  if (description) expensePayload.description = description;
-  if (date) expensePayload.date = date;
-  if (categoryid) expensePayload.categoryid = categoryid;
 
   const { data: created, error: createErr } = await supabase
     .from("expenses")
-    .insert(expensePayload)
-    .select("id,divvyid,title,amount,currency,date,paidbyuserid,splitmode,createdat")
+    .insert(insertPayload)
+    .select(
+      "id, divvyid, paidbyuserid, amount, currency, category, description, date, receiptphotourl, locked, lockedreason, lockedat, createdat, updatedat"
+    )
     .single();
 
   if (createErr || !created?.id) {
-    return NextResponse.json(
-      { ok: false, code: "CREATE_EXPENSE_FAILED", message: createErr?.message ?? "Unknown error", meta: { membershipError: gate.membershipError } },
-      { status: 500 }
+    return json(
+      false,
+      { ok: false, code: "DB_ERROR", message: createErr?.message ?? "Failed to create expense" },
+      500
     );
   }
 
-  // Build splits:
-  // - se body.splits existir (array [{ userId, amount }]), usa isso
-  // - senão cria equal splits para todos membros (se conseguir listar), senão cria split só pro payer
-  let splits: Array<{ userid: string; amount: number }> = [];
+  // splits: se vier body.splits, usa; senão divide igual entre membros
+  let splitsInserted = 0;
+  try {
+    const splits = Array.isArray(body?.splits) ? body.splits : null;
 
-  const incoming = Array.isArray(body?.splits) ? body.splits : null;
-  if (incoming && incoming.length > 0) {
-    splits = incoming
-      .map((s: any) => ({ userid: String(s.userId ?? s.userid ?? "").trim(), amount: parseNumber(s.amount) }))
-      .filter((s: any) => s.userid && typeof s.amount === "number" && s.amount > 0) as any;
+    if (splits && splits.length > 0) {
+      const rows = splits
+        .map((s: any) => ({
+          expenseid: created.id,
+          participantuserid: String(s.userId ?? s.participantuserid ?? "").trim(),
+          amountowed: toNumber(s.amountOwed ?? s.amountowed),
+        }))
+        .filter((r: any) => r.participantuserid && Number.isFinite(r.amountowed) && r.amountowed >= 0);
 
-    // se soma não bater, não quebra: apenas segue (UI pode mandar valores exatos)
-  } else {
-    const members = await listMemberIds(supabase, divvyId, gate.membershipShape ?? null);
-    const ids = members.ids.length > 0 ? members.ids : [user.id];
-    splits = buildEqualSplits(ids, amount);
+      if (rows.length > 0) {
+        const { error: splitErr } = await supabase.from("expensesplits").insert(rows);
+        if (!splitErr) splitsInserted = rows.length;
+      }
+    } else {
+      const shape = await detectMembersShape(supabase);
+
+      let memberIds: string[] = [user.id];
+      if (shape) {
+        const { data: members, error: memErr } = await supabase
+          .from(shape.table)
+          .select(`${shape.userCol}`)
+          .eq(shape.divvyCol, shape.table === "divvy_members" ? divvyId : divvyId);
+
+        if (!memErr && members?.length) {
+          memberIds = Array.from(new Set(members.map((m: any) => m?.[shape.userCol]).filter(Boolean)));
+        }
+      }
+
+      // divide igualmente
+      const perHead = Math.max(0, Number((amount / memberIds.length).toFixed(2)));
+      const rows = memberIds.map((uid) => ({
+        expenseid: created.id,
+        participantuserid: uid,
+        amountowed: perHead,
+      }));
+
+      const { error: splitErr } = await supabase.from("expensesplits").insert(rows);
+      if (!splitErr) splitsInserted = rows.length;
+    }
+  } catch {
+    // não falha a criação da despesa por causa de split
   }
 
-  // grava splits em expensesplits (schema real: expenseid, userid, amount, paid)
-  const splitRows = splits.map((s) => ({
-    expenseid: created.id,
-    userid: s.userid,
-    amount: s.amount,
-    paid: s.userid === user.id, // opcional: payer como "paid" (você pode ajustar depois)
-  }));
+  const paidByMap = await fetchPaidByProfiles(supabase, [created.paidbyuserid]);
 
-  const { error: splitErr } = await supabase.from("expensesplits").insert(splitRows);
-
-  if (splitErr) {
-    return NextResponse.json({
-      ok: true,
-      expense: created,
-      warning: { code: "SPLITS_NOT_CREATED", message: splitErr.message },
-      meta: { membershipError: gate.membershipError },
-    });
-  }
-
-  return NextResponse.json({
+  return json(true, {
     ok: true,
-    expense: created,
-    splits: splitRows,
-    meta: { membershipError: gate.membershipError },
+    divvyId,
+    expense: {
+      id: created.id,
+      divvy_id: created.divvyid,
+      paid_by_user_id: created.paidbyuserid,
+      amount: created.amount,
+      currency: created.currency ?? "BRL",
+      category: created.category ?? "other",
+      description: created.description ?? "",
+      date: created.date,
+      receipt_photo_url: created.receiptphotourl ?? null,
+      locked: !!created.locked,
+      locked_reason: created.lockedreason ?? null,
+      locked_at: created.lockedat ?? null,
+      created_at: created.createdat ?? null,
+      updated_at: created.updatedat ?? null,
+      paid_by: paidByMap.get(created.paidbyuserid) ?? null,
+    },
+    splitsInserted,
+    authMode: "cookie",
   });
 }
