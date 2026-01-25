@@ -4,194 +4,293 @@ import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs";
 
 export const dynamic = "force-dynamic";
 
-// ---------- helpers ----------
-function json(ok: boolean, body: any, status = 200) {
-  return NextResponse.json(body, { status });
-}
+type Supa = ReturnType<typeof createRouteHandlerClient>;
 
-function pickFirst<T>(...vals: Array<T | null | undefined>) {
+function pickFirst<T>(...vals: Array<T | null | undefined>): T | null {
   for (const v of vals) if (v !== null && v !== undefined) return v;
-  return undefined;
-}
-
-function toNumber(v: any) {
-  const n = Number(v);
-  return Number.isFinite(n) ? n : NaN;
-}
-
-function normalizeCategory(v: any) {
-  const s = String(v ?? "").trim().toLowerCase();
-  const allowed = new Set([
-    "food",
-    "transport",
-    "accommodation",
-    "activity",
-    "utilities",
-    "shopping",
-    "other",
-  ]);
-  return allowed.has(s) ? s : "other";
-}
-
-function normalizeDate(v: any) {
-  // Espera "YYYY-MM-DD". Se vier vazio, usa hoje.
-  const s = String(v ?? "").trim();
-  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
-  const d = new Date();
-  const yyyy = d.getUTCFullYear();
-  const mm = String(d.getUTCMonth() + 1).padStart(2, "0");
-  const dd = String(d.getUTCDate()).padStart(2, "0");
-  return `${yyyy}-${mm}-${dd}`;
-}
-
-type MembersShape =
-  | { table: "divvy_members"; divvyCol: "divvy_id"; userCol: "user_id" }
-  | { table: "divvymembers"; divvyCol: "divvyid"; userCol: "userid" }
-  | null;
-
-async function detectMembersShape(supabase: any): Promise<MembersShape> {
-  // Tenta divvy_members (seu patch)
-  {
-    const { error } = await supabase
-      .from("divvy_members")
-      .select("user_id,divvy_id")
-      .limit(1);
-    if (!error) return { table: "divvy_members", divvyCol: "divvy_id", userCol: "user_id" };
-  }
-
-  // Fallback: schema original (divvymembers)
-  {
-    const { error } = await supabase
-      .from("divvymembers")
-      .select("userid,divvyid")
-      .limit(1);
-    if (!error) return { table: "divvymembers", divvyCol: "divvyid", userCol: "userid" };
-  }
-
   return null;
 }
 
-async function requireUser(supabase: any) {
+function isMissingColumnError(msg: string, col: string) {
+  // exemplos:
+  // "column expenses.title does not exist"
+  // "column e.created_at does not exist"
+  return msg.toLowerCase().includes(`column`) && msg.toLowerCase().includes(col.toLowerCase()) && msg.toLowerCase().includes("does not exist");
+}
+
+async function getAuthedUser(supabase: Supa) {
   const { data, error } = await supabase.auth.getUser();
   if (error || !data?.user) return null;
   return data.user;
 }
 
-async function fetchPaidByProfiles(supabase: any, userIds: string[]) {
-  if (userIds.length === 0) return new Map<string, any>();
+async function assertMembership(supabase: Supa, userId: string, divvyId: string) {
+  // tenta tabelas de membership conhecidas
+  const membershipTables = ["divvy_members", "divvymembers", "divvy_memberships", "group_members"] as const;
 
-  const { data, error } = await supabase
-    .from("userprofiles")
-    .select("id, fullname, displayname, email, avatarurl")
-    .in("id", userIds);
-
-  if (error || !data) return new Map<string, any>();
-
-  const map = new Map<string, any>();
-  for (const p of data) {
-    const fullName = pickFirst(p.displayname, p.fullname, p.email, "Usuário") as string;
-    map.set(p.id, {
-      id: p.id,
-      full_name: fullName,
-      avatar_url: p.avatarurl ?? null,
-      email: p.email ?? null,
-    });
+  for (const t of membershipTables) {
+    const { error } = await supabase.from(t).select("id").eq("divvyid", divvyId).eq("userid", userId).maybeSingle();
+    if (!error) {
+      // se não deu erro, tabela existe e policy permitiu ler
+      // se veio null, pode ser não-membro — ainda assim vamos checar creator fallback fora
+      const { data } = await supabase.from(t).select("id").eq("divvyid", divvyId).eq("userid", userId).maybeSingle();
+      if (data) return { ok: true as const, via: t };
+      return { ok: false as const, via: t };
+    }
   }
-  return map;
+
+  // Se nenhuma tabela existe/permitiu select, devolve “desconhecido”
+  return { ok: false as const, via: "unknown" as const };
 }
 
-// ---------- GET (list) ----------
-export async function GET(_req: Request, ctx: { params: { divvyId: string } }) {
-  const divvyId = String(ctx?.params?.divvyId ?? "").trim();
-  if (!divvyId) {
-    return json(false, { ok: false, code: "BAD_REQUEST", message: "Missing divvyId" }, 400);
+async function isCreatorOfDivvy(supabase: Supa, userId: string, divvyId: string) {
+  // schema que você mostrou: divvies.creatorid
+  const { data, error } = await supabase
+    .from("divvies")
+    .select("creatorid")
+    .eq("id", divvyId)
+    .maybeSingle();
+
+  if (error) return false;
+  return (data as any)?.creatorid === userId;
+}
+
+async function listExpensesTolerant(supabase: Supa, divvyId: string) {
+  // vamos tentar uma lista de selects até achar um conjunto compatível com seu banco
+  // (pelo doc do projeto, o correto tende a ser: divvyid, paidbyuserid, amount, category, description, date, createdat)
+  const candidates = [
+    {
+      select: "id,divvyid,paidbyuserid,amount,category,description,date,createdat,locked",
+      divvyCol: "divvyid",
+      createdCol: "createdat",
+      descCol: "description",
+    },
+    {
+      select: "id,divvy_id,paidbyuserid,amount,category,description,date,created_at,locked",
+      divvyCol: "divvy_id",
+      createdCol: "created_at",
+      descCol: "description",
+    },
+    {
+      select: "id,divvyid,paidbyuserid,amount,category,title,date,createdat,locked",
+      divvyCol: "divvyid",
+      createdCol: "createdat",
+      descCol: "title",
+    },
+    {
+      select: "id,divvy_id,paidbyuserid,amount,category,title,date,created_at,locked",
+      divvyCol: "divvy_id",
+      createdCol: "created_at",
+      descCol: "title",
+    },
+  ] as const;
+
+  let lastErr: any = null;
+
+  for (const c of candidates) {
+    // order por date e createdCol (se existir)
+    let q: any = supabase.from("expenses").select(c.select).eq(c.divvyCol, divvyId);
+
+    // tenta ordenar com createdCol; se falhar, cai pra só date
+    q = q.order("date", { ascending: false, nullsFirst: false });
+
+    const { data, error } = await q;
+    if (!error) {
+      const rows = (data ?? []) as any[];
+
+      return {
+        ok: true as const,
+        rows: rows.map((r) => ({
+          id: r.id,
+          divvyId: r[c.divvyCol],
+          paidByUserId: r.paidbyuserid ?? null,
+          amount: r.amount ?? 0,
+          category: r.category ?? null,
+          description: r[c.descCol] ?? "",
+          date: r.date ?? null,
+          createdAt: r[c.createdCol] ?? null,
+          locked: r.locked ?? false,
+        })),
+        meta: {
+          divvyCol: c.divvyCol,
+          createdCol: c.createdCol,
+          descCol: c.descCol,
+          select: c.select,
+        },
+      };
+    }
+
+    lastErr = error;
+    // segue tentando os próximos
   }
 
+  return { ok: false as const, error: lastErr };
+}
+
+async function insertExpenseAndSplitsTolerant(supabase: Supa, userId: string, divvyId: string, body: any) {
+  const amount = Number(body?.amount ?? 0);
+  const category = (body?.category ?? "").toString().trim();
+  const description = (body?.description ?? body?.title ?? "").toString().trim();
+  const date = (body?.date ?? "").toString().trim();
+
+  const splits = Array.isArray(body?.splits) ? body.splits : [];
+
+  if (!divvyId || !amount || !category || !date || splits.length === 0) {
+    return {
+      ok: false as const,
+      status: 400,
+      payload: { ok: false, code: "BAD_REQUEST", message: "Campos obrigatórios faltando (divvyId, amount, category, date, splits[])." },
+    };
+  }
+
+  // tenta inserir com colunas conhecidas
+  const expensePayloadCandidates = [
+    // schema do doc
+    { divvyid: divvyId, paidbyuserid: userId, amount, category, description, date },
+    // caso seu banco use divvy_id
+    { divvy_id: divvyId, paidbyuserid: userId, amount, category, description, date },
+    // caso seja title em vez de description
+    { divvyid: divvyId, paidbyuserid: userId, amount, category, title: description, date },
+    { divvy_id: divvyId, paidbyuserid: userId, amount, category, title: description, date },
+  ] as const;
+
+  let createdExpense: any = null;
+  let insertMeta: any = null;
+  let lastErr: any = null;
+
+  for (const payload of expensePayloadCandidates) {
+    const { data, error } = await supabase.from("expenses").insert(payload as any).select("*").single();
+    if (!error && data?.id) {
+      createdExpense = data;
+      insertMeta = { usedPayloadKeys: Object.keys(payload) };
+      break;
+    }
+    lastErr = error;
+  }
+
+  if (!createdExpense?.id) {
+    return {
+      ok: false as const,
+      status: 500,
+      payload: { ok: false, code: "DB_ERROR", message: lastErr?.message ?? "Falha ao criar expense", where: "expenses_insert" },
+    };
+  }
+
+  // tenta inserir splits (schema do doc: expenseid, participantuserid, amountowed)
+  const splitRows = splits.map((s: any) => ({
+    expenseid: createdExpense.id,
+    participantuserid: (s.userid ?? s.userId ?? s.participantUserId ?? "").toString(),
+    amountowed: Number(s.amount ?? s.amountOwed ?? 0),
+  }));
+
+  const invalid = splitRows.some((r) => !r.participantuserid || !r.amountowed);
+  if (invalid) {
+    // rollback best-effort
+    await supabase.from("expenses").delete().eq("id", createdExpense.id);
+    return {
+      ok: false as const,
+      status: 400,
+      payload: { ok: false, code: "BAD_SPLITS", message: "splits inválidos. Use { userid, amount } em cada item." },
+    };
+  }
+
+  const { error: splitErr } = await supabase.from("expensesplits").insert(splitRows as any);
+
+  if (splitErr) {
+    // rollback best-effort
+    await supabase.from("expenses").delete().eq("id", createdExpense.id);
+    return {
+      ok: false as const,
+      status: 500,
+      payload: { ok: false, code: "DB_ERROR", message: splitErr.message, where: "expensesplits_insert" },
+    };
+  }
+
+  return {
+    ok: true as const,
+    status: 201,
+    payload: {
+      ok: true,
+      expense: createdExpense,
+      meta: { insertMeta, splitsInserted: splitRows.length },
+    },
+  };
+}
+
+export async function GET(_: Request, ctx: { params: { divvyId: string } }) {
   const supabase = createRouteHandlerClient({ cookies });
-  const user = await requireUser(supabase);
+  const user = await getAuthedUser(supabase);
+
   if (!user) {
-    return json(false, { ok: false, code: "UNAUTHENTICATED", message: "You must be logged in" }, 401);
+    return NextResponse.json({ ok: false, code: "UNAUTHENTICATED", message: "You must be logged in" }, { status: 401 });
   }
 
-  // colunas reais: divvyid, paidbyuserid, createdat... (sem created_at/title/divvy_id)
-  const { data: rows, error } = await supabase
-    .from("expenses")
-    .select(
-      "id, divvyid, paidbyuserid, amount, currency, category, description, date, receiptphotourl, locked, lockedreason, lockedat, createdat, updatedat"
-    )
-    .eq("divvyid", divvyId)
-    .order("date", { ascending: false })
-    .order("createdat", { ascending: false })
-    .limit(200);
+  const divvyId = ctx.params.divvyId;
 
-  if (error) {
-    return json(
-      false,
+  // authz: membro OU creator
+  const mem = await assertMembership(supabase, user.id, divvyId);
+  const creator = mem.ok ? false : await isCreatorOfDivvy(supabase, user.id, divvyId);
+
+  if (!mem.ok && !creator) {
+    return NextResponse.json({ ok: false, code: "FORBIDDEN", message: "Forbidden" }, { status: 403 });
+  }
+
+  const list = await listExpensesTolerant(supabase, divvyId);
+  if (!list.ok) {
+    return NextResponse.json(
       {
         ok: false,
         code: "DB_ERROR",
-        message: error.message,
+        message: list.error?.message ?? "Failed to list expenses",
         where: "expenses_list",
-        meta: { expensesTable: "expenses" },
+        meta: { membership: mem, creator },
       },
-      500
+      { status: 500 }
     );
   }
 
-  const paidByIds = Array.from(
-    new Set((rows ?? []).map((r: any) => r?.paidbyuserid).filter(Boolean))
-  ) as string[];
-
-  const paidByMap = await fetchPaidByProfiles(supabase, paidByIds);
-
-  // Retorno compatível com a UI (aliases)
-  const expenses = (rows ?? []).map((e: any) => ({
-    id: e.id,
-    divvy_id: e.divvyid, // alias só pra debug/compat
-    paid_by_user_id: e.paidbyuserid,
-    amount: e.amount,
-    currency: e.currency ?? "BRL",
-    category: e.category ?? "other",
-    description: e.description ?? "",
-    date: e.date,
-    receipt_photo_url: e.receiptphotourl ?? null,
-    locked: !!e.locked,
-    locked_reason: e.lockedreason ?? null,
-    locked_at: e.lockedat ?? null,
-
-    // aliases esperados em trechos da UI
-    created_at: e.createdat ?? null,
-    updated_at: e.updatedat ?? null,
-
-    // objeto esperado: exp.paid_by?.full_name
-    paid_by: paidByMap.get(e.paidbyuserid) ?? null,
-  }));
-
-  return json(true, {
+  return NextResponse.json({
     ok: true,
     divvyId,
-    expenses,
+    expenses: list.rows,
     authMode: "cookie",
     debug: {
       userId: user.id,
-      hasAuthHeader: false,
-      cookieMode: "auth-helpers",
-      count: expenses.length,
+      membership: mem,
+      creator,
+      select: list.meta.select,
+      cols: list.meta,
+      count: list.rows.length,
     },
   });
 }
 
-// ---------- POST (create) ----------
 export async function POST(req: Request, ctx: { params: { divvyId: string } }) {
-  const divvyId = String(ctx?.params?.divvyId ?? "").trim();
-  if (!divvyId) {
-    return json(false, { ok: false, code: "BAD_REQUEST", message: "Missing divvyId" }, 400);
+  const supabase = createRouteHandlerClient({ cookies });
+  const user = await getAuthedUser(supabase);
+
+  if (!user) {
+    return NextResponse.json({ ok: false, code: "UNAUTHENTICATED", message: "You must be logged in" }, { status: 401 });
   }
 
-  const supabase = createRouteHandlerClient({ cookies });
-  const user = await requireUser(supabase);
-  if (!user) {
-    return json(false, { ok: false, code: "UNAUTHENTICATED", message: "You must be logged in" }, 401);
+  const divvyId = ctx.params.divvyId;
+
+  // precisa ser membro (policy de insert em expenses normalmente exige membership)
+  const mem = await assertMembership(supabase, user.id, divvyId);
+  if (!mem.ok) {
+    // se for creator mas não membro, normalmente ainda falha na policy; então retornamos instrução clara
+    const creator = await isCreatorOfDivvy(supabase, user.id, divvyId);
+    return NextResponse.json(
+      {
+        ok: false,
+        code: "FORBIDDEN",
+        message: creator
+          ? "Você é creator, mas não consta como membro. Crie/garanta membership do creator em divvy_members/divvymembers."
+          : "Forbidden",
+        debug: { membership: mem, creator },
+      },
+      { status: 403 }
+    );
   }
 
   let body: any = {};
@@ -201,119 +300,6 @@ export async function POST(req: Request, ctx: { params: { divvyId: string } }) {
     body = {};
   }
 
-  const description = String(body?.description ?? "").trim();
-  const amount = toNumber(body?.amount);
-  const category = normalizeCategory(body?.category);
-  const currency = String(body?.currency ?? "BRL").trim().toUpperCase() || "BRL";
-  const date = normalizeDate(body?.date);
-
-  if (!description) {
-    return json(false, { ok: false, code: "BAD_REQUEST", message: "description is required" }, 400);
-  }
-  if (!Number.isFinite(amount) || amount <= 0) {
-    return json(false, { ok: false, code: "BAD_REQUEST", message: "amount must be > 0" }, 400);
-  }
-
-  const paidByUserId = String(body?.paid_by_user_id ?? body?.paidByUserId ?? user.id);
-
-  const insertPayload = {
-    divvyid: divvyId,
-    paidbyuserid: paidByUserId,
-    amount,
-    currency,
-    category,
-    description,
-    date,
-    receiptphotourl: body?.receipt_photo_url ?? body?.receiptPhotoUrl ?? null,
-  };
-
-  const { data: created, error: createErr } = await supabase
-    .from("expenses")
-    .insert(insertPayload)
-    .select(
-      "id, divvyid, paidbyuserid, amount, currency, category, description, date, receiptphotourl, locked, lockedreason, lockedat, createdat, updatedat"
-    )
-    .single();
-
-  if (createErr || !created?.id) {
-    return json(
-      false,
-      { ok: false, code: "DB_ERROR", message: createErr?.message ?? "Failed to create expense" },
-      500
-    );
-  }
-
-  // splits: se vier body.splits, usa; senão divide igual entre membros
-  let splitsInserted = 0;
-  try {
-    const splits = Array.isArray(body?.splits) ? body.splits : null;
-
-    if (splits && splits.length > 0) {
-      const rows = splits
-        .map((s: any) => ({
-          expenseid: created.id,
-          participantuserid: String(s.userId ?? s.participantuserid ?? "").trim(),
-          amountowed: toNumber(s.amountOwed ?? s.amountowed),
-        }))
-        .filter((r: any) => r.participantuserid && Number.isFinite(r.amountowed) && r.amountowed >= 0);
-
-      if (rows.length > 0) {
-        const { error: splitErr } = await supabase.from("expensesplits").insert(rows);
-        if (!splitErr) splitsInserted = rows.length;
-      }
-    } else {
-      const shape = await detectMembersShape(supabase);
-
-      let memberIds: string[] = [user.id];
-      if (shape) {
-        const { data: members, error: memErr } = await supabase
-          .from(shape.table)
-          .select(`${shape.userCol}`)
-          .eq(shape.divvyCol, shape.table === "divvy_members" ? divvyId : divvyId);
-
-        if (!memErr && members?.length) {
-          memberIds = Array.from(new Set(members.map((m: any) => m?.[shape.userCol]).filter(Boolean)));
-        }
-      }
-
-      // divide igualmente
-      const perHead = Math.max(0, Number((amount / memberIds.length).toFixed(2)));
-      const rows = memberIds.map((uid) => ({
-        expenseid: created.id,
-        participantuserid: uid,
-        amountowed: perHead,
-      }));
-
-      const { error: splitErr } = await supabase.from("expensesplits").insert(rows);
-      if (!splitErr) splitsInserted = rows.length;
-    }
-  } catch {
-    // não falha a criação da despesa por causa de split
-  }
-
-  const paidByMap = await fetchPaidByProfiles(supabase, [created.paidbyuserid]);
-
-  return json(true, {
-    ok: true,
-    divvyId,
-    expense: {
-      id: created.id,
-      divvy_id: created.divvyid,
-      paid_by_user_id: created.paidbyuserid,
-      amount: created.amount,
-      currency: created.currency ?? "BRL",
-      category: created.category ?? "other",
-      description: created.description ?? "",
-      date: created.date,
-      receipt_photo_url: created.receiptphotourl ?? null,
-      locked: !!created.locked,
-      locked_reason: created.lockedreason ?? null,
-      locked_at: created.lockedat ?? null,
-      created_at: created.createdat ?? null,
-      updated_at: created.updatedat ?? null,
-      paid_by: paidByMap.get(created.paidbyuserid) ?? null,
-    },
-    splitsInserted,
-    authMode: "cookie",
-  });
+  const created = await insertExpenseAndSplitsTolerant(supabase, user.id, divvyId, body);
+  return NextResponse.json(created.payload, { status: created.status });
 }

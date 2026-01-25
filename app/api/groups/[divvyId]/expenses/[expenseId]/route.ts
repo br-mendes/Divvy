@@ -1,64 +1,70 @@
-import { NextResponse } from "next/server";
-import { cookies } from "next/headers";
-import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs";
+import { NextResponse as NextResponse2 } from "next/server";
+import { cookies as cookies2 } from "next/headers";
+import { createRouteHandlerClient as createRouteHandlerClient2 } from "@supabase/auth-helpers-nextjs";
 
 export const dynamic = "force-dynamic";
 
-async function getUser(supabase: any) {
+async function getUser2(supabase: any) {
   const { data, error } = await supabase.auth.getUser();
   if (error || !data?.user) return null;
   return data.user;
 }
 
 export async function GET(_: Request, ctx: { params: { divvyId: string; expenseId: string } }) {
-  const { divvyId, expenseId } = ctx.params;
-  const supabase = createRouteHandlerClient({ cookies });
+  const supabase = createRouteHandlerClient2({ cookies: cookies2 });
+  const user = await getUser2(supabase);
 
-  const user = await getUser(supabase);
   if (!user) {
-    return NextResponse.json({ ok: false, code: "UNAUTHENTICATED", message: "You must be logged in" }, { status: 401 });
+    return NextResponse2.json({ ok: false, code: "UNAUTHENTICATED", message: "You must be logged in" }, { status: 401 });
   }
 
-  // leitura via RLS (assume policies ok)
-  const { data, error } = await supabase
-    .from("expenses")
-    .select("id,divvyid,title,description,amount,currency,date,paidbyuserid,categoryid,splitmode,locked,deleted,createdat,updatedat")
-    .eq("divvyid", divvyId)
-    .eq("id", expenseId)
-    .maybeSingle();
+  const { divvyId, expenseId } = ctx.params;
 
-  if (error) {
-    return NextResponse.json({ ok: false, code: "DB_ERROR", message: error.message }, { status: 500 });
+  // tenta ler o expense com colunas que existirem
+  const attempts = [
+    { sel: "id,divvyid,paidbyuserid,amount,category,description,date,createdat,locked", divvyCol: "divvyid" },
+    { sel: "id,divvy_id,paidbyuserid,amount,category,description,date,created_at,locked", divvyCol: "divvy_id" },
+    { sel: "id,divvyid,paidbyuserid,amount,category,title,date,createdat,locked", divvyCol: "divvyid" },
+    { sel: "id,divvy_id,paidbyuserid,amount,category,title,date,created_at,locked", divvyCol: "divvy_id" },
+  ] as const;
+
+  let lastErr: any = null;
+  for (const a of attempts) {
+    const { data, error } = await supabase.from("expenses").select(a.sel).eq("id", expenseId).maybeSingle();
+    if (!error && data) {
+      const row: any = data;
+      // garante que pertence ao divvy do path (evita leak)
+      if (String(row[a.divvyCol] ?? "") !== String(divvyId)) {
+        return NextResponse2.json({ ok: false, code: "NOT_FOUND", message: "Expense not found" }, { status: 404 });
+      }
+      return NextResponse2.json({ ok: true, expense: row, authMode: "cookie", userId: user.id });
+    }
+    lastErr = error;
   }
 
-  if (!data) {
-    return NextResponse.json({ ok: false, code: "NOT_FOUND", message: "Expense not found" }, { status: 404 });
-  }
-
-  return NextResponse.json({ ok: true, divvyId, expense: data, authMode: "cookie" });
+  return NextResponse2.json(
+    { ok: false, code: "DB_ERROR", message: lastErr?.message ?? "Failed to load expense", where: "expense_get" },
+    { status: 500 }
+  );
 }
 
 export async function DELETE(_: Request, ctx: { params: { divvyId: string; expenseId: string } }) {
-  const { divvyId, expenseId } = ctx.params;
-  const supabase = createRouteHandlerClient({ cookies });
+  const supabase = createRouteHandlerClient2({ cookies: cookies2 });
+  const user = await getUser2(supabase);
 
-  const user = await getUser(supabase);
   if (!user) {
-    return NextResponse.json({ ok: false, code: "UNAUTHENTICATED", message: "You must be logged in" }, { status: 401 });
+    return NextResponse2.json({ ok: false, code: "UNAUTHENTICATED", message: "You must be logged in" }, { status: 401 });
   }
 
-  // soft delete (schema: deleted boolean)
-  const { data, error } = await supabase
-    .from("expenses")
-    .update({ deleted: true })
-    .eq("divvyid", divvyId)
-    .eq("id", expenseId)
-    .select("id,deleted")
-    .single();
+  const { expenseId } = ctx.params;
 
+  const { error } = await supabase.from("expenses").delete().eq("id", expenseId);
   if (error) {
-    return NextResponse.json({ ok: false, code: "DB_ERROR", message: error.message }, { status: 500 });
+    return NextResponse2.json(
+      { ok: false, code: "DB_ERROR", message: error.message, where: "expense_delete" },
+      { status: 500 }
+    );
   }
 
-  return NextResponse.json({ ok: true, divvyId, expenseId, deleted: data?.deleted === true });
+  return NextResponse2.json({ ok: true });
 }
