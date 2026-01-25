@@ -11,36 +11,59 @@ function pickFirst<T>(...vals: Array<T | null | undefined>): T | null {
   return null;
 }
 
-function isMissingColumnError(msg: string, col: string) {
-  // exemplos:
-  // "column expenses.title does not exist"
-  // "column e.created_at does not exist"
-  return msg.toLowerCase().includes(`column`) && msg.toLowerCase().includes(col.toLowerCase()) && msg.toLowerCase().includes("does not exist");
-}
-
 async function getAuthedUser(supabase: Supa) {
   const { data, error } = await supabase.auth.getUser();
   if (error || !data?.user) return null;
   return data.user;
 }
 
-async function assertMembership(supabase: Supa, userId: string, divvyId: string) {
-  // tenta tabelas de membership conhecidas
-  const membershipTables = ["divvy_members", "divvymembers", "divvy_memberships", "group_members"] as const;
+type MembershipShape = {
+  table: string;
+  groupIdCol: string;
+  userIdCol: string;
+  roleCol?: string;
+};
 
-  for (const t of membershipTables) {
-    const { error } = await supabase.from(t).select("id").eq("divvyid", divvyId).eq("userid", userId).maybeSingle();
+const MEMBERSHIP_SHAPES: MembershipShape[] = [
+  // seu caso mais provável (você já citou divvy_members)
+  { table: "divvy_members", groupIdCol: "divvy_id", userIdCol: "user_id", roleCol: "role" },
+
+  // variações comuns
+  { table: "divvymembers", groupIdCol: "divvyid", userIdCol: "userid", roleCol: "role" },
+  { table: "divvy_memberships", groupIdCol: "divvy_id", userIdCol: "user_id", roleCol: "role" },
+  { table: "group_members", groupIdCol: "group_id", userIdCol: "user_id", roleCol: "role" },
+];
+
+async function assertMembership(supabase: Supa, userId: string, divvyId: string) {
+  // tenta shape por shape; se tabela não existir ou policy bloquear select, segue tentando
+  let lastErr: any = null;
+
+  for (const s of MEMBERSHIP_SHAPES) {
+    const { data, error } = await supabase
+      .from(s.table)
+      .select("id")
+      .eq(s.groupIdCol, divvyId)
+      .eq(s.userIdCol, userId)
+      .maybeSingle();
+
     if (!error) {
-      // se não deu erro, tabela existe e policy permitiu ler
-      // se veio null, pode ser não-membro — ainda assim vamos checar creator fallback fora
-      const { data } = await supabase.from(t).select("id").eq("divvyid", divvyId).eq("userid", userId).maybeSingle();
-      if (data) return { ok: true as const, via: t };
-      return { ok: false as const, via: t };
+      return {
+        ok: !!data,
+        via: s.table,
+        shape: s,
+        error: null,
+      };
     }
+
+    lastErr = error;
   }
 
-  // Se nenhuma tabela existe/permitiu select, devolve “desconhecido”
-  return { ok: false as const, via: "unknown" as const };
+  return {
+    ok: false,
+    via: "unknown",
+    shape: null as any,
+    error: lastErr?.message ?? "membership lookup failed",
+  };
 }
 
 async function isCreatorOfDivvy(supabase: Supa, userId: string, divvyId: string) {
@@ -55,9 +78,51 @@ async function isCreatorOfDivvy(supabase: Supa, userId: string, divvyId: string)
   return (data as any)?.creatorid === userId;
 }
 
+async function tryEnsureMembership(supabase: Supa, divvyId: string, role: string) {
+  // 1) tenta RPC (se existir no seu DB)
+  //    (se não existir, vai falhar com “function does not exist” e seguimos)
+  try {
+    const { error: rpcErr } = await supabase.rpc("ensure_divvy_membership", {
+      p_divvy_id: divvyId,
+      p_role: role,
+    });
+    if (!rpcErr) {
+      return { ok: true as const, via: "rpc:ensure_divvy_membership" };
+    }
+  } catch {
+    // ignora
+  }
+
+  // 2) tenta inserir direto na tabela de membership mais provável
+  //    primeiro escolhe a primeira tabela que “existe” (select limit 1)
+  for (const s of MEMBERSHIP_SHAPES) {
+    const { error: existsErr } = await supabase.from(s.table).select("id").limit(1);
+    if (existsErr) continue;
+
+    const payload: any = {
+      [s.groupIdCol]: divvyId,
+      [s.userIdCol]: (await supabase.auth.getUser()).data.user?.id ?? null,
+    };
+    if (s.roleCol) payload[s.roleCol] = role;
+
+    // insert best-effort (se policy impedir, vai falhar)
+    const { error: insErr } = await supabase.from(s.table).insert(payload);
+
+    if (!insErr) return { ok: true as const, via: `insert:${s.table}` };
+
+    // se já existe (constraint), consideramos ok
+    const msg = (insErr.message ?? "").toLowerCase();
+    if (msg.includes("duplicate") || msg.includes("already exists") || msg.includes("unique")) {
+      return { ok: true as const, via: `exists:${s.table}` };
+    }
+
+    // se falhou por policy, segue tentando outras tabelas
+  }
+
+  return { ok: false as const, via: "none" };
+}
+
 async function listExpensesTolerant(supabase: Supa, divvyId: string) {
-  // vamos tentar uma lista de selects até achar um conjunto compatível com seu banco
-  // (pelo doc do projeto, o correto tende a ser: divvyid, paidbyuserid, amount, category, description, date, createdat)
   const candidates = [
     {
       select: "id,divvyid,paidbyuserid,amount,category,description,date,createdat,locked",
@@ -88,16 +153,16 @@ async function listExpensesTolerant(supabase: Supa, divvyId: string) {
   let lastErr: any = null;
 
   for (const c of candidates) {
-    // order por date e createdCol (se existir)
-    let q: any = supabase.from("expenses").select(c.select).eq(c.divvyCol, divvyId);
-
-    // tenta ordenar com createdCol; se falhar, cai pra só date
-    q = q.order("date", { ascending: false, nullsFirst: false });
+    const q: any = supabase
+      .from("expenses")
+      .select(c.select)
+      .eq(c.divvyCol, divvyId)
+      .order("date", { ascending: false, nullsFirst: false });
 
     const { data, error } = await q;
+
     if (!error) {
       const rows = (data ?? []) as any[];
-
       return {
         ok: true as const,
         rows: rows.map((r) => ({
@@ -111,17 +176,11 @@ async function listExpensesTolerant(supabase: Supa, divvyId: string) {
           createdAt: r[c.createdCol] ?? null,
           locked: r.locked ?? false,
         })),
-        meta: {
-          divvyCol: c.divvyCol,
-          createdCol: c.createdCol,
-          descCol: c.descCol,
-          select: c.select,
-        },
+        meta: c,
       };
     }
 
     lastErr = error;
-    // segue tentando os próximos
   }
 
   return { ok: false as const, error: lastErr };
@@ -139,24 +198,24 @@ async function insertExpenseAndSplitsTolerant(supabase: Supa, userId: string, di
     return {
       ok: false as const,
       status: 400,
-      payload: { ok: false, code: "BAD_REQUEST", message: "Campos obrigatórios faltando (divvyId, amount, category, date, splits[])." },
+      payload: {
+        ok: false,
+        code: "BAD_REQUEST",
+        message: "Campos obrigatórios faltando (divvyId, amount, category, date, splits[]).",
+      },
     };
   }
 
-  // tenta inserir com colunas conhecidas
   const expensePayloadCandidates = [
-    // schema do doc
     { divvyid: divvyId, paidbyuserid: userId, amount, category, description, date },
-    // caso seu banco use divvy_id
     { divvy_id: divvyId, paidbyuserid: userId, amount, category, description, date },
-    // caso seja title em vez de description
     { divvyid: divvyId, paidbyuserid: userId, amount, category, title: description, date },
     { divvy_id: divvyId, paidbyuserid: userId, amount, category, title: description, date },
   ] as const;
 
   let createdExpense: any = null;
-  let insertMeta: any = null;
   let lastErr: any = null;
+  let insertMeta: any = null;
 
   for (const payload of expensePayloadCandidates) {
     const { data, error } = await supabase.from("expenses").insert(payload as any).select("*").single();
@@ -176,7 +235,6 @@ async function insertExpenseAndSplitsTolerant(supabase: Supa, userId: string, di
     };
   }
 
-  // tenta inserir splits (schema do doc: expenseid, participantuserid, amountowed)
   const splitRows = splits.map((s: any) => ({
     expenseid: createdExpense.id,
     participantuserid: (s.userid ?? s.userId ?? s.participantUserId ?? "").toString(),
@@ -185,7 +243,6 @@ async function insertExpenseAndSplitsTolerant(supabase: Supa, userId: string, di
 
   const invalid = splitRows.some((r) => !r.participantuserid || !r.amountowed);
   if (invalid) {
-    // rollback best-effort
     await supabase.from("expenses").delete().eq("id", createdExpense.id);
     return {
       ok: false as const,
@@ -197,7 +254,6 @@ async function insertExpenseAndSplitsTolerant(supabase: Supa, userId: string, di
   const { error: splitErr } = await supabase.from("expensesplits").insert(splitRows as any);
 
   if (splitErr) {
-    // rollback best-effort
     await supabase.from("expenses").delete().eq("id", createdExpense.id);
     return {
       ok: false as const,
@@ -228,8 +284,15 @@ export async function GET(_: Request, ctx: { params: { divvyId: string } }) {
   const divvyId = ctx.params.divvyId;
 
   // authz: membro OU creator
-  const mem = await assertMembership(supabase, user.id, divvyId);
+  let mem = await assertMembership(supabase, user.id, divvyId);
   const creator = mem.ok ? false : await isCreatorOfDivvy(supabase, user.id, divvyId);
+
+  // se for creator mas não membro, tenta corrigir automaticamente
+  let ensured: any = null;
+  if (!mem.ok && creator) {
+    ensured = await tryEnsureMembership(supabase, divvyId, "owner");
+    mem = await assertMembership(supabase, user.id, divvyId);
+  }
 
   if (!mem.ok && !creator) {
     return NextResponse.json({ ok: false, code: "FORBIDDEN", message: "Forbidden" }, { status: 403 });
@@ -243,7 +306,7 @@ export async function GET(_: Request, ctx: { params: { divvyId: string } }) {
         code: "DB_ERROR",
         message: list.error?.message ?? "Failed to list expenses",
         where: "expenses_list",
-        meta: { membership: mem, creator },
+        meta: { membership: mem, creator, ensured },
       },
       { status: 500 }
     );
@@ -258,6 +321,7 @@ export async function GET(_: Request, ctx: { params: { divvyId: string } }) {
       userId: user.id,
       membership: mem,
       creator,
+      ensured,
       select: list.meta.select,
       cols: list.meta,
       count: list.rows.length,
@@ -275,19 +339,25 @@ export async function POST(req: Request, ctx: { params: { divvyId: string } }) {
 
   const divvyId = ctx.params.divvyId;
 
-  // precisa ser membro (policy de insert em expenses normalmente exige membership)
-  const mem = await assertMembership(supabase, user.id, divvyId);
+  // precisa ser membro; se for creator, tentamos auto-ensure membership
+  let mem = await assertMembership(supabase, user.id, divvyId);
+  const creator = mem.ok ? false : await isCreatorOfDivvy(supabase, user.id, divvyId);
+
+  let ensured: any = null;
+  if (!mem.ok && creator) {
+    ensured = await tryEnsureMembership(supabase, divvyId, "owner");
+    mem = await assertMembership(supabase, user.id, divvyId);
+  }
+
   if (!mem.ok) {
-    // se for creator mas não membro, normalmente ainda falha na policy; então retornamos instrução clara
-    const creator = await isCreatorOfDivvy(supabase, user.id, divvyId);
     return NextResponse.json(
       {
         ok: false,
         code: "FORBIDDEN",
         message: creator
-          ? "Você é creator, mas não consta como membro. Crie/garanta membership do creator em divvy_members/divvymembers."
+          ? "Você é creator, mas não consegui garantir membership automaticamente (policy/RLS)."
           : "Forbidden",
-        debug: { membership: mem, creator },
+        debug: { membership: mem, creator, ensured },
       },
       { status: 403 }
     );
