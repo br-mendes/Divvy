@@ -9,10 +9,6 @@ export async function GET(request: NextRequest, { params }: { params: { divvyId:
     const divvyId = params.divvyId;
     const { searchParams } = new URL(request.url);
     const activeOnly = searchParams.get('active') === 'true';
-    
-    if (!divvyId) {
-      return NextResponse.json({ error: 'divvyId is required' }, { status: 400 });
-    }
 
     // User authentication and authorization
     const supabase = createServerSupabase();
@@ -35,19 +31,22 @@ export async function GET(request: NextRequest, { params }: { params: { divvyId:
     }
 
     let query = supabaseAdmin
-      .from('expense_categories')
-      .select('*')
-      .eq('divvy_id', divvyId)
-      .order('created_at', { ascending: false });
+      .from('recurring_expenses')
+      .select(`
+        *,
+        expense_categories (name, color),
+        user_profiles!recurring_expenses_paid_by_user_id_fkey (fullname, email)
+      `)
+      .eq('divvy_id', divvyId);
 
     if (activeOnly) {
-      query = query.not('budget_limit', 'is', null);
+      query = query.eq('is_active', true);
     }
 
-    const { data, error } = await query;
+    const { data, error } = await query.order('created_at', { ascending: false });
 
     if (error) {
-      console.error('Error fetching categories:', error);
+      console.error('Error fetching recurring expenses:', error);
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
@@ -62,13 +61,16 @@ export async function POST(request: NextRequest, { params }: { params: { divvyId
   try {
     const divvyId = params.divvyId;
     const body = await request.json();
-    const { name, color, icon, budget_limit } = body;
-
-    if (!divvyId || !name) {
-      return NextResponse.json({ 
-        error: 'divvyId and name are required' 
-      }, { status: 400 });
-    }
+    const { 
+      paid_by_user_id, 
+      amount, 
+      category_id, 
+      description, 
+      frequency, 
+      interval_value, 
+      start_date, 
+      end_date 
+    } = body;
 
     // User authentication
     const supabase = createServerSupabase();
@@ -90,21 +92,35 @@ export async function POST(request: NextRequest, { params }: { params: { divvyId
       return NextResponse.json({ error: 'Access denied' }, { status: 403 });
     }
 
+    // Validation
+    if (!divvyId || !paid_by_user_id || !amount || !description || !frequency || !start_date) {
+      return NextResponse.json({ 
+        error: 'Required fields: paid_by_user_id, amount, description, frequency, start_date' 
+      }, { status: 400 });
+    }
+
+    // Calculate next due date
+    const nextDue = calculateNextDueDate(frequency, interval_value || 1, start_date);
+
     const { data, error } = await supabaseAdmin
-      .from('expense_categories')
+      .from('recurring_expenses')
       .insert([{
         divvy_id: divvyId,
-        name: name.trim(),
-        color,
-        icon,
-        budget_limit,
-        created_by: user.id,
+        paid_by_user_id,
+        amount,
+        category_id,
+        description: description.trim(),
+        frequency,
+        interval_value: interval_value || 1,
+        start_date,
+        end_date,
+        next_due_at: nextDue,
       }])
       .select()
       .single();
 
     if (error) {
-      console.error('Error creating category:', error);
+      console.error('Error creating recurring expense:', error);
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
@@ -134,27 +150,15 @@ export async function PUT(request: NextRequest, { params }: { params: { divvyId:
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Check if user is admin of divvy
-    const { data: memberCheck, error: memberError } = await supabaseAdmin
-      .from('divvymembers')
-      .select('userid, role')
-      .eq('divvyid', updates.divvy_id || '')
-      .eq('userid', user.id)
-      .single();
-
-    if (memberError || !memberCheck || memberCheck.role !== 'admin') {
-      return NextResponse.json({ error: 'Access denied. Admin role required.' }, { status: 403 });
-    }
-
     const { data, error } = await supabaseAdmin
-      .from('expense_categories')
+      .from('recurring_expenses')
       .update(updates)
       .eq('id', id)
       .select()
       .single();
 
     if (error) {
-      console.error('Error updating category:', error);
+      console.error('Error updating recurring expense:', error);
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
@@ -182,35 +186,13 @@ export async function DELETE(request: NextRequest, { params }: { params: { divvy
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Check if user is admin of divvy
-    const { data: category, error: categoryError } = await supabaseAdmin
-      .from('expense_categories')
-      .select('divvy_id')
-      .eq('id', id)
-      .single();
-
-    if (categoryError || !category) {
-      return NextResponse.json({ error: 'Category not found' }, { status: 404 });
-    }
-
-    const { data: memberCheck, error: memberError } = await supabaseAdmin
-      .from('divvymembers')
-      .select('userid, role')
-      .eq('divvyid', category.divvy_id)
-      .eq('userid', user.id)
-      .single();
-
-    if (memberError || !memberCheck || memberCheck.role !== 'admin') {
-      return NextResponse.json({ error: 'Access denied. Admin role required.' }, { status: 403 });
-    }
-
     const { error } = await supabaseAdmin
-      .from('expense_categories')
+      .from('recurring_expenses')
       .delete()
       .eq('id', id);
 
     if (error) {
-      console.error('Error deleting category:', error);
+      console.error('Error deleting recurring expense:', error);
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
@@ -219,4 +201,28 @@ export async function DELETE(request: NextRequest, { params }: { params: { divvy
     console.error('Unexpected error:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
+}
+
+function calculateNextDueDate(frequency: string, interval: number, startDate: string): string {
+  const start = new Date(startDate);
+  const nextDue = new Date(start);
+
+  switch (frequency) {
+    case 'daily':
+      nextDue.setDate(nextDue.getDate() + interval);
+      break;
+    case 'weekly':
+      nextDue.setDate(nextDue.getDate() + (7 * interval));
+      break;
+    case 'monthly':
+      nextDue.setMonth(nextDue.getMonth() + interval);
+      break;
+    case 'yearly':
+      nextDue.setFullYear(nextDue.getFullYear() + interval);
+      break;
+    default:
+      nextDue.setDate(nextDue.getDate() + interval);
+  }
+
+  return nextDue.toISOString();
 }
