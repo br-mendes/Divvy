@@ -18,7 +18,7 @@ export default function UpdatePassword() {
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (!session) {
         toast.error('Link inválido ou expirado.');
-        router.push('/login');
+        router.push('/auth/login');
       }
     });
   }, [router]);

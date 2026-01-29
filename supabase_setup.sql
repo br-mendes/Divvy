@@ -1,1 +1,2 @@
-�
+-- This file was corrupted/invalid (binary) in history.
+-- Use `supabase/migrations/*.sql` and the scripts under `supabase/*.sql`.

@@ -17,7 +17,7 @@ export function useDivvies(userId: string | undefined) {
       try {
         const { data, error: fetchError } = await supabase
           .from('divvies')
-          .select('*, members:divvy_members(*, user:user_profiles(*))')
+          .select('*, members:divvy_members(*, user:userprofiles(*))')
           .order('created_at', { ascending: false });
 
         if (fetchError) throw fetchError;

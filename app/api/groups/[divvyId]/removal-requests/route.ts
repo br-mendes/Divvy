@@ -1,34 +1,74 @@
 import { NextResponse } from 'next/server';
 
+import { requireUser } from '@/app/api/_utils/supabase';
+import { requireMemberOrCreator, tryQuery } from '@/app/api/_utils/divvy';
+
 export const dynamic = 'force-dynamic';
 
-/**
- * STUB AUTOMÁTICO PARA DESTRAVAR BUILD
- * - Evita qualquer throw em tempo de import durante 
-ext build
- * - Se faltar SUPABASE_SERVICE_ROLE_KEY, retorna 500 dentro do handler
- * - Usa req.url para pathname (evita problemas de backslash no Windows)
- */
+const CANDIDATES = [
+  { table: 'divvy_requests', divvyCol: 'divvyid' },
+  { table: 'divvy_requests', divvyCol: 'divvy_id' },
+  { table: 'requests', divvyCol: 'divvyid' },
+  { table: 'requests', divvyCol: 'divvy_id' },
+] as const;
 
-function missingEnv(pathname: string) {
-  return NextResponse.json(
-    { ok: false, code: 'MISSING_ENV', message: 'Missing env SUPABASE_SERVICE_ROLE_KEY', pathname },
-    { status: 500 }
-  );
+async function pick(supabase: any) {
+  for (const c of CANDIDATES) {
+    const r = await tryQuery(() => supabase.from(c.table).select('id').limit(1));
+    if (r.ok) return c;
+  }
+  return null;
 }
 
-function ok(pathname: string, method: string) {
-  return NextResponse.json({ ok: true, pathname, method, note: 'stub' });
-}
+export async function GET(_req: Request, ctx: { params: { divvyId: string } }) {
+  const auth = await requireUser();
+  if (auth.error) return auth.error;
 
-function gate(req: Request, method: string) {
-  const pathname = new URL(req.url).pathname;
-  if (!process.env.SUPABASE_SERVICE_ROLE_KEY) return missingEnv(pathname);
-  return ok(pathname, method);
-}
+  const { supabase, user } = auth;
+  const divvyId = ctx.params.divvyId;
 
-export async function GET(req: Request)    { return gate(req, 'GET'); }
-export async function POST(req: Request)   { return gate(req, 'POST'); }
-export async function PUT(req: Request)    { return gate(req, 'PUT'); }
-export async function PATCH(req: Request)  { return gate(req, 'PATCH'); }
-export async function DELETE(req: Request) { return gate(req, 'DELETE'); }
+  const perm = await requireMemberOrCreator(supabase, divvyId, user.id);
+  if (!perm.ok) return perm.error;
+
+  if (!perm.isAdmin) {
+    return NextResponse.json({ ok: false, error: 'Forbidden' }, { status: 403 });
+  }
+
+  const picked = await pick(supabase);
+  if (!picked) return NextResponse.json({ ok: true, divvyId, requests: [], note: 'No requests table found.' });
+
+  const { data, error } = await supabase
+    .from(picked.table)
+    .select('*')
+    .eq(picked.divvyCol, divvyId)
+    .eq('type', 'remove_member')
+    .eq('status', 'pending')
+    .order('createdat', { ascending: false });
+
+  if (error) return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
+
+  // Add best-effort emails when table userprofiles exists.
+  const rows = (data ?? []) as any[];
+  const ids = Array.from(new Set(rows.flatMap((r) => [r.requested_by, r.target_userid]).filter(Boolean)));
+
+  const profilesMap = new Map<string, any>();
+  if (ids.length > 0) {
+    const p1 = await tryQuery(() => supabase.from('userprofiles').select('id,email').in('id', ids));
+    const p2 = p1.ok ? null : await tryQuery(() => supabase.from('user_profiles').select('id,email').in('id', ids));
+    const profs = (p1.ok ? p1.data : p2?.ok ? p2.data : null) as any[] | null;
+    (profs ?? []).forEach((p) => profilesMap.set(String(p.id), p));
+  }
+
+  const decorated = rows.map((r) => ({
+    id: r.id,
+    requestedby: r.requested_by,
+    targetuserid: r.target_userid,
+    reason: r.reason ?? null,
+    status: r.status,
+    createdat: r.createdat ?? r.created_at ?? null,
+    requestedbyemail: profilesMap.get(String(r.requested_by))?.email ?? null,
+    targetuseremail: profilesMap.get(String(r.target_userid))?.email ?? null,
+  }));
+
+  return NextResponse.json({ ok: true, divvyId, requests: decorated, source: picked });
+}

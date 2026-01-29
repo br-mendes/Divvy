@@ -1,34 +1,98 @@
 import { NextResponse } from 'next/server';
 
+import { requireUser } from '@/app/api/_utils/supabase';
+import { requireMemberOrCreator, tryQuery } from '@/app/api/_utils/divvy';
+import { getURL } from '@/lib/getURL';
+
 export const dynamic = 'force-dynamic';
+export const runtime = 'nodejs';
 
-/**
- * STUB AUTOMÁTICO PARA DESTRAVAR BUILD
- * - Evita qualquer throw em tempo de import durante 
-ext build
- * - Se faltar SUPABASE_SERVICE_ROLE_KEY, retorna 500 dentro do handler
- * - Usa req.url para pathname (evita problemas de backslash no Windows)
- */
+const INVITE_TABLES = [
+  { table: 'invites', tokenCol: 'token', divvyCol: 'divvy_id', emailCol: 'invitedemail', statusCol: 'status', roleCol: 'role', expiresCol: 'expiresat' },
+  { table: 'invites', tokenCol: 'token', divvyCol: 'divvyid', emailCol: 'invitedemail', statusCol: 'status', roleCol: 'role', expiresCol: 'expiresat' },
+  { table: 'divvyinvites', tokenCol: 'token', divvyCol: 'divvyid', emailCol: 'invitedemail', statusCol: 'status', roleCol: 'role', expiresCol: 'expiresat' },
+] as const;
 
-function missingEnv(pathname: string) {
-  return NextResponse.json(
-    { ok: false, code: 'MISSING_ENV', message: 'Missing env SUPABASE_SERVICE_ROLE_KEY', pathname },
-    { status: 500 }
-  );
+async function pickInviteTable(supabase: any) {
+  for (const t of INVITE_TABLES) {
+    const r = await tryQuery(() => supabase.from(t.table).select('id').limit(1));
+    if (r.ok) return t;
+  }
+  return null;
 }
 
-function ok(pathname: string, method: string) {
-  return NextResponse.json({ ok: true, pathname, method, note: 'stub' });
+function makeToken() {
+  // short-ish token for URLs
+  return crypto.randomUUID().replace(/-/g, '');
 }
 
-function gate(req: Request, method: string) {
-  const pathname = new URL(req.url).pathname;
-  if (!process.env.SUPABASE_SERVICE_ROLE_KEY) return missingEnv(pathname);
-  return ok(pathname, method);
-}
+export async function POST(req: Request) {
+  const auth = await requireUser();
+  if (auth.error) return auth.error;
 
-export async function GET(req: Request)    { return gate(req, 'GET'); }
-export async function POST(req: Request)   { return gate(req, 'POST'); }
-export async function PUT(req: Request)    { return gate(req, 'PUT'); }
-export async function PATCH(req: Request)  { return gate(req, 'PATCH'); }
-export async function DELETE(req: Request) { return gate(req, 'DELETE'); }
+  const { supabase, user } = auth;
+
+  let body: any = {};
+  try {
+    body = await req.json();
+  } catch {
+    body = {};
+  }
+
+  const divvyId = String(body?.divvyId ?? '').trim();
+  const invitedEmail = String(body?.email ?? '').trim().toLowerCase();
+
+  if (!divvyId || !invitedEmail) {
+    return NextResponse.json({ ok: false, error: 'Missing divvyId/email' }, { status: 400 });
+  }
+
+  const perm = await requireMemberOrCreator(supabase, divvyId, user.id);
+  if (!perm.ok) return perm.error;
+  if (!perm.isAdmin) {
+    return NextResponse.json({ ok: false, error: 'Forbidden' }, { status: 403 });
+  }
+
+  const picked = await pickInviteTable(supabase);
+  if (!picked) {
+    return NextResponse.json({ ok: false, error: 'Invites table not found.' }, { status: 500 });
+  }
+
+  const token = makeToken();
+  const now = new Date();
+  const expires = new Date(now.getTime() + 1000 * 60 * 60 * 24 * 7).toISOString();
+
+  const payloads = [
+    {
+      [picked.tokenCol]: token,
+      [picked.divvyCol]: divvyId,
+      [picked.emailCol]: invitedEmail,
+      invitedbyuserid: user.id,
+      invited_by: user.id,
+      [picked.roleCol]: 'member',
+      [picked.statusCol]: 'pending',
+      [picked.expiresCol]: expires,
+      createdat: now.toISOString(),
+      created_at: now.toISOString(),
+    },
+    {
+      [picked.tokenCol]: token,
+      [picked.divvyCol]: divvyId,
+      [picked.emailCol]: invitedEmail,
+      [picked.roleCol]: 'member',
+      [picked.statusCol]: 'pending',
+      [picked.expiresCol]: expires,
+    },
+  ];
+
+  let lastErr: any = null;
+  for (const p of payloads) {
+    const { error } = await supabase.from(picked.table).insert(p as any);
+    if (!error) {
+      const inviteLink = `${getURL()}/join/${token}`;
+      return NextResponse.json({ ok: true, inviteLink });
+    }
+    lastErr = error;
+  }
+
+  return NextResponse.json({ ok: false, error: lastErr?.message ?? 'Failed to create invite' }, { status: 500 });
+}

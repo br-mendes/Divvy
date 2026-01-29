@@ -1,0 +1,55 @@
+.frame {
+  position: relative;
+  overflow: hidden;
+}
+
+.scanLine {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 2px;
+  opacity: 0.6;
+  background: linear-gradient(90deg, transparent, rgba(124, 58, 237, 0.7), transparent);
+  animation: scan 3.2s ease-in-out infinite;
+}
+
+.ticker {
+  animation: ticker 6.5s linear infinite;
+}
+
+.chip {
+  animation: chipFloat 5s ease-in-out infinite;
+}
+
+@keyframes scan {
+  0% {
+    transform: translateY(-10%);
+  }
+  45% {
+    transform: translateY(55%);
+  }
+  100% {
+    transform: translateY(110%);
+  }
+}
+
+@keyframes ticker {
+  0% {
+    transform: translateY(0);
+  }
+  100% {
+    transform: translateY(-50%);
+  }
+}
+
+@keyframes chipFloat {
+  0% {
+    transform: translate3d(0, 0, 0) rotate(-1deg);
+  }
+  50% {
+    transform: translate3d(0, -6px, 0) rotate(1deg);
+  }
+  100% {
+    transform: translate3d(0, 0, 0) rotate(-1deg);
+  }
+}

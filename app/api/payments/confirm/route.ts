@@ -1,34 +1,66 @@
 import { NextResponse } from 'next/server';
 
+import { requireUser } from '@/app/api/_utils/supabase';
+import { requireMemberOrCreator, tryQuery } from '@/app/api/_utils/divvy';
+
 export const dynamic = 'force-dynamic';
 
-/**
- * STUB AUTOMÁTICO PARA DESTRAVAR BUILD
- * - Evita qualquer throw em tempo de import durante 
-ext build
- * - Se faltar SUPABASE_SERVICE_ROLE_KEY, retorna 500 dentro do handler
- * - Usa req.url para pathname (evita problemas de backslash no Windows)
- */
+const TX_TABLES = [
+  { table: 'transactions', idCol: 'id', divvyCol: 'divvyid' },
+  { table: 'transactions', idCol: 'id', divvyCol: 'divvy_id' },
+  { table: 'payment_transactions', idCol: 'id', divvyCol: 'divvyid' },
+] as const;
 
-function missingEnv(pathname: string) {
-  return NextResponse.json(
-    { ok: false, code: 'MISSING_ENV', message: 'Missing env SUPABASE_SERVICE_ROLE_KEY', pathname },
-    { status: 500 }
-  );
+async function pickTxTable(supabase: any) {
+  for (const t of TX_TABLES) {
+    const r = await tryQuery(() => supabase.from(t.table).select('id').limit(1));
+    if (r.ok) return t;
+  }
+  return null;
 }
 
-function ok(pathname: string, method: string) {
-  return NextResponse.json({ ok: true, pathname, method, note: 'stub' });
-}
+export async function POST(req: Request) {
+  const auth = await requireUser();
+  if (auth.error) return auth.error;
 
-function gate(req: Request, method: string) {
-  const pathname = new URL(req.url).pathname;
-  if (!process.env.SUPABASE_SERVICE_ROLE_KEY) return missingEnv(pathname);
-  return ok(pathname, method);
-}
+  const { supabase, user } = auth;
 
-export async function GET(req: Request)    { return gate(req, 'GET'); }
-export async function POST(req: Request)   { return gate(req, 'POST'); }
-export async function PUT(req: Request)    { return gate(req, 'PUT'); }
-export async function PATCH(req: Request)  { return gate(req, 'PATCH'); }
-export async function DELETE(req: Request) { return gate(req, 'DELETE'); }
+  let body: any = {};
+  try {
+    body = await req.json();
+  } catch {
+    body = {};
+  }
+
+  const transactionId = String(body?.transactionId ?? body?.id ?? '').trim();
+  if (!transactionId) return NextResponse.json({ ok: false, error: 'Missing transactionId' }, { status: 400 });
+
+  const picked = await pickTxTable(supabase);
+  if (!picked) return NextResponse.json({ ok: false, error: 'Transactions table not found.' }, { status: 500 });
+
+  const { data: tx, error: txErr } = await supabase.from(picked.table).select('*').eq(picked.idCol, transactionId).maybeSingle();
+  if (txErr) return NextResponse.json({ ok: false, error: txErr.message }, { status: 500 });
+  if (!tx) return NextResponse.json({ ok: false, error: 'Not found' }, { status: 404 });
+
+  const divvyId = String((tx as any)[picked.divvyCol] ?? '');
+  const perm = await requireMemberOrCreator(supabase, divvyId, user.id);
+  if (!perm.ok) return perm.error;
+
+  // Only receiver can confirm.
+  const toUserId = String((tx as any).touserid ?? (tx as any).to_userid ?? '');
+  if (toUserId && toUserId !== user.id) {
+    return NextResponse.json({ ok: false, error: 'Forbidden' }, { status: 403 });
+  }
+
+  const now = new Date().toISOString();
+  const patch: any = { status: 'confirmed', updatedat: now, updated_at: now, confirmedat: now, confirmed_at: now };
+  const { data: updated, error } = await supabase
+    .from(picked.table)
+    .update(patch)
+    .eq(picked.idCol, transactionId)
+    .select('*')
+    .maybeSingle();
+
+  if (error) return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
+  return NextResponse.json({ ok: true, transaction: updated });
+}

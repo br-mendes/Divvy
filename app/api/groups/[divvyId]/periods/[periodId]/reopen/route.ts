@@ -1,34 +1,77 @@
 import { NextResponse } from 'next/server';
 
+import { requireUser } from '@/app/api/_utils/supabase';
+import { requireMemberOrCreator, tryQuery } from '@/app/api/_utils/divvy';
+
 export const dynamic = 'force-dynamic';
 
-/**
- * STUB AUTOMÁTICO PARA DESTRAVAR BUILD
- * - Evita qualquer throw em tempo de import durante 
-ext build
- * - Se faltar SUPABASE_SERVICE_ROLE_KEY, retorna 500 dentro do handler
- * - Usa req.url para pathname (evita problemas de backslash no Windows)
- */
+const CANDIDATES = [
+  { table: 'divvy_periods', divvyCol: 'divvyid', idCol: 'id' },
+  { table: 'divvy_periods', divvyCol: 'divvy_id', idCol: 'id' },
+  { table: 'periods', divvyCol: 'divvyid', idCol: 'id' },
+  { table: 'periods', divvyCol: 'divvy_id', idCol: 'id' },
+] as const;
 
-function missingEnv(pathname: string) {
-  return NextResponse.json(
-    { ok: false, code: 'MISSING_ENV', message: 'Missing env SUPABASE_SERVICE_ROLE_KEY', pathname },
-    { status: 500 }
-  );
+async function pick(supabase: any) {
+  for (const c of CANDIDATES) {
+    const r = await tryQuery(() => supabase.from(c.table).select('id').limit(1));
+    if (r.ok) return c;
+  }
+  return null;
 }
 
-function ok(pathname: string, method: string) {
-  return NextResponse.json({ ok: true, pathname, method, note: 'stub' });
-}
+export async function POST(_req: Request, ctx: { params: { divvyId: string; periodId: string } }) {
+  const auth = await requireUser();
+  if (auth.error) return auth.error;
 
-function gate(req: Request, method: string) {
-  const pathname = new URL(req.url).pathname;
-  if (!process.env.SUPABASE_SERVICE_ROLE_KEY) return missingEnv(pathname);
-  return ok(pathname, method);
-}
+  const { supabase, user } = auth;
+  const { divvyId, periodId } = ctx.params;
 
-export async function GET(req: Request)    { return gate(req, 'GET'); }
-export async function POST(req: Request)   { return gate(req, 'POST'); }
-export async function PUT(req: Request)    { return gate(req, 'PUT'); }
-export async function PATCH(req: Request)  { return gate(req, 'PATCH'); }
-export async function DELETE(req: Request) { return gate(req, 'DELETE'); }
+  const perm = await requireMemberOrCreator(supabase, divvyId, user.id);
+  if (!perm.ok) return perm.error;
+  if (!perm.isAdmin) return NextResponse.json({ ok: false, error: 'Forbidden' }, { status: 403 });
+
+  const picked = await pick(supabase);
+  if (!picked) return NextResponse.json({ ok: false, error: 'No periods table found.' }, { status: 500 });
+
+  const patch: any = { status: 'open', reopened_at: new Date().toISOString() };
+
+  const { data, error } = await supabase
+    .from(picked.table)
+    .update(patch)
+    .eq(picked.divvyCol, divvyId)
+    .eq(picked.idCol, periodId)
+    .select('*')
+    .maybeSingle();
+
+  if (error) return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
+  if (!data) return NextResponse.json({ ok: false, error: 'Not found' }, { status: 404 });
+
+  // Best-effort: unlock expenses within this period.
+  const from = String((data as any).period_from ?? '');
+  const to = String((data as any).period_to ?? '');
+  if (from && to) {
+    try {
+      await supabase
+        .from('expenses')
+        .update({ locked: false })
+        .eq('divvyid', divvyId)
+        .gte('date', from)
+        .lte('date', to);
+    } catch {
+      // ignore
+    }
+    try {
+      await supabase
+        .from('expenses')
+        .update({ locked: false })
+        .eq('divvy_id', divvyId)
+        .gte('date', from)
+        .lte('date', to);
+    } catch {
+      // ignore
+    }
+  }
+
+  return NextResponse.json({ ok: true, period: data });
+}

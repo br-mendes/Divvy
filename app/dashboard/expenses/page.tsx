@@ -3,81 +3,131 @@
 import Link from 'next/link';
 import { useMemo, useState } from 'react';
 
+import Button from '@/components/common/Button';
+import { Card } from '@/components/common/Card';
+import { formatCurrency, formatDate } from '@/utils/format';
+
+import styles from './page.module.css';
+
 type ExpenseItem = {
   id: string;
   description: string;
-  amount: number;
-  category: string;
+  amount_cents: number;
+  payer: string;
+  category: 'food' | 'transport' | 'accommodation' | 'entertainment' | 'other';
   date: string;
+  participants: number;
+};
+
+const categoryIcons: Record<ExpenseItem['category'], string> = {
+  food: '🍽️',
+  transport: '🚗',
+  accommodation: '🏨',
+  entertainment: '🎉',
+  other: '📝',
 };
 
 export default function ExpensesPage() {
-  const [filter, setFilter] = useState('');
+  const [filterCategory, setFilterCategory] = useState<string>('all');
 
   const expenses = useMemo<ExpenseItem[]>(
     () => [
-      { id: '1', description: 'Hospedagem', amount: 500, category: 'accommodation', date: '2026-01-14' },
-      { id: '2', description: 'Jantar', amount: 150, category: 'food', date: '2026-01-13' },
+      {
+        id: '1',
+        description: 'Hospedagem Hotel',
+        amount_cents: 50000,
+        payer: 'João Silva',
+        category: 'accommodation',
+        date: '2026-01-14',
+        participants: 3,
+      },
+      {
+        id: '2',
+        description: 'Jantar no restaurante',
+        amount_cents: 15000,
+        payer: 'Maria Santos',
+        category: 'food',
+        date: '2026-01-13',
+        participants: 2,
+      },
     ],
     []
   );
 
-  const visible = useMemo(
-    () => expenses.filter(e => (filter ? e.category === filter : true)),
-    [expenses, filter]
-  );
+  const visible = useMemo(() => {
+    if (!filterCategory || filterCategory === 'all') return expenses;
+    return expenses.filter((e) => e.category === filterCategory);
+  }, [expenses, filterCategory]);
 
   return (
-    <main className="max-w-5xl mx-auto p-6 space-y-6">
-      <header className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">Despesas</h1>
-        <Link
-          href="/dashboard/expenses/create"
-          className="inline-flex items-center justify-center rounded-md bg-black text-white px-4 py-2 text-sm hover:opacity-90"
-        >
-          + Nova despesa
+    <div className={styles.container}>
+      <div className={styles.header}>
+        <h1>Despesas</h1>
+        <Link href="/dashboard/expenses/create">
+          <Button variant="primary" size="md">
+            + Nova despesa
+          </Button>
         </Link>
-      </header>
+      </div>
 
-      <section className="bg-white border border-gray-200 rounded-lg p-4 flex gap-3 items-center">
-        <span className="text-sm text-gray-600">Filtrar categoria:</span>
+      <div className={styles.filters}>
         <select
-          className="border border-gray-300 rounded-md px-3 py-2 text-sm"
-          value={filter}
-          onChange={(e) => setFilter(e.target.value)}
+          value={filterCategory}
+          onChange={(e) => setFilterCategory(e.target.value)}
+          className={styles.select}
         >
-          <option value="">Todas</option>
+          <option value="all">Todas as categorias</option>
           <option value="food">Comida</option>
           <option value="transport">Transporte</option>
           <option value="accommodation">Hospedagem</option>
           <option value="entertainment">Entretenimento</option>
           <option value="other">Outro</option>
         </select>
-      </section>
+      </div>
 
-      <section className="space-y-3">
-        {visible.length === 0 ? (
-          <div className="text-gray-600 bg-gray-50 border border-gray-200 rounded-lg p-6">
-            Nenhuma despesa para este filtro.
+      {visible.length === 0 ? (
+        <Card>
+          <div className={styles.emptyState}>
+            <p className={styles.emptyIcon}>🧾</p>
+            <h3>Nenhuma despesa registrada</h3>
+            <p>Comece a adicionar despesas para rastrear gastos</p>
+            <Link href="/dashboard/expenses/create">
+              <Button variant="primary" size="md">
+                + Adicionar despesa
+              </Button>
+            </Link>
           </div>
-        ) : (
-          visible.map((e) => (
-            <div key={e.id} className="bg-white border border-gray-200 rounded-lg p-4 flex justify-between">
-              <div>
-                <div className="font-semibold text-gray-900">{e.description}</div>
-                <div className="text-sm text-gray-500">
-                  {e.category} • {e.date}
+        </Card>
+      ) : (
+        <div className={styles.expensesList}>
+          {visible.map((expense) => (
+            <div key={expense.id} className={styles.expenseCard}>
+              <div className={styles.expenseIcon}>{categoryIcons[expense.category]}</div>
+              <div className={styles.expenseDetails}>
+                <div className={styles.expenseHeader}>
+                  <h3>{expense.description}</h3>
+                  <span className={styles.amount}>{formatCurrency(expense.amount_cents)}</span>
                 </div>
+                <p className={styles.expenseMeta}>
+                  Adicionado por <strong>{expense.payer}</strong> em{' '}
+                  <strong>{formatDate(expense.date, 'short')}</strong>
+                </p>
+                <p className={styles.participants}>Dividido entre {expense.participants} pessoas</p>
               </div>
-              <div className="font-bold">R$ {e.amount.toFixed(2)}</div>
+              <div className={styles.expenseActions}>
+                <Link href={`/dashboard/expenses/${expense.id}`}>
+                  <Button variant="outline" size="sm">
+                    Editar
+                  </Button>
+                </Link>
+                <Button variant="outline" size="sm">
+                  Deletar
+                </Button>
+              </div>
             </div>
-          ))
-        )}
-      </section>
-
-      <p className="text-xs text-gray-500">
-        Stub criado automaticamente para corrigir o build (o arquivo anterior tinha conteúdo duplicado e export repetido).
-      </p>
-    </main>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }

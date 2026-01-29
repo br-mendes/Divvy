@@ -122,7 +122,14 @@ async function tryEnsureMembership(supabase: Supa, divvyId: string, role: string
   return { ok: false as const, via: "none" };
 }
 
-async function listExpensesTolerant(supabase: Supa, divvyId: string) {
+async function listExpensesTolerant(
+  supabase: Supa,
+  divvyId: string,
+  filters?: { from?: string | null; to?: string | null }
+) {
+  const from = (filters?.from ?? '').toString().trim();
+  const to = (filters?.to ?? '').toString().trim();
+
   const candidates = [
     {
       select: "id,divvyid,paidbyuserid,amount,category,description,date,createdat,locked",
@@ -153,11 +160,15 @@ async function listExpensesTolerant(supabase: Supa, divvyId: string) {
   let lastErr: any = null;
 
   for (const c of candidates) {
-    const q: any = supabase
+    let q: any = supabase
       .from("expenses")
       .select(c.select)
       .eq(c.divvyCol, divvyId)
       .order("date", { ascending: false, nullsFirst: false });
+
+    // Optional date filtering (YYYY-MM-DD). Column is always named `date` in our tolerant selects.
+    if (from) q = q.gte('date', from);
+    if (to) q = q.lte('date', to);
 
     const { data, error } = await q;
 
@@ -192,6 +203,9 @@ async function insertExpenseAndSplitsTolerant(supabase: Supa, userId: string, di
   const description = (body?.description ?? body?.title ?? "").toString().trim();
   const date = (body?.date ?? "").toString().trim();
 
+  const requestedPayerId = String(body?.paidByUserId ?? body?.paidbyuserid ?? body?.paid_by_user_id ?? '').trim();
+  const payerId = requestedPayerId || userId;
+
   const splits = Array.isArray(body?.splits) ? body.splits : [];
 
   if (!divvyId || !amount || !category || !date || splits.length === 0) {
@@ -206,11 +220,29 @@ async function insertExpenseAndSplitsTolerant(supabase: Supa, userId: string, di
     };
   }
 
+  // Optional: best-effort validate payer is a member.
+  if (payerId !== userId) {
+    const payerMem = await assertMembership(supabase, payerId, divvyId);
+    if (payerMem.ok === false && payerMem.error && String(payerMem.error).length > 0) {
+      // If we can conclusively read membership and payer isn't in it, reject.
+      // When RLS blocks reading other members, we don't block the request.
+      const msg = String(payerMem.error ?? '').toLowerCase();
+      const blocked = msg.includes('permission') || msg.includes('rls') || msg.includes('row level');
+      if (!blocked) {
+        return {
+          ok: false as const,
+          status: 400,
+          payload: { ok: false, code: 'BAD_REQUEST', message: 'paidByUserId is not a member of this group' },
+        };
+      }
+    }
+  }
+
   const expensePayloadCandidates = [
-    { divvyid: divvyId, paidbyuserid: userId, amount, category, description, date },
-    { divvy_id: divvyId, paidbyuserid: userId, amount, category, description, date },
-    { divvyid: divvyId, paidbyuserid: userId, amount, category, title: description, date },
-    { divvy_id: divvyId, paidbyuserid: userId, amount, category, title: description, date },
+    { divvyid: divvyId, paidbyuserid: payerId, amount, category, description, date },
+    { divvy_id: divvyId, paidbyuserid: payerId, amount, category, description, date },
+    { divvyid: divvyId, paidbyuserid: payerId, amount, category, title: description, date },
+    { divvy_id: divvyId, paidbyuserid: payerId, amount, category, title: description, date },
   ] as const;
 
   let createdExpense: any = null;
@@ -235,13 +267,24 @@ async function insertExpenseAndSplitsTolerant(supabase: Supa, userId: string, di
     };
   }
 
-  const splitRows = splits.map((s: any) => ({
-    expenseid: createdExpense.id,
-    participantuserid: (s.userid ?? s.userId ?? s.participantUserId ?? "").toString(),
-    amountowed: Number(s.amount ?? s.amountOwed ?? 0),
-  }));
+  const splitRows = splits.map((s: any) => {
+    const participantuserid = String(
+      s.participantuserid ?? s.participantUserId ?? s.userid ?? s.userId ?? ''
+    ).trim();
 
-  const invalid = splitRows.some((r) => !r.participantuserid || !r.amountowed);
+    let amountowed = Number(s.amountowed ?? s.amountOwed ?? s.amount ?? 0);
+    if (!amountowed && s.amountCents !== undefined) {
+      amountowed = Number(s.amountCents) / 100;
+    }
+
+    return {
+      expenseid: createdExpense.id,
+      participantuserid,
+      amountowed,
+    };
+  });
+
+  const invalid = splitRows.some((r) => !r.participantuserid || !(Number.isFinite(r.amountowed) && r.amountowed > 0));
   if (invalid) {
     await supabase.from("expenses").delete().eq("id", createdExpense.id);
     return {
@@ -251,7 +294,42 @@ async function insertExpenseAndSplitsTolerant(supabase: Supa, userId: string, di
     };
   }
 
-  const { error: splitErr } = await supabase.from("expensesplits").insert(splitRows as any);
+  const sum = splitRows.reduce((acc, r) => acc + r.amountowed, 0);
+  if (Math.abs(sum - amount) > 0.01) {
+    await supabase.from('expenses').delete().eq('id', createdExpense.id);
+    return {
+      ok: false as const,
+      status: 400,
+      payload: {
+        ok: false,
+        code: 'BAD_SPLITS',
+        message: `A soma dos splits (${sum.toFixed(2)}) deve ser igual ao total (${amount.toFixed(2)}).`,
+      },
+    };
+  }
+
+  const splitInsertCandidates = [
+    { table: 'expensesplits', toRow: (r: any) => ({ expenseid: r.expenseid, participantuserid: r.participantuserid, amountowed: r.amountowed }) },
+    { table: 'expensesplits', toRow: (r: any) => ({ expenseid: r.expenseid, userid: r.participantuserid, amount: r.amountowed }) },
+    { table: 'expense_splits', toRow: (r: any) => ({ expense_id: r.expenseid, user_id: r.participantuserid, amount_cents: Math.round(r.amountowed * 100) }) },
+  ] as const;
+
+  let splitErr: any = null;
+  for (const c of splitInsertCandidates) {
+    const test = await supabase.from(c.table).select('id').limit(1);
+    if (test.error) {
+      splitErr = test.error;
+      continue;
+    }
+
+    const rows = splitRows.map((r) => c.toRow(r));
+    const ins = await supabase.from(c.table).insert(rows as any);
+    if (!ins.error) {
+      splitErr = null;
+      break;
+    }
+    splitErr = ins.error;
+  }
 
   if (splitErr) {
     await supabase.from("expenses").delete().eq("id", createdExpense.id);
@@ -273,7 +351,7 @@ async function insertExpenseAndSplitsTolerant(supabase: Supa, userId: string, di
   };
 }
 
-export async function GET(_: Request, ctx: { params: { divvyId: string } }) {
+export async function GET(req: Request, ctx: { params: { divvyId: string } }) {
   const supabase = createRouteHandlerClient({ cookies });
   const user = await getAuthedUser(supabase);
 
@@ -282,6 +360,10 @@ export async function GET(_: Request, ctx: { params: { divvyId: string } }) {
   }
 
   const divvyId = ctx.params.divvyId;
+
+  const url = new URL(req.url);
+  const from = url.searchParams.get('from');
+  const to = url.searchParams.get('to');
 
   // authz: membro OU creator
   let mem = await assertMembership(supabase, user.id, divvyId);
@@ -298,7 +380,7 @@ export async function GET(_: Request, ctx: { params: { divvyId: string } }) {
     return NextResponse.json({ ok: false, code: "FORBIDDEN", message: "Forbidden" }, { status: 403 });
   }
 
-  const list = await listExpensesTolerant(supabase, divvyId);
+  const list = await listExpensesTolerant(supabase, divvyId, { from, to });
   if (!list.ok) {
     return NextResponse.json(
       {
@@ -322,6 +404,7 @@ export async function GET(_: Request, ctx: { params: { divvyId: string } }) {
       membership: mem,
       creator,
       ensured,
+      filters: { from: from || null, to: to || null },
       select: list.meta.select,
       cols: list.meta,
       count: list.rows.length,

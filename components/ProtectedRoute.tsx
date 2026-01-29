@@ -1,34 +1,34 @@
-"use client";
+'use client';
 
-import React, { useEffect } from 'react';
+import * as React from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { useAuth } from '../context/AuthContext';
-import { Layout } from './Layout';
-import LoadingSpinner from './ui/LoadingSpinner';
+import { useAuth } from '@/hooks/useAuth';
 
-export const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+export function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
 
-  useEffect(() => {
+  React.useEffect(() => {
     if (!loading && !user) {
-      router.push(`/auth/login?redirect=${encodeURIComponent(router.asPath)}`);
+      const sp = searchParams?.toString();
+      const current = `${pathname}${sp ? `?${sp}` : ''}`;
+      router.push(`/auth/login?redirect=${encodeURIComponent(current)}`);
     }
   }, [user, loading, router, pathname, searchParams]);
 
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <LoadingSpinner />
+        <div className="inline-flex items-center gap-2 text-gray-600">
+          <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+          Carregando...
+        </div>
       </div>
     );
   }
 
-  if (!user) {
-    return null;
-  }
-
-  return <Layout>{children}</Layout>;
-};
+  if (!user) return null;
+  return <>{children}</>;
+}

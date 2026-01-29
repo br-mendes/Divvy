@@ -86,7 +86,7 @@ async function detectGroupIdColumn(
 }
 
 export async function GET(
-  _req: Request,
+  req: Request,
   { params }: { params: { divvyId: string } }
 ) {
   const supabase = createRouteHandlerClient({ cookies });
@@ -101,6 +101,10 @@ export async function GET(
 
   const userId = authData.user.id;
   const divvyId = params.divvyId;
+
+  const url = new URL(req.url);
+  const fromParam = url.searchParams.get('from') || '';
+  const toParam = url.searchParams.get('to') || '';
 
   // 1) membership check
   const membershipTable = "divvy_members";
@@ -179,10 +183,11 @@ export async function GET(
   }
 
   // 5) buscar despesas do grupo (com coluna detectada)
-  const { data: expenses, error: expErr } = await supabase
-    .from(expensesTable)
-    .select("*")
-    .eq(groupIdCol, divvyId);
+  //    (com filtro por data best-effort)
+  let expQuery = supabase.from(expensesTable).select('*').eq(groupIdCol, divvyId);
+
+  // We'll detect the date column after we have a sample row. For now, just fetch.
+  const { data: expenses, error: expErr } = await expQuery;
 
   if (expErr) {
     return NextResponse.json(
@@ -216,6 +221,30 @@ export async function GET(
   const expenseIdCol = pickField(sample, ["id", "expense_id"]);
   const amountCol = pickField(sample, ["amount", "total", "value", "amount_cents", "total_cents", "value_cents"]);
   const paidByCol = pickField(sample, ["paid_by", "payer_id", "paidby", "created_by", "creatorid", "user_id"]);
+
+  const dateCol = pickField(sample, [
+    'created_at',
+    'createdat',
+    'paid_at',
+    'paidat',
+    'spent_at',
+    'spentat',
+    'date',
+    'occurred_at',
+    'occurredat',
+  ]);
+
+  // If caller asked for date filtering and we can detect a date column, refetch filtered.
+  if ((fromParam || toParam) && dateCol) {
+    let filtered = supabase.from(expensesTable).select('*').eq(groupIdCol, divvyId);
+    if (fromParam) filtered = filtered.gte(dateCol, fromParam);
+    if (toParam) filtered = filtered.lte(dateCol, toParam);
+
+    const { data: expenses2, error: expErr2 } = await filtered;
+    if (!expErr2 && Array.isArray(expenses2)) {
+      expRows.splice(0, expRows.length, ...(expenses2 as AnyRow[]));
+    }
+  }
 
   const amountMode: "cents" | "units" =
     amountCol && amountCol.toLowerCase().includes("cents") ? "cents" : "units";
@@ -326,9 +355,69 @@ export async function GET(
 
   balances.sort((a, b) => b.balance - a.balance);
 
+  // 10) mapear para o formato usado pela UI (member_balances)
+  const profileTable = await pickFirstExistingTable(supabase, [
+    'userprofiles',
+    'user_profiles',
+    'profiles',
+  ]);
+
+  const profilesById: Record<string, AnyRow> = {};
+  if (profileTable && memberIds.length > 0) {
+    const { data: profiles, error: profErr } = await supabase
+      .from(profileTable)
+      .select('*')
+      .in('id', memberIds);
+
+    if (!profErr && Array.isArray(profiles)) {
+      for (const p of profiles as AnyRow[]) {
+        const id = String(p.id ?? '');
+        if (id) profilesById[id] = p;
+      }
+    }
+  }
+
+  const fullNameKey = pickField(Object.values(profilesById)[0] ?? {}, ['full_name', 'fullname', 'name', 'display_name', 'displayname']);
+  const emailKey = pickField(Object.values(profilesById)[0] ?? {}, ['email']);
+
+  const rolesByUser: Record<string, string> = {};
+  for (const m of members ?? []) {
+    const id = String((m as any)?.user_id ?? '');
+    if (id) rolesByUser[id] = String((m as any)?.role ?? 'member');
+  }
+
+  const member_balances = balances.map((b) => {
+    const uid = b.userId;
+    const prof = profilesById[uid] ?? {};
+    const total_paid = b.paid;
+    const total_owes = b.owed;
+    const net_balance = b.balance;
+
+    const full_name = (fullNameKey ? String(prof[fullNameKey] ?? '') : '') || uid.slice(0, 8);
+    const email = (emailKey ? String(prof[emailKey] ?? '') : '') || '';
+
+    return {
+      user_id: uid,
+      full_name,
+      email,
+      role: rolesByUser[uid] || 'member',
+      total_paid,
+      total_owes,
+      net_balance,
+      balance_amount: net_balance,
+      color: net_balance > 0 ? 'green' : net_balance < 0 ? 'red' : 'gray',
+    };
+  });
+
   return NextResponse.json({
     ok: true,
     divvyId,
+    // UI-friendly shape
+    member_balances,
+    total_expenses: expRows.length,
+    calculation_date: new Date().toISOString(),
+
+    // Back-compat/debug shape
     balances,
     note:
       splitsTable && Object.keys(splitsByExpense).length > 0
@@ -341,6 +430,9 @@ export async function GET(
       expensesTable,
       splitsTable,
       groupIdCol,
+      dateCol,
+      filters: { from: fromParam || null, to: toParam || null },
+      profileTable,
       inferred: { expenseIdCol, amountCol, paidByCol, amountMode },
       members: memberIds.length,
       expenses: expRows.length,

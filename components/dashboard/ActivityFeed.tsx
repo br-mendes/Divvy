@@ -3,7 +3,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase';
-import { useAuth } from '../../context/AuthContext';
+import { useAuth } from '@/hooks/useAuth';
 import { Notification } from '../../types';
 import { DollarSign, CreditCard, Info, Bell } from 'lucide-react';
 import Link from 'next/link';

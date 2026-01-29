@@ -27,7 +27,8 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(function Inp
   ref
 ) {
   const autoId = React.useId();
-  const resolvedId = id ?? (label ? `input-${autoId}` : undefined);
+  const safeAutoId = String(autoId).replace(/[:]/g, '');
+  const resolvedId = id ?? (label ? `input-${safeAutoId}` : undefined);
 
   const [showPassword, setShowPassword] = React.useState(false);
   const hasError = Boolean(error);
@@ -78,7 +79,9 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(function Inp
             type="button"
             className="absolute inset-y-0 right-0 flex items-center px-3 text-xs font-medium text-gray-600 hover:text-gray-900"
             onClick={() => setShowPassword((v) => !v)}
-            tabIndex={-1}
+            aria-label={showPassword ? 'Ocultar senha' : 'Mostrar senha'}
+            aria-pressed={showPassword}
+            title={showPassword ? 'Ocultar senha' : 'Mostrar senha'}
           >
             {showPassword ? 'Ocultar' : 'Mostrar'}
           </button>

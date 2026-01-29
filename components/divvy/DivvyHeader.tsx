@@ -9,7 +9,7 @@ import { Button } from '../ui/Button';
 import { Modal } from '../ui/Modal';
 import DivvyForm from './DivvyForm';
 import { supabase } from '../../lib/supabase';
-import { useAuth } from '../../context/AuthContext';
+import { useAuth } from '@/hooks/useAuth';
 import { Pencil, Trash2, Archive, RotateCcw, Calendar } from 'lucide-react';
 import toast from 'react-hot-toast';
 

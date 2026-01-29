@@ -1,34 +1,47 @@
 import { NextResponse } from 'next/server';
 
+import { requireUser } from '@/app/api/_utils/supabase';
+import { MEMBERSHIP_SHAPES, getGroupRow, tryQuery } from '@/app/api/_utils/divvy';
+
 export const dynamic = 'force-dynamic';
 
-/**
- * STUB AUTOMÁTICO PARA DESTRAVAR BUILD
- * - Evita qualquer throw em tempo de import durante 
-ext build
- * - Se faltar SUPABASE_SERVICE_ROLE_KEY, retorna 500 dentro do handler
- * - Usa req.url para pathname (evita problemas de backslash no Windows)
- */
+export async function POST(req: Request) {
+  const auth = await requireUser();
+  if (auth.error) return auth.error;
 
-function missingEnv(pathname: string) {
-  return NextResponse.json(
-    { ok: false, code: 'MISSING_ENV', message: 'Missing env SUPABASE_SERVICE_ROLE_KEY', pathname },
-    { status: 500 }
-  );
+  const { supabase, user } = auth;
+
+  let body: any = {};
+  try {
+    body = await req.json();
+  } catch {
+    body = {};
+  }
+
+  const divvyId = String(body?.divvyId ?? body?.id ?? '').trim();
+  if (!divvyId) return NextResponse.json({ ok: false, error: 'Missing divvyId' }, { status: 400 });
+
+  // Prevent creator from leaving without transferring ownership.
+  const g = await getGroupRow(supabase, divvyId);
+  if (g.ok) {
+    const ownerId = String(g.group?.[g.shape.ownerCol] ?? '');
+    if (ownerId && ownerId === user.id) {
+      return NextResponse.json({ ok: false, error: 'Creator cannot leave the group.' }, { status: 400 });
+    }
+  }
+
+  for (const s of MEMBERSHIP_SHAPES) {
+    const exists = await tryQuery(() => supabase.from(s.table).select('id').limit(1));
+    if (!exists.ok) continue;
+
+    const { error } = await supabase
+      .from(s.table)
+      .delete()
+      .eq(s.groupIdCol, divvyId)
+      .eq(s.userIdCol, user.id);
+
+    if (!error) return NextResponse.json({ ok: true, action: 'left', via: s.table });
+  }
+
+  return NextResponse.json({ ok: false, error: 'Membership table not found or blocked.' }, { status: 500 });
 }
-
-function ok(pathname: string, method: string) {
-  return NextResponse.json({ ok: true, pathname, method, note: 'stub' });
-}
-
-function gate(req: Request, method: string) {
-  const pathname = new URL(req.url).pathname;
-  if (!process.env.SUPABASE_SERVICE_ROLE_KEY) return missingEnv(pathname);
-  return ok(pathname, method);
-}
-
-export async function GET(req: Request)    { return gate(req, 'GET'); }
-export async function POST(req: Request)   { return gate(req, 'POST'); }
-export async function PUT(req: Request)    { return gate(req, 'PUT'); }
-export async function PATCH(req: Request)  { return gate(req, 'PATCH'); }
-export async function DELETE(req: Request) { return gate(req, 'DELETE'); }

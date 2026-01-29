@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
-import { useAuth } from '../../context/AuthContext';
+import { useAuth } from '@/hooks/useAuth';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
 import { DivvyMember, Expense } from '../../types';
@@ -142,8 +142,10 @@ export default function ExpenseForm({ divvyId, members, onSuccess, onCancel, ini
           if (Math.abs(totalPct - 100) > 0.5) throw new Error("A soma das porcentagens deve ser 100%.");
       }
 
-      // 2. Send to API
-      const endpoint = initialData ? `/api/expenses/${initialData.id}` : '/api/expenses';
+      // 2. Send to API (group-scoped)
+      const endpoint = initialData
+        ? `/api/groups/${divvyId}/expenses/${initialData.id}`
+        : `/api/groups/${divvyId}/expenses`;
       const method = initialData ? 'PUT' : 'POST';
 
       const response = await fetch(endpoint, {

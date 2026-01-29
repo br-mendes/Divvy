@@ -5,6 +5,9 @@ import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
 import Button from '@/components/common/Button';
 import LogoAnimated from '@/components/common/LogoAnimated';
+import AnimatedTagline from '@/components/home/AnimatedTagline';
+import HeroVideo from '@/components/home/HeroVideo';
+import StaticPageLinks from '@/components/common/StaticPageLinks';
 
 export default function HomePage() {
   const [user, setUser] = useState<any>(null);
@@ -52,8 +55,7 @@ export default function HomePage() {
               Gestão inteligente de despesas
             </div>
             <h1 className="text-5xl font-bold text-gray-900 leading-tight">
-              Divida despesas <br />
-              <span className="text-indigo-600">sem perder amigos</span>
+              <AnimatedTagline />
             </h1>
             <p className="text-xl text-gray-600">
               Viagens, repúblicas ou jantares. O Divvy calcula quem deve quem para que
@@ -63,28 +65,21 @@ export default function HomePage() {
               <Link href={user ? '/dashboard' : '/auth/signup'}>
                 <Button size="lg">{user ? 'Ir para Dashboard' : 'Começar Agora'}</Button>
               </Link>
-              <Button variant="outline" size="lg">
-                Saiba Mais
-              </Button>
+              <a href="#features">
+                <Button variant="outline" size="lg">
+                  Saiba Mais
+                </Button>
+              </a>
             </div>
           </div>
 
           <div className="hidden md:flex justify-center">
-            <div className="relative w-full h-96 bg-gradient-to-br from-indigo-50 to-purple-50 rounded-3xl border-2 border-dashed border-indigo-200 flex flex-col items-center justify-center overflow-hidden">
-              <div className="absolute inset-0 flex items-center justify-center opacity-10">
-                <span className="text-9xl">💸</span>
-              </div>
-              <div className="z-10 text-center p-6 bg-white/80 rounded-xl backdrop-blur-md shadow-lg transform hover:scale-105 transition duration-500">
-                <div className="text-5xl mb-2 animate-bounce">⟳</div>
-                <p className="font-bold text-indigo-600">Processando Divisão...</p>
-                <p className="text-xs text-gray-500 mt-1">Animação: Recibo → Gráfico</p>
-              </div>
-            </div>
+            <HeroVideo />
           </div>
         </div>
       </section>
 
-      <section className="bg-white py-16 md:py-20">
+      <section id="features" className="bg-white py-16 md:py-20">
         <div className="max-w-7xl mx-auto px-4">
           <div className="text-center mb-12 md:mb-16">
             <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-4">
@@ -120,6 +115,9 @@ export default function HomePage() {
       <footer className="bg-gray-900 text-white py-12">
         <div className="max-w-7xl mx-auto px-4 text-center">
           <p className="mb-4">© 2026 Divvy. Todos os direitos reservados.</p>
+          <div className="flex items-center justify-center">
+            <StaticPageLinks className="text-gray-300" />
+          </div>
         </div>
       </footer>
     </div>

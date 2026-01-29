@@ -49,7 +49,7 @@ export default function InvitePage({ params }: { params: { token: string } }) {
     const data = await res.json();
 
     if (res.status === 401) {
-      window.location.href = `/login?redirect=/invite/${token}`;
+      window.location.href = `/auth/login?redirect=${encodeURIComponent(`/invite/${token}`)}`;
       return;
     }
 

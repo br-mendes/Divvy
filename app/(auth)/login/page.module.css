@@ -68,6 +68,33 @@
   margin-bottom: var(--spacing-lg);
 }
 
+.divider {
+  position: relative;
+  margin: var(--spacing-lg) 0;
+  text-align: center;
+}
+
+.divider::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 2px;
+  background: var(--border);
+}
+
+.divider span {
+  position: relative;
+  display: inline-block;
+  padding: 0 var(--spacing-md);
+  background: var(--bg-primary);
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
 .footer {
   text-align: center;
   display: flex;

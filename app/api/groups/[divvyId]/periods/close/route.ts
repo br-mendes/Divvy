@@ -1,34 +1,108 @@
 import { NextResponse } from 'next/server';
 
+import { requireUser } from '@/app/api/_utils/supabase';
+import { requireMemberOrCreator, tryQuery } from '@/app/api/_utils/divvy';
+
 export const dynamic = 'force-dynamic';
 
-/**
- * STUB AUTOMÁTICO PARA DESTRAVAR BUILD
- * - Evita qualquer throw em tempo de import durante 
-ext build
- * - Se faltar SUPABASE_SERVICE_ROLE_KEY, retorna 500 dentro do handler
- * - Usa req.url para pathname (evita problemas de backslash no Windows)
- */
+const CANDIDATES = [
+  { table: 'divvy_periods', divvyCol: 'divvyid' },
+  { table: 'divvy_periods', divvyCol: 'divvy_id' },
+  { table: 'periods', divvyCol: 'divvyid' },
+  { table: 'periods', divvyCol: 'divvy_id' },
+] as const;
 
-function missingEnv(pathname: string) {
-  return NextResponse.json(
-    { ok: false, code: 'MISSING_ENV', message: 'Missing env SUPABASE_SERVICE_ROLE_KEY', pathname },
-    { status: 500 }
-  );
+async function pick(supabase: any) {
+  for (const c of CANDIDATES) {
+    const r = await tryQuery(() => supabase.from(c.table).select('id').limit(1));
+    if (r.ok) return c;
+  }
+  return null;
 }
 
-function ok(pathname: string, method: string) {
-  return NextResponse.json({ ok: true, pathname, method, note: 'stub' });
-}
+export async function POST(req: Request, ctx: { params: { divvyId: string } }) {
+  const auth = await requireUser();
+  if (auth.error) return auth.error;
 
-function gate(req: Request, method: string) {
-  const pathname = new URL(req.url).pathname;
-  if (!process.env.SUPABASE_SERVICE_ROLE_KEY) return missingEnv(pathname);
-  return ok(pathname, method);
-}
+  const { supabase, user } = auth;
+  const divvyId = ctx.params.divvyId;
 
-export async function GET(req: Request)    { return gate(req, 'GET'); }
-export async function POST(req: Request)   { return gate(req, 'POST'); }
-export async function PUT(req: Request)    { return gate(req, 'PUT'); }
-export async function PATCH(req: Request)  { return gate(req, 'PATCH'); }
-export async function DELETE(req: Request) { return gate(req, 'DELETE'); }
+  const perm = await requireMemberOrCreator(supabase, divvyId, user.id);
+  if (!perm.ok) return perm.error;
+
+  if (!perm.isAdmin) {
+    return NextResponse.json({ ok: false, error: 'Forbidden' }, { status: 403 });
+  }
+
+  const picked = await pick(supabase);
+  if (!picked) return NextResponse.json({ ok: false, error: 'No periods table found.' }, { status: 500 });
+
+  let body: any = {};
+  try {
+    body = await req.json();
+  } catch {
+    body = {};
+  }
+
+  const from = String(body?.from ?? '').trim();
+  const to = String(body?.to ?? '').trim();
+  if (!from || !to) return NextResponse.json({ ok: false, error: 'Missing from/to' }, { status: 400 });
+
+  const now = new Date().toISOString();
+
+  const payloads = [
+    {
+      [picked.divvyCol]: divvyId,
+      period_from: from,
+      period_to: to,
+      status: 'closed',
+      closed_at: now,
+      snapshot: null,
+      createdby: user.id,
+      created_by: user.id,
+      createdat: now,
+    },
+    {
+      [picked.divvyCol]: divvyId,
+      period_from: from,
+      period_to: to,
+      status: 'closed',
+      closed_at: now,
+      snapshot: null,
+    },
+  ];
+
+  let lastErr: any = null;
+  for (const p of payloads) {
+    const { data, error } = await supabase.from(picked.table).insert(p as any).select('*').single();
+    if (!error) {
+      // Best-effort: lock expenses inside the range.
+      try {
+        // try common group id column names
+        await supabase
+          .from('expenses')
+          .update({ locked: true })
+          .eq('divvyid', divvyId)
+          .gte('date', from)
+          .lte('date', to);
+      } catch {
+        // ignore
+      }
+      try {
+        await supabase
+          .from('expenses')
+          .update({ locked: true })
+          .eq('divvy_id', divvyId)
+          .gte('date', from)
+          .lte('date', to);
+      } catch {
+        // ignore
+      }
+
+      return NextResponse.json({ ok: true, period: data, source: picked });
+    }
+    lastErr = error;
+  }
+
+  return NextResponse.json({ ok: false, error: lastErr?.message ?? 'Failed to close period' }, { status: 500 });
+}

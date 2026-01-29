@@ -2,7 +2,7 @@
 "use client";
 
 import React, { useState } from 'react';
-import { useAuth } from '../../context/AuthContext';
+import { useAuth } from '@/hooks/useAuth';
 import { Button } from '../ui/Button';
 import { Modal } from '../ui/Modal';
 import { Input } from '../ui/Input';
@@ -11,7 +11,7 @@ import toast from 'react-hot-toast';
 import { useRouter } from 'next/navigation';
 
 export default function DangerZone() {
-  const { user, signOut } = useAuth();
+  const { user, logout } = useAuth();
   const router = useRouter();
   const [modalOpen, setModalOpen] = useState(false);
   const [action, setAction] = useState<'leave_groups' | 'delete_account' | null>(null);
@@ -62,8 +62,8 @@ export default function DangerZone() {
         });
 
         if (!res.ok) throw new Error('Erro ao excluir conta.');
-        
-        await signOut();
+
+        await logout();
         toast.success("Conta excluída.");
         router.push('/');
       }
