@@ -21,10 +21,6 @@ type BalancesResponse = {
   total_expenses?: number;
   calculation_date?: string;
 
-<<<<<<< HEAD
-=======
-  // Back-compat with older payloads
->>>>>>> 3742ed0ae9e93e68ce111148d75a3f9568b2e852
   balances?: Array<{ userId: string; paid: number; owed: number; balance: number }>;
 };
 
@@ -128,8 +124,4 @@ export function BalancesPanel({ divvyId }: BalancesPanelProps) {
       ) : null}
     </div>
   );
-<<<<<<< HEAD
 }
-=======
-}
->>>>>>> 3742ed0ae9e93e68ce111148d75a3f9568b2e852

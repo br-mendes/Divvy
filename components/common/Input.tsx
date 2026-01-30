@@ -103,8 +103,4 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(function Inp
 
 Input.displayName = 'Input';
 
-<<<<<<< HEAD
 export default Input;
-=======
-export default Input;
->>>>>>> 3742ed0ae9e93e68ce111148d75a3f9568b2e852
