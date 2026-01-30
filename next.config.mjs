@@ -20,4 +20,8 @@ const nextConfig = {
   eslint: { ignoreDuringBuilds: true },
 };
 
+<<<<<<< HEAD
 export default nextConfig;
+=======
+export default nextConfig;
+>>>>>>> 3742ed0ae9e93e68ce111148d75a3f9568b2e852

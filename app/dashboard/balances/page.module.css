@@ -1,0 +1,7 @@
+.container { padding: 20px; }
+.header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
+.title { font-size: 20px; font-weight: 700; }
+.card { border: 1px solid rgba(0,0,0,.08); border-radius: 12px; padding: 16px; background: #fff; }
+.list { display: grid; gap: 10px; }
+.row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 0; border-bottom: 1px solid rgba(0,0,0,.06); }
+.row:last-child { border-bottom: 0; }

@@ -1,0 +1,8 @@
+.container { max-width: 520px; margin: 0 auto; padding: 24px; }
+.card { border: 1px solid rgba(0,0,0,.08); border-radius: 12px; padding: 20px; background: #fff; }
+.title { font-size: 24px; font-weight: 700; margin-bottom: 8px; }
+.subtitle { opacity: .8; margin-bottom: 16px; }
+.row { display: flex; gap: 12px; }
+.actions { display: flex; gap: 10px; align-items: center; justify-content: space-between; margin-top: 16px; }
+.footer { margin-top: 16px; opacity: .85; font-size: 14px; }
+.error { color: #b91c1c; font-size: 14px; margin-top: 8px; }

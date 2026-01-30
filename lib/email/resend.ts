@@ -45,7 +45,11 @@ export function getResendClient() {
   return new Resend(key);
 }
 
+<<<<<<< HEAD
 // Backwards-compatible exports used across codebase
+=======
+// Backwards-compatible exports used across the codebase
+>>>>>>> 3742ed0ae9e93e68ce111148d75a3f9568b2e852
 export const appUrl = getAppUrl();
 export const EMAIL_FROM = getFromEmail();
 
@@ -53,4 +57,8 @@ export const EMAIL_FROM = getFromEmail();
 export const resend = getResendClient();
 
 // Default export used by other call-sites
+<<<<<<< HEAD
 export default resend;
+=======
+export default resend;
+>>>>>>> 3742ed0ae9e93e68ce111148d75a3f9568b2e852

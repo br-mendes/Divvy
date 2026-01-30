@@ -1,0 +1,94 @@
+/* components/common/Logo.module.css */
+
+.logoWrapper {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-weight: 700;
+  text-decoration: none;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.sm {
+  font-size: 1rem;
+  --logo-size: 32px;
+}
+
+.md {
+  font-size: 1.2rem;
+  --logo-size: 40px;
+}
+
+.lg {
+  font-size: 1.4rem;
+  --logo-size: 56px;
+}
+
+.logo {
+  width: var(--logo-size);
+  height: var(--logo-size);
+  transform-origin: 50% 50%;
+}
+
+.animated {
+}
+
+.animated .logo {
+  will-change: transform;
+  animation:
+    divvy-rotate 12s linear infinite,
+    divvy-pulse 3s ease-in-out infinite;
+}
+
+.slice {
+  transform-origin: 50px 50px;
+}
+
+.animated .slice {
+  will-change: transform;
+  animation: divvy-slice-detach 3s cubic-bezier(0.45, 0.05, 0.55, 0.95) infinite;
+}
+
+.logoWrapper:hover .logo {
+  animation-duration: 4s, 3s;
+}
+
+.logoWrapper:hover .slice {
+  animation-duration: 1.5s;
+}
+
+.text {
+  letter-spacing: -0.03em;
+  background: linear-gradient(135deg, #9b5bff, #6c2bff);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  transition: filter 0.3s ease;
+}
+
+.logoWrapper:hover .text {
+  filter: drop-shadow(0 0 8px rgba(155, 91, 255, 0.6));
+}
+
+@keyframes divvy-rotate {
+  0% { transform: rotate(0deg) scale(1); }
+  100% { transform: rotate(360deg) scale(1); }
+}
+
+@keyframes divvy-pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.08); }
+}
+
+@keyframes divvy-slice-detach {
+  0% {
+    transform: translate3d(0, 0, 0);
+  }
+  50% {
+    transform: translate3d(-14px, -14px, 0);
+  }
+  100% {
+    transform: translate3d(0, 0, 0);
+  }
+}

@@ -96,6 +96,10 @@ async function pickFirstWorkingGroupsShape(supabase: Supa) {
 }
 
 async function ensureMembership(supabase: Supa, userId: string, divvyId: string, role: string) {
+<<<<<<< HEAD
+=======
+  // 1) prefer security definer RPC if available
+>>>>>>> 3742ed0ae9e93e68ce111148d75a3f9568b2e852
   const rpc = await tryQuery(() =>
     supabase.rpc('ensure_divvy_membership', {
       p_divvy_id: divvyId,
@@ -104,6 +108,10 @@ async function ensureMembership(supabase: Supa, userId: string, divvyId: string,
   );
   if (rpc.ok) return { ok: true as const, via: 'rpc:ensure_divvy_membership' };
 
+<<<<<<< HEAD
+=======
+  // 2) fallback: insert into first membership table that exists
+>>>>>>> 3742ed0ae9e93e68ce111148d75a3f9568b2e852
   for (const s of MEMBERSHIP_SHAPES) {
     const exists = await tryQuery(() => supabase.from(s.table).select('id').limit(1));
     if (!exists.ok) continue;
@@ -156,6 +164,10 @@ export async function GET(req: Request) {
       });
     }
 
+<<<<<<< HEAD
+=======
+    // Prefer membership ids; fallback to owner column.
+>>>>>>> 3742ed0ae9e93e68ce111148d75a3f9568b2e852
     if (membership.ok && membership.ids.length > 0) {
       const { data, error } = await supabase
         .from(shape.table)
@@ -186,6 +198,10 @@ export async function GET(req: Request) {
       .order(shape.createdCol ?? shape.idCol, { ascending: false });
 
     if (error) {
+<<<<<<< HEAD
+=======
+      // Non-fatal: return empty with debug.
+>>>>>>> 3742ed0ae9e93e68ce111148d75a3f9568b2e852
       return NextResponse.json({
         ok: true,
         groups: [],
@@ -235,6 +251,10 @@ export async function POST(req: Request) {
     const name = (body?.name ?? body?.title ?? 'Novo grupo').toString().trim();
     const type = pickFirst(body?.type, body?.kind, 'trip');
 
+<<<<<<< HEAD
+=======
+    // Insert into the first working groups table.
+>>>>>>> 3742ed0ae9e93e68ce111148d75a3f9568b2e852
     const groupsCandidates: Array<{ table: 'divvies' | 'groups'; payloads: AnyRow[] }> = [
       {
         table: 'divvies',
@@ -297,4 +317,8 @@ export async function POST(req: Request) {
       { status: 500 }
     );
   }
+<<<<<<< HEAD
 }
+=======
+}
+>>>>>>> 3742ed0ae9e93e68ce111148d75a3f9568b2e852

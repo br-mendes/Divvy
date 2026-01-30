@@ -1,0 +1,53 @@
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "lib": ["ES2020", "DOM", "DOM.Iterable"],
+    "jsx": "preserve",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./*"]
+    },
+    "allowJs": true,
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "incremental": true,
+    "plugins": [
+      {
+        "name": "next"
+      }
+    ],
+    "isolatedModules": true,
+    "noEmit": true,
+    "allowSyntheticDefaultImports": true
+  },
+  "include": [
+    "next-env.d.ts",
+    "**/*.ts",
+    "**/*.tsx",
+    ".next/types/**/*.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "pages/Dashboard.tsx",
+    "pages/dashboard.tsx",
+    "pages/Home.tsx",
+    "pages/home.tsx",
+    "pages/Login.tsx",
+    "pages/login.tsx",
+    "pages/Signup.tsx",
+    "pages/signup.tsx",
+    "pages/DivvyDetail.tsx",
+    "pages/divvy/[id].tsx",
+    "pages/JoinDivvy.tsx",
+    "pages/join/[token].tsx",
+    "pages/Auth.tsx",
+    "pages/auth/callback.tsx",
+    "pages/index.tsx",
+    "pages/Index.tsx"
+  ]
+}

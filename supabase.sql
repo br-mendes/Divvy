@@ -1,0 +1,6 @@
+-- This file was corrupted/invalid (binary) in history.
+-- Use `supabase/migrations/*.sql` as the source of truth.
+--
+-- Suggested workflow:
+-- - Apply migrations in `supabase/migrations/` to your Supabase project.
+-- - Use `supabase/verify.sql` for sanity checks.

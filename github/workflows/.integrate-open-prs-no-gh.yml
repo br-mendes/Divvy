@@ -1,0 +1,170 @@
+name: Integrate Open PRs (no gh, prefer latest)
+
+on:
+  workflow_dispatch:
+    inputs:
+      base_branch:
+        description: "Branch base (ex: master ou main)"
+        required: true
+        default: "master"
+      integration_branch:
+        description: "Branch de integração"
+        required: true
+        default: "integrate/all-prs"
+      order_by:
+        description: "Ordenar PRs por (created_at|updated_at)"
+        required: true
+        default: "updated_at"
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  integrate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout base
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.base_branch }}
+          fetch-depth: 0
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+
+      - name: Create integration branch
+        run: |
+          git checkout -B "${{ inputs.integration_branch }}" "${{ inputs.base_branch }}"
+
+      - name: Fetch open PRs via GitHub API (no gh)
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          ORDER_BY: ${{ inputs.order_by }}
+        run: |
+          set -euo pipefail
+
+          # Busca PRs abertos (paginado)
+          page=1
+          > prs.json
+          while true; do
+            echo "Fetching page $page..."
+            resp=$(curl -sS -H "Authorization: Bearer $GITHUB_TOKEN" \
+                         -H "Accept: application/vnd.github+json" \
+                         "https://api.github.com/repos/$REPO/pulls?state=open&per_page=100&page=$page")
+            count=$(echo "$resp" | python3 -c "import sys, json; print(len(json.load(sys.stdin)))")
+            if [ "$count" -eq 0 ]; then
+              break
+            fi
+            echo "$resp" >> prs.json
+            page=$((page+1))
+          done
+
+          python3 - << 'PY'
+import json, glob, sys
+prs=[]
+for fn in glob.glob("prs.json"):
+  with open(fn,"r",encoding="utf-8") as f:
+    # prs.json pode conter múltiplos arrays concatenados
+    # vamos ler linha a linha e acumular arrays
+    content=f.read().strip()
+    if not content: 
+      continue
+    # separa concatenacao de arrays: ][ -> ],[
+    content = content.replace("][", "],[")
+    data = json.loads(f"[{content}]")
+    for arr in data:
+      prs.extend(arr)
+
+order_by = "${ORDER_BY}"
+key = "updated_at" if order_by == "updated_at" else "created_at"
+prs_sorted = sorted(prs, key=lambda p: p.get(key) or "")
+
+# Escreve em prs.txt: "<number> <head.ref>"
+with open("prs.txt","w",encoding="utf-8") as out:
+  for p in prs_sorted:
+    out.write(f"{p['number']} {p['head']['ref']}\n")
+
+print(f"Found {len(prs_sorted)} open PRs. Order by: {key}")
+for line in open("prs.txt","r",encoding="utf-8").read().splitlines()[:20]:
+  print("  ", line)
+PY
+
+          echo "PR list written to prs.txt"
+          cat prs.txt
+
+      - name: Merge PR branches preferring latest changes (theirs)
+        run: |
+          set -euo pipefail
+
+          while read -r pr headref; do
+            echo "==> Merging PR #$pr from branch $headref"
+
+            # Busca branch do PR
+            git fetch origin "$headref":"refs/remotes/origin/$headref" || true
+
+            # Merge preferindo o que está entrando
+            git merge --no-edit -X theirs "origin/$headref" || true
+
+            # Se sobrou conflito, força "theirs" em todos os arquivos conflitados
+            if git status --porcelain | grep -q '^UU '; then
+              echo "Conflicts detected; taking THEIRS for conflicted files"
+              git diff --name-only --diff-filter=U | while read -r f; do
+                git checkout --theirs -- "$f"
+                git add "$f"
+              done
+              git commit -m "Resolve conflicts by preferring newest incoming changes (theirs)"
+            fi
+
+          done < prs.txt
+
+      - name: Run verify/build (optional but recommended)
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+          NEXT_PUBLIC_APP_URL: ${{ secrets.NEXT_PUBLIC_APP_URL }}
+        run: |
+          npm ci
+          npm run verify
+          npm run build
+
+      - name: Push integration branch
+        run: |
+          git push origin "${{ inputs.integration_branch }}" --force
+
+      - name: Create PR back to base (no gh)
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          BASE: ${{ inputs.base_branch }}
+          HEAD: ${{ inputs.integration_branch }}
+        run: |
+          set -euo pipefail
+          # Tenta criar PR (se já existir, API retorna erro; não falhar)
+          payload=$(python3 - << PY
+import json
+print(json.dumps({
+  "title": "Integration: merge all open PRs (prefer latest)",
+  "head": "${HEAD}",
+  "base": "${BASE}",
+  "body": "Automated integration of all open PRs. Conflicts resolved preferring newest incoming changes (-X theirs)."
+}))
+PY
+)
+          resp=$(curl -sS -X POST \
+            -H "Authorization: Bearer $GITHUB_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/$REPO/pulls" \
+            -d "$payload")
+
+          # Mostra URL se deu certo
+          url=$(echo "$resp" | python3 -c "import sys, json; d=json.load(sys.stdin); print(d.get('html_url',''))" 2>/dev/null || true)
+          if [ -n "$url" ]; then
+            echo "Created PR: $url"
+          else
+            echo "PR may already exist or creation failed. Response:"
+            echo "$resp"
+          fi

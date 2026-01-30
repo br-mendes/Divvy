@@ -1,0 +1,2 @@
+-- This file was corrupted/invalid (binary) in history.
+-- Use `supabase/migrations/*.sql` as the canonical schema.

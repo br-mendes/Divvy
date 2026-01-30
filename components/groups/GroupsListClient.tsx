@@ -121,4 +121,8 @@ export default function GroupsListClient() {
       ))}
     </div>
   );
+<<<<<<< HEAD
 }
+=======
+}
+>>>>>>> 3742ed0ae9e93e68ce111148d75a3f9568b2e852

@@ -58,4 +58,8 @@ export function GroupTabs({ value, onChange, className }: Props) {
   );
 }
 
+<<<<<<< HEAD
 export default GroupTabs;
+=======
+export default GroupTabs;
+>>>>>>> 3742ed0ae9e93e68ce111148d75a3f9568b2e852

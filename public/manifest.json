@@ -1,0 +1,17 @@
+
+{
+  "name": "Divvy",
+  "short_name": "Divvy",
+  "description": "Gestão inteligente de despesas em grupo.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#8b5cf6",
+  "icons": [
+    {
+      "src": "https://i.ibb.co/qLBKgSVR/favicon.png",
+      "sizes": "192x192 512x512",
+      "type": "image/png"
+    }
+  ]
+}
