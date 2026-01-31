@@ -172,14 +172,19 @@ export async function PUT(req: Request, ctx: { params: { divvyId: string; expens
   // Optional: replace splits
   const splits = Array.isArray(body?.splits) ? body.splits : null;
   if (splits) {
-    const normalized = splits.map((s: any) => {
+    interface SplitItem {
+      userid: string;
+      amountowed: number;
+    }
+
+    const normalized: SplitItem[] = splits.map((s: any) => {
       const userid = String(s.participantuserid ?? s.participantUserId ?? s.userid ?? s.userId ?? '').trim();
       let amountowed = Number(s.amountowed ?? s.amountOwed ?? s.amount ?? 0);
       if (!amountowed && s.amountCents !== undefined) amountowed = Number(s.amountCents) / 100;
       return { userid, amountowed };
     });
 
-    const invalid = normalized.some((r) => !r.userid || !(Number.isFinite(r.amountowed) && r.amountowed > 0));
+    const invalid = normalized.some((r: SplitItem) => !r.userid || !(Number.isFinite(r.amountowed) && r.amountowed > 0));
     if (invalid) {
       return NextResponse2.json({ ok: false, code: 'BAD_SPLITS', message: 'Invalid splits payload' }, { status: 400 });
     }
