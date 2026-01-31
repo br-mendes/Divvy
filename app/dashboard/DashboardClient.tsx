@@ -63,7 +63,7 @@ export default function DashboardClient() {
       <div className="flex items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold">Meus grupos</h1>
-          <p className="text-sm text-gray-600">(Compat) Esta rota existe por legado: /dashboard/divvies. A tela principal é /groups.</p>
+          <p className="text-sm text-gray-600">Para uma experiência completa, acesse a página de grupos.</p>
         </div>
         <div className="flex gap-2">
           <Link href="/groups" className="inline-flex items-center justify-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium hover:bg-gray-50">

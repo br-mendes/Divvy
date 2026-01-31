@@ -6,18 +6,10 @@ const basePath = isGithubPages && repoName ? `/${repoName}` : '';
 const nextConfig = {
   reactStrictMode: true,
 
-  // GitHub Pages support (desligado na Vercel se GITHUB_PAGES != true)
   basePath,
   assetPrefix: basePath ? `${basePath}/` : undefined,
 
-  // SSR na Vercel: NÃO force output: 'export' nem trailingSlash.
-  // trailingSlash: true,
-
   images: { unoptimized: true },
-
-  // Temporário pra destravar pipeline
-  typescript: { ignoreBuildErrors: true },
-  eslint: { ignoreDuringBuilds: true },
 };
 
 export default nextConfig;
