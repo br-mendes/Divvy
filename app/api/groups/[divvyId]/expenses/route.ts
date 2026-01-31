@@ -267,7 +267,13 @@ async function insertExpenseAndSplitsTolerant(supabase: Supa, userId: string, di
     };
   }
 
-  const splitRows = splits.map((s: any) => {
+  interface SplitRow {
+    expenseid: string;
+    participantuserid: string;
+    amountowed: number;
+  }
+
+  const splitRows: SplitRow[] = splits.map((s: any) => {
     const participantuserid = String(
       s.participantuserid ?? s.participantUserId ?? s.userid ?? s.userId ?? ''
     ).trim();
@@ -284,7 +290,7 @@ async function insertExpenseAndSplitsTolerant(supabase: Supa, userId: string, di
     };
   });
 
-  const invalid = splitRows.some((r) => !r.participantuserid || !(Number.isFinite(r.amountowed) && r.amountowed > 0));
+  const invalid = splitRows.some((r: SplitRow) => !r.participantuserid || !(Number.isFinite(r.amountowed) && r.amountowed > 0));
   if (invalid) {
     await supabase.from("expenses").delete().eq("id", createdExpense.id);
     return {
