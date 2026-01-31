@@ -1,6 +1,3 @@
-<<<<<<< HEAD
-export { supabase } from './index';
-=======
 import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 import { getSupabaseEnv } from './env';
@@ -26,7 +23,7 @@ export function createSupabaseServerClient() {
       },
       set(name: string, value: string, options: any) {
         // next/headers cookies() supports set in route handlers in modern Next versions;
-        // if the runtime disallows, routes still work for reads (and you’ll see it in logs).
+        // if the runtime disallows, routes still work for reads (and you'll see it in logs).
         cookieStore.set({ name, value, ...options });
       },
       remove(name: string, options: any) {
@@ -35,4 +32,3 @@ export function createSupabaseServerClient() {
     },
   });
 }
->>>>>>> 3742ed0ae9e93e68ce111148d75a3f9568b2e852
