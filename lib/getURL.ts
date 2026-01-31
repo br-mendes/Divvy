@@ -9,8 +9,8 @@ export function getURL() {
     url = window.location.origin;
   }
 
-  // Garante que a URL comeÃ§a com http/https
-  url = url.startsWith('http') ? url : https://;
+  // Garante que a URL começa com http/https
+  url = url.startsWith('http') ? url : `https://${url}`;
 
   // Remove qualquer barra no final para evitar URLs como domain.com//auth/callback
   return url.replace(/\/$/, '');
