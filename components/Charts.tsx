@@ -159,7 +159,7 @@ export const ExpenseCharts: React.FC<ExpenseChartsProps> = ({ expenses, members 
                   fill="#7c3aed" 
                   radius={[0, 4, 4, 0]} 
                   barSize={30}
-                  background={{ fill: '#f3f4f6', radius: [0, 4, 4, 0] }}
+                  background={{ fill: '#f3f4f6', radius: 4 }}
                 />
               </BarChart>
             </ResponsiveContainer>

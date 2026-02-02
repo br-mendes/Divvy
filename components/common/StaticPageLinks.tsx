@@ -3,6 +3,7 @@ import Link from 'next/link';
 type Props = {
   className?: string;
   compact?: boolean;
+  linkClassName?: string;
 };
 
 export default function StaticPageLinks({ className, compact }: Props) {

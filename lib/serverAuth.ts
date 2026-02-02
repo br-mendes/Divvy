@@ -17,7 +17,11 @@ if (!supabaseKey) {
  * Use this to verify identity in API Routes when using client-side localStorage auth.
  */
 export async function authorizeUser(request: Request): Promise<User> {
-  const token = request.headers.get('authorization')?.split(' ')[1];
+  const authHeader = request.headers.get('authorization');
+  if (!authHeader) {
+    throw new Error('Unauthorized - No authorization header');
+  }
+  const token = authHeader.split(' ')[1];
   
   if (!token) {
     throw new Error('Unauthorized');

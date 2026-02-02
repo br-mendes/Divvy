@@ -31,7 +31,7 @@ export default function Notifications() {
           schema: 'public', 
           table: 'notifications'
         },
-        (payload) => {
+        (payload: any) => {
           const newNotif = payload.new as Notification;
           // Filtro extra de segurança no cliente
           if (newNotif.user_id === user.id) {
@@ -66,7 +66,7 @@ export default function Notifications() {
     
     if (data) {
       setNotifications(data);
-      setUnreadCount(data.filter(n => !n.is_read).length);
+      setUnreadCount(data.filter((n: any) => !n.is_read).length);
     }
   };
 
