@@ -97,7 +97,7 @@ export default function AuthCallback() {
         toast.success('Login realizado com sucesso!');
         doRedirect();
       } else {
-        const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+        const { data: { subscription } } = supabase.auth.onAuthStateChange((event: any, session) => {
           if (session) {
             subscription.unsubscribe();
             ensureProfile(session.user);
