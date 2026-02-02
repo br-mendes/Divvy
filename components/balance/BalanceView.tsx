@@ -11,6 +11,14 @@ interface BalancePair {
   user_name: string;
   balance: number;
 }
+
+interface SettlementPlan {
+  from: string;
+  to: string;
+  fromDisplayName: string;
+  toDisplayName: string;
+  amount: number;
+}
 import { Button } from '../ui/Button';
 import { Modal } from '../ui/Modal';
 import { ArrowRight, Wallet, CheckCircle, Clock, XCircle, History, ChevronDown, ChevronUp, Copy, Phone, QrCode, Banknote, ArrowUpRight, ArrowDownLeft } from 'lucide-react';
@@ -38,7 +46,7 @@ export default function BalanceView({
 }: BalanceViewProps) {
   const { user } = useAuth();
   const [showHistory, setShowHistory] = useState(false);
-  const [plan, setPlan] = useState<BalancePair[]>([]);
+  const [plan, setPlan] = useState<SettlementPlan[]>([]);
   const [planLoading, setPlanLoading] = useState(false);
   
   // Payment Modal State
