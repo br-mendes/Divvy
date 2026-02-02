@@ -61,3 +61,9 @@ export interface Balance {
   share: number;
   net: number;
 }
+
+export interface BalancePair {
+  user_id: string;
+  user_name: string;
+  balance: number;
+}
