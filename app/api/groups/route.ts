@@ -90,9 +90,10 @@ const GROUPS_SHAPES: GroupsTableShape[] = [
 async function pickFirstWorkingGroupsShape(supabase: Supa) {
   for (const s of GROUPS_SHAPES) {
     // eslint-disable-next-line no-await-in-loop
-    const r = await tryQuery(() => {
+    const r = await tryQuery(async () => {
       const query = supabase.from(s.table).select(s.select).limit(1);
-      return query.then(({ data, error }: any) => ({ data, error }));
+      const { data, error }: any = await query;
+      return { data, error };
     });
     if (r.ok) return s;
   }
@@ -100,20 +101,22 @@ async function pickFirstWorkingGroupsShape(supabase: Supa) {
 }
 
 async function ensureMembership(supabase: Supa, userId: string, divvyId: string, role: string) {
-  const rpc = await tryQuery(() => {
+  const rpc = await tryQuery(async () => {
     const query = supabase.rpc('ensure_divvy_membership', {
       p_divvy_id: divvyId,
       p_role: role,
     });
-    return query.then(({ data, error }: any) => ({ data, error }));
+    const { data, error }: any = await query;
+    return { data, error };
   });
   if (rpc.ok) return { ok: true as const, via: 'rpc:ensure_divvy_membership' };
 
   for (const s of MEMBERSHIP_SHAPES) {
     // eslint-disable-next-line no-await-in-loop
-    const exists = await tryQuery(() => {
+    const exists = await tryQuery(async () => {
       const query = supabase.from(s.table).select('id').limit(1);
-      return query.then(({ data, error }: any) => ({ data, error }));
+      const { data, error }: any = await query;
+      return { data, error };
     });
     if (!exists.ok) continue;
 
@@ -124,9 +127,10 @@ async function ensureMembership(supabase: Supa, userId: string, divvyId: string,
     if (s.roleCol) payload[s.roleCol] = role;
 
     // eslint-disable-next-line no-await-in-loop
-    const ins = await tryQuery(() => {
+    const ins = await tryQuery(async () => {
       const query = supabase.from(s.table).insert(payload as any);
-      return query.then(({ data, error }: any) => ({ data, error }));
+      const { data, error }: any = await query;
+      return { data, error };
     });
     if (ins.ok) return { ok: true as const, via: `insert:${s.table}`, warning: rpc.error?.message ? { code: 'RPC_FAILED_USED_FALLBACK', message: String(rpc.error.message) } : null };
 
