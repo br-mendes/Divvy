@@ -4,7 +4,7 @@ export function getURL() {
     process.env.NEXT_PUBLIC_VERCEL_URL || // Vercel define isso automaticamente
     'http://localhost:3000';
 
-  // No lado do cliente, window.location.origin Ã© a fonte da verdade sobre onde o usuÃ¡rio estÃ¡
+  // No lado do cliente, window.location.origin é a fonte da verdade sobre onde o usuário está
   if (typeof window !== 'undefined') {
     url = window.location.origin;
   }

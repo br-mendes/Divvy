@@ -10,7 +10,7 @@ export async function sendRemovalRequestEmail(args: {
   const { to, groupName, requesterEmail, targetEmail, groupId } = args;
 
   const subject = `Divvy: aprovação para remover membro em "${groupName}"`;
-  const link = appUrl(`/groups/${groupId}?tab=requests`);
+  const link = `${appUrl}/groups/${groupId}?tab=requests`;
 
   const text =
 `Olá!
