@@ -41,7 +41,10 @@ const REQUEST_TABLES: RequestShape[] = [
 
 async function pickRequestTable(supabase: any) {
   for (const s of REQUEST_TABLES) {
-    const r = await tryQuery(() => supabase.from(s.table).select('id').limit(1));
+    const r = await tryQuery(() => {
+      const query = supabase.from(s.table).select('id').limit(1);
+      return query.then(({ data, error }: any) => ({ data, error }));
+    });
     if (r.ok) return s;
   }
   return null;
@@ -78,7 +81,10 @@ export async function POST(req: Request, ctx: { params: { divvyId: string } }) {
   // Admins/owners can remove directly.
   if (perm.isAdmin) {
     for (const s of MEMBERSHIP_SHAPES) {
-      const exists = await tryQuery(() => supabase.from(s.table).select('id').limit(1));
+      const exists = await tryQuery(() => {
+      const query = supabase.from(s.table).select('id').limit(1);
+      return query.then(({ data, error }: any) => ({ data, error }));
+    });
       if (!exists.ok) continue;
 
       const del = await supabase

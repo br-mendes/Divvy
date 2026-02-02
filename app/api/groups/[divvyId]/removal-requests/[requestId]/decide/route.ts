@@ -14,7 +14,10 @@ const CANDIDATES = [
 
 async function pick(supabase: any) {
   for (const c of CANDIDATES) {
-    const r = await tryQuery(() => supabase.from(c.table).select('id').limit(1));
+    const r = await tryQuery(() => {
+      const query = supabase.from(c.table).select('id').limit(1);
+      return query.then(({ data, error }: any) => ({ data, error }));
+    });
     if (r.ok) return c;
   }
   return null;
@@ -22,7 +25,10 @@ async function pick(supabase: any) {
 
 async function removeMember(supabase: any, divvyId: string, userIdToRemove: string) {
   for (const s of MEMBERSHIP_SHAPES) {
-    const exists = await tryQuery(() => supabase.from(s.table).select('id').limit(1));
+    const exists = await tryQuery(() => {
+      const query = supabase.from(s.table).select('id').limit(1);
+      return query.then(({ data, error }: any) => ({ data, error }));
+    });
     if (!exists.ok) continue;
 
     const del = await supabase

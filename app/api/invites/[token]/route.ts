@@ -14,17 +14,26 @@ const INVITE_TABLES = [
 
 async function pickInviteTable(supabase: any) {
   for (const t of INVITE_TABLES) {
-    const r = await tryQuery(() => supabase.from(t.table).select('id').limit(1));
+    const r = await tryQuery(() => {
+      const query = supabase.from(t.table).select('id').limit(1);
+      return query.then(({ data, error }: any) => ({ data, error }));
+    });
     if (r.ok) return t;
   }
   return null;
 }
 
 async function getGroupName(supabase: any, divvyId: string) {
-  const g1 = await tryQuery(() => supabase.from('divvies').select('name').eq('id', divvyId).maybeSingle());
+  const g1 = await tryQuery(() => {
+    const query = supabase.from('divvies').select('name').eq('id', divvyId).maybeSingle();
+    return query.then(({ data, error }: any) => ({ data, error }));
+  });
   if (g1.ok && (g1.data as any)?.name) return String((g1.data as any).name);
 
-  const g2 = await tryQuery(() => supabase.from('groups').select('name').eq('id', divvyId).maybeSingle());
+  const g2 = await tryQuery(() => {
+    const query = supabase.from('groups').select('name').eq('id', divvyId).maybeSingle();
+    return query.then(({ data, error }: any) => ({ data, error }));
+  });
   if (g2.ok && (g2.data as any)?.name) return String((g2.data as any).name);
 
   return null;

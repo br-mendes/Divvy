@@ -14,7 +14,10 @@ const CANDIDATES = [
 
 async function pickPaymentsTable(supabase: any) {
   for (const c of CANDIDATES) {
-    const r = await tryQuery(() => supabase.from(c.table).select('id').limit(1));
+    const r = await tryQuery(() => {
+      const query = supabase.from(c.table).select('id').limit(1);
+      return query.then(({ data, error }: any) => ({ data, error }));
+    });
     if (r.ok) return c;
   }
   return null;

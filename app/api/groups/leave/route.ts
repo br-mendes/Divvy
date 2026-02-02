@@ -31,7 +31,11 @@ export async function POST(req: Request) {
   }
 
   for (const s of MEMBERSHIP_SHAPES) {
-    const exists = await tryQuery(() => supabase.from(s.table).select('id').limit(1));
+    // eslint-disable-next-line no-await-in-loop
+    const exists = await tryQuery(() => {
+      const query = supabase.from(s.table).select('id').limit(1);
+      return query.then(({ data, error }: any) => ({ data, error }));
+    });
     if (!exists.ok) continue;
 
     const { error } = await supabase

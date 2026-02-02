@@ -13,7 +13,10 @@ const TX_TABLES = [
 
 async function pickTxTable(supabase: any) {
   for (const t of TX_TABLES) {
-    const r = await tryQuery(() => supabase.from(t.table).select('id').limit(1));
+    const r = await tryQuery(() => {
+      const query = supabase.from(t.table).select('id').limit(1);
+      return query.then(({ data, error }: any) => ({ data, error }));
+    });
     if (r.ok) return t;
   }
   return null;

@@ -14,7 +14,10 @@ const INVITE_TABLES = [
 
 async function pickInviteTable(supabase: any) {
   for (const t of INVITE_TABLES) {
-    const r = await tryQuery(() => supabase.from(t.table).select('id').limit(1));
+    const r = await tryQuery(() => {
+      const query = supabase.from(t.table).select('id').limit(1);
+      return query.then(({ data, error }: any) => ({ data, error }));
+    });
     if (r.ok) return t;
   }
   return null;
@@ -22,7 +25,11 @@ async function pickInviteTable(supabase: any) {
 
 async function insertMembership(supabase: any, divvyId: string, userId: string, role: string) {
   for (const s of MEMBERSHIP_SHAPES) {
-    const exists = await tryQuery(() => supabase.from(s.table).select('id').limit(1));
+    // eslint-disable-next-line no-await-in-loop
+    const exists = await tryQuery(() => {
+      const query = supabase.from(s.table).select('id').limit(1);
+      return query.then(({ data, error }: any) => ({ data, error }));
+    });
     if (!exists.ok) continue;
 
     const payload: any = {
