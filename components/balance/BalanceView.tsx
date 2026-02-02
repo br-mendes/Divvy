@@ -4,7 +4,13 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '../../lib/supabase';
-import { BalancePair, DivvyMember, Expense, ExpenseSplit, Transaction, PaymentMethod } from '../../types';
+import { DivvyMember, Expense, ExpenseSplit, Transaction, PaymentMethod } from '../../types';
+
+interface BalancePair {
+  user_id: string;
+  user_name: string;
+  balance: number;
+}
 import { Button } from '../ui/Button';
 import { Modal } from '../ui/Modal';
 import { ArrowRight, Wallet, CheckCircle, Clock, XCircle, History, ChevronDown, ChevronUp, Copy, Phone, QrCode, Banknote, ArrowUpRight, ArrowDownLeft } from 'lucide-react';
