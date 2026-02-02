@@ -15,7 +15,7 @@ export default function UpdatePassword() {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    supabase.auth.getSession().then(({ data: { session } }: any) => {
       if (!session) {
         toast.error('Link inválido ou expirado.');
         router.push('/auth/login');
