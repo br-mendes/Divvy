@@ -97,10 +97,10 @@ function NewDivvyPage() {
   );
 }
 
-export default function () {
+function NewDivvyPageContent() {
   return (
     <Suspense fallback={<div>Loading...</div>}>
-      <NewDivvyPage \/>
-    <\/Suspense>
+      <NewDivvyPageContent />
+    </Suspense>
   );
 }

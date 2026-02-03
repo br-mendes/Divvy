@@ -108,5 +108,3 @@ export default function CreateDivvyPage() {
     </Suspense>
   );
 }
-  );
-}

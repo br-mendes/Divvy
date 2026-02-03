@@ -287,10 +287,10 @@ function CreateExpensePage() {
   );
 }
 
-export default function () {
+function CreateExpensePageContent() {
   return (
     <Suspense fallback={<div>Loading...</div>}>
-      <CreateExpensePage \/>
-    <\/Suspense>
+      <CreateExpensePageContent />
+    </Suspense>
   );
 }
