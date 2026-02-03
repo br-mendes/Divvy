@@ -28,7 +28,7 @@ export default function ProtectedRoute({ children, fallback = '/auth/login' }: P
         setLoading(false);
 
         // Listen for auth changes
-        const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+        const { data: { subscription } } = supabase.auth.onAuthStateChange((event: any, session) => {
           if (event === 'SIGNED_OUT' || !session) {
             setAuthenticated(false);
             router.push(fallback);
