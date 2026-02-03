@@ -9,6 +9,10 @@ export async function sendRemovalRequestEmail(args: {
 }) {
   const { to, groupName, requesterEmail, targetEmail, groupId } = args;
 
+  if (!resend) {
+    throw new Error('Email service not configured');
+  }
+
   const subject = `Divvy: aprovação para remover membro em "${groupName}"`;
   const link = `${appUrl}/groups/${groupId}?tab=requests`;
 

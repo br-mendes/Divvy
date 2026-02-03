@@ -2,6 +2,9 @@ import { createServerSupabase } from '@/lib/supabase/server';
 
 export async function isDateLocked(divvyId: string, dateISO: string): Promise<boolean> {
   const supabase = createServerSupabase();
+  if (!supabase) {
+    throw new Error('Supabase client not initialized');
+  }
 
   const { data, error } = await supabase
     .from('divvy_periods')
