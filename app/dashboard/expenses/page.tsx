@@ -133,7 +133,7 @@ function ExpensesPage() {
   );
 }
 
-function ExpensesPageContent() {
+export default function ExpensesPage() {
   return (
     <Suspense fallback={<div>Loading...</div>}>
       <ExpensesPageContent />

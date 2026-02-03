@@ -19,7 +19,7 @@ interface Participant {
   share: number;
 }
 
-function CreateExpensePage() {
+function CreateExpensePageContent() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
 
@@ -287,7 +287,7 @@ function CreateExpensePage() {
   );
 }
 
-function CreateExpensePageContent() {
+export default function CreateExpensePage() {
   return (
     <Suspense fallback={<div>Loading...</div>}>
       <CreateExpensePageContent />
