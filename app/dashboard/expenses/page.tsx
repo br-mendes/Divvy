@@ -28,7 +28,7 @@ const categoryIcons: Record<ExpenseItem['category'], string> = {
   other: '📝',
 };
 
-function ExpensesPage() {
+function ExpensesPageContent() {
   const [filterCategory, setFilterCategory] = useState<string>('all');
 
   const expenses = useMemo<ExpenseItem[]>(

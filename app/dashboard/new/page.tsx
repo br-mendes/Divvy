@@ -9,7 +9,7 @@ import Button from '@/components/common/Button';
 import Input from '@/components/common/Input';
 import { toast } from 'react-hot-toast';
 
-function NewDivvyPage() {
+function NewDivvyPageContent() {
   const router = useRouter();
   const { user } = useAuth();
   const [name, setName] = useState('');
