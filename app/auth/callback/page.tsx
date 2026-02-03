@@ -71,8 +71,9 @@ export default function AuthCallback() {
 
       if (error) {
         console.error('Error during auth callback:', error.message);
-        toast.error('Erro na autenticação.');
-        router.push('/auth/login');
+        console.error('Error details:', error);
+        toast.error(`Erro na autenticação: ${error.message}`);
+        setTimeout(() => router.push('/auth/login'), 2000);
         return;
       }
 

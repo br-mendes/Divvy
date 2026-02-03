@@ -7,7 +7,9 @@ export function createClient() {
   const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   
   if (!url || !anonKey) {
-    // Return a dummy client for build time
+    console.error('Missing Supabase environment variables');
+    console.error('NEXT_PUBLIC_SUPABASE_URL:', url);
+    console.error('NEXT_PUBLIC_SUPABASE_ANON_KEY:', anonKey ? '***' : 'undefined');
     return null as any;
   }
   
