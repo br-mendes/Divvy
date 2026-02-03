@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
+import AuthDebugger from '@/components/common/AuthDebugger';
 import Button from '@/components/common/Button';
 import LogoAnimated from '@/components/common/LogoAnimated';
 import AnimatedTagline from '@/components/home/AnimatedTagline';
@@ -14,10 +15,21 @@ export default function HomePage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }: { data: { session: any } }) => {
+    const initAuth = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      setUser(session?.user ?? null);
+      setLoading(false);
+    };
+
+    initAuth();
+
+    // Listen to auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event: any, session: any) => {
       setUser(session?.user ?? null);
       setLoading(false);
     });
+
+    return () => subscription.unsubscribe();
   }, []);
 
   if (loading) {
@@ -120,6 +132,10 @@ export default function HomePage() {
           </div>
         </div>
       </footer>
+      
+    <AuthDebugger>
+      <div />
+    </AuthDebugger>
     </div>
   );
 }

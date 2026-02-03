@@ -3,12 +3,11 @@
 import * as React from 'react';
 import Link from 'next/link';
 import Button from '@/components/common/Button';
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
+import { supabase } from '@/lib/supabase';
 
 type Group = any;
 
 export default function DashboardClient() {
-  const supabase = React.useMemo(() => createClientComponentClient(), []);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
   const [debug, setDebug] = React.useState<any>(null);

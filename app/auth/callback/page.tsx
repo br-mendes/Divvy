@@ -66,6 +66,7 @@ export default function AuthCallback() {
 
   useEffect(() => {
     const handleCallback = async () => {
+      console.log('Auth callback: Processing...');
       const { data: { session }, error } = await supabase.auth.getSession();
 
       if (error) {
@@ -74,6 +75,8 @@ export default function AuthCallback() {
         router.push('/auth/login');
         return;
       }
+
+      console.log('Auth callback: Session found:', !!session, 'User:', session?.user?.email);
 
       const doRedirect = () => {
         const sp = new URLSearchParams(window.location.search);
@@ -95,20 +98,28 @@ export default function AuthCallback() {
         }
 
         toast.success('Login realizado com sucesso!');
-        doRedirect();
+        // Small delay to ensure state is updated before redirect
+        setTimeout(() => doRedirect(), 500);
       } else {
-        const { data: { subscription } } = supabase.auth.onAuthStateChange((event: any, session: any) => {
-          if (session) {
+        // Wait for auth state change with proper cleanup
+        const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event: any, session: any) => {
+          if (event === 'SIGNED_IN' && session) {
             subscription.unsubscribe();
-            ensureProfile(session.user);
-            doRedirect();
+            try {
+              await ensureProfile(session.user);
+            } catch (e) {
+              console.error('Auto profile creation error', e);
+            }
+            toast.success('Login realizado com sucesso!');
+            setTimeout(() => doRedirect(), 500);
           }
         });
 
         const timeout = setTimeout(() => {
           subscription.unsubscribe();
-          if (!session) router.push('/auth/login');
-        }, 5000);
+          toast.error('Tempo esgotado. Tente novamente.');
+          router.push('/auth/login');
+        }, 8000); // Increased timeout for slower connections
 
         return () => {
           clearTimeout(timeout);

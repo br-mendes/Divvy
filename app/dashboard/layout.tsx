@@ -3,10 +3,19 @@
 'use client';
 
 import { useAuth } from '@/hooks/useAuth';
+import { ProtectedRoute } from '@/components/ProtectedRoute';
 import LogoAnimated from '@/components/common/LogoAnimated';
 import Button from '@/components/common/Button';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <ProtectedRoute>
+      <DashboardLayoutContent>{children}</DashboardLayoutContent>
+    </ProtectedRoute>
+  );
+}
+
+function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
   const { user, logout } = useAuth();
 
   return (

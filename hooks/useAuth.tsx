@@ -43,9 +43,21 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event: any, session: any) => {
+    } = supabase.auth.onAuthStateChange(async (event: any, session: any) => {
+      console.log('Auth state changed:', event, session?.user?.email);
       setSession(session);
       setUser(session?.user ?? null);
+      
+      // Auto-create profile for new sign-ins
+      if (event === 'SIGNED_IN' && session?.user) {
+        try {
+          const email = session.user.email || '';
+          const fullName = session.user.user_metadata?.full_name || '';
+          await upsertUserProfile(session.user, email, fullName);
+        } catch (error) {
+          console.error('Auto profile creation error:', error);
+        }
+      }
     });
 
     return () => subscription.unsubscribe();

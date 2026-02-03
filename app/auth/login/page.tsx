@@ -38,8 +38,10 @@ export default function LoginPage() {
       const sp = new URLSearchParams(window.location.search);
       const next = sp.get('redirect') || sp.get('next') || '/dashboard';
       await signInWithGoogle(next);
-    } catch (err) {
-      toast.error('Erro ao entrar com Google. Tente novamente.');
+      // Don't set loading to false here - let the callback handle it
+    } catch (err: any) {
+      console.error('Google login error:', err);
+      toast.error(err.message || 'Erro ao entrar com Google. Tente novamente.');
       setGoogleLoading(false);
     }
   }
