@@ -7,6 +7,7 @@ import Link from 'next/link';
 import Input from '@/components/common/Input';
 import { toast } from 'react-hot-toast';
 import { useAuth } from '@/hooks/useAuth';
+import { supabase } from '@/lib/supabase';
 
 export const dynamic = 'force-dynamic';
 
