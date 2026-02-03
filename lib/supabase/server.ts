@@ -8,11 +8,6 @@ import { getSupabaseEnv } from './env';
  * - NEVER throws during import (build-safe). Caller should handle missing env.
  */
 export function createSupabaseServerClient() {
-  // Alias for backward compatibility
-  return createSupabaseServerClient();
-}
-
-export function createSupabaseServerClient() {
   const { url, anonKey } = getSupabaseEnv();
 
   if (!url || !anonKey) {
