@@ -4,6 +4,8 @@ import * as React from 'react';
 import Link from 'next/link';
 import { Suspense } from 'react';
 
+export const dynamic = 'force-dynamic';
+
 type Divvy = {
   id: string;
   name: string;

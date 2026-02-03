@@ -1,13 +1,13 @@
 'use client';
-import { Suspense } from 'react';
 
 import { useState } from 'react';
+import { Suspense } from 'react';
 import { useRouter } from 'next/navigation';
-import { supabase } from '@/lib/supabase';
-import { useAuth } from '@/hooks/useAuth';
-import Button from '@/components/common/Button';
+import Link from 'next/link';
 import Input from '@/components/common/Input';
 import { toast } from 'react-hot-toast';
+
+export const dynamic = 'force-dynamic';
 
 function NewDivvyPageContent() {
   const router = useRouter();

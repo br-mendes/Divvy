@@ -1,9 +1,11 @@
 'use client';
-import { Suspense } from 'react';
 
 import { useState, type ChangeEvent, type FormEvent } from 'react';
+import { Suspense } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+
+export const dynamic = 'force-dynamic';
 import Button from '@/components/common/Button';
 import Input from '@/components/common/Input';
 import CategorySelect from '@/components/common/CategorySelect';

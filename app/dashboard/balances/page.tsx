@@ -8,6 +8,8 @@ import { formatCurrency } from '@/utils/format';
 import { formatBalance } from '@/utils/balanceCalculator';
 import styles from './page.module.css';
 
+export const dynamic = 'force-dynamic';
+
 interface BalanceTransaction {
   id: string;
   from: string;

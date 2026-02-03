@@ -1,14 +1,15 @@
 'use client';
+
+import { useState, useMemo } from 'react';
 import { Suspense } from 'react';
-
 import Link from 'next/link';
-import { useMemo, useState } from 'react';
-
+import { useRouter } from 'next/navigation';
 import Button from '@/components/common/Button';
-import { Card } from '@/components/common/Card';
 import { formatCurrency, formatDate } from '@/utils/format';
-
+import Card from '@/components/common/Card';
 import styles from './page.module.css';
+
+export const dynamic = 'force-dynamic';
 
 type ExpenseItem = {
   id: string;
