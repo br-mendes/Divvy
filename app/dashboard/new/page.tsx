@@ -5,6 +5,7 @@ import { Suspense } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import Input from '@/components/common/Input';
+import Button from '@/components/common/Button';
 import { toast } from 'react-hot-toast';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/lib/supabase';
