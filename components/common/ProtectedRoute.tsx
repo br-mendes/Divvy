@@ -3,13 +3,14 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
+import { Suspense } from 'react';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
   fallback?: string;
 }
 
-export default function ProtectedRoute({ children, fallback = '/auth/login' }: ProtectedRouteProps) {
+function ProtectedRouteContent({ children, fallback = '/auth/login' }: ProtectedRouteProps) {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [authenticated, setAuthenticated] = useState(false);
@@ -58,4 +59,12 @@ export default function ProtectedRoute({ children, fallback = '/auth/login' }: P
   }
 
   return <>{children}</>;
+}
+
+export default function ProtectedRoute({ children, fallback }: ProtectedRouteProps) {
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <ProtectedRouteContent children={children} fallback={fallback} />
+    </Suspense>
+  );
 }
