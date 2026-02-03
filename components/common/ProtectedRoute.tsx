@@ -1,9 +1,8 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
-import { cookies } from 'next/headers';
+import { supabase } from '@/lib/supabase';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
@@ -12,29 +11,51 @@ interface ProtectedRouteProps {
 
 export default function ProtectedRoute({ children, fallback = '/auth/login' }: ProtectedRouteProps) {
   const router = useRouter();
-  const supabase = createRouteHandlerClient({ cookies });
+  const [loading, setLoading] = useState(true);
+  const [authenticated, setAuthenticated] = useState(false);
 
   useEffect(() => {
     const checkAuth = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      
-      if (!session) {
-        router.push(fallback);
-        return;
-      }
-
-      // Listen for auth changes
-      const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-        if (event === 'SIGNED_OUT' || !session) {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        
+        if (!session) {
           router.push(fallback);
+          return;
         }
-      });
 
-      return () => subscription.unsubscribe();
+        setAuthenticated(true);
+        setLoading(false);
+
+        // Listen for auth changes
+        const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+          if (event === 'SIGNED_OUT' || !session) {
+            setAuthenticated(false);
+            router.push(fallback);
+          }
+        });
+
+        return () => subscription.unsubscribe();
+      } catch (error) {
+        console.error('Auth check error:', error);
+        router.push(fallback);
+      }
     };
 
     checkAuth();
-  }, [router, supabase, fallback]);
+  }, [router, fallback]);
+
+  if (loading) {
+    return (
+      <div className="h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-brand-500"></div>
+      </div>
+    );
+  }
+
+  if (!authenticated) {
+    return null; // Will redirect
+  }
 
   return <>{children}</>;
 }
