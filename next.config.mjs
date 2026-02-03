@@ -10,6 +10,11 @@ const nextConfig = {
   assetPrefix: basePath ? `${basePath}/` : undefined,
 
   images: { unoptimized: true },
+  
+  // Force dynamic rendering for dashboard routes
+  experimental: {
+    forceSwcTransforms: true,
+  },
 };
 
 export default nextConfig;
