@@ -3,8 +3,9 @@
 import * as React from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { Suspense } from 'react';
 
-export default function CreateDivvyPage() {
+function CreateDivvyPageContent() {
   const router = useRouter();
   const [name, setName] = React.useState('');
   const [type, setType] = React.useState<'trip' | 'group' | 'home'>('trip');
@@ -97,5 +98,15 @@ export default function CreateDivvyPage() {
         Dica: depois de criar, o backend tenta criar membership via RPC <code>ensure_divvy_membership</code> (com fallback).
       </div>
     </main>
+  );
+}
+
+export default function CreateDivvyPage() {
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <CreateDivvyPageContent />
+    </Suspense>
+  );
+}
   );
 }

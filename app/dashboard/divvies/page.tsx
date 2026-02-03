@@ -2,6 +2,7 @@
 
 import * as React from 'react';
 import Link from 'next/link';
+import { Suspense } from 'react';
 
 type Divvy = {
   id: string;
@@ -11,7 +12,7 @@ type Divvy = {
   created_at?: string | null;
 };
 
-export default function DashboardDivviesPage() {
+function DashboardDivviesPageContent() {
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
   const [groups, setGroups] = React.useState<Divvy[]>([]);
@@ -85,5 +86,13 @@ export default function DashboardDivviesPage() {
         </div>
       )}
     </main>
+  );
+}
+
+export default function DashboardDivviesPage() {
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <DashboardDivviesPageContent />
+    </Suspense>
   );
 }

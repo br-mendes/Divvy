@@ -6,11 +6,14 @@ import { useAuth } from '@/hooks/useAuth';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import LogoAnimated from '@/components/common/LogoAnimated';
 import Button from '@/components/common/Button';
+import { Suspense } from 'react';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   return (
     <ProtectedRoute>
-      <DashboardLayoutContent>{children}</DashboardLayoutContent>
+      <Suspense fallback={<div>Loading...</div>}>
+        <DashboardLayoutContent>{children}</DashboardLayoutContent>
+      </Suspense>
     </ProtectedRoute>
   );
 }

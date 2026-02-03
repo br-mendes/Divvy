@@ -1,5 +1,4 @@
 'use client';
-import { Suspense } from 'react';
 
 import { useState, type ChangeEvent, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
@@ -19,7 +18,7 @@ interface Participant {
   share: number;
 }
 
-function CreateExpensePage() {
+export default function CreateExpensePage() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
 
@@ -284,13 +283,5 @@ function CreateExpensePage() {
         </form>
       </div>
     </div>
-  );
-}
-
-export default function () {
-  return (
-    <Suspense fallback={<div>Loading...</div>}>
-      <CreateExpensePage \/>
-    <\/Suspense>
   );
 }

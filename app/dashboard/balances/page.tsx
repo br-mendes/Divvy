@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { Suspense } from 'react';
 import Card from '@/components/common/Card';
 import Button from '@/components/common/Button';
 import { formatCurrency } from '@/utils/format';
@@ -16,7 +17,7 @@ interface BalanceTransaction {
   description: string;
 }
 
-export default function BalancesPage() {
+function BalancesPageContent() {
   const [transactions] = useState<BalanceTransaction[]>([
     // TODO: Substituir por dados reais da API
     {
@@ -167,5 +168,13 @@ export default function BalancesPage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function BalancesPage() {
+  return (
+    <Suspense fallback={<div>Loading balances...</div>}>
+      <BalancesPageContent />
+    </Suspense>
   );
 }

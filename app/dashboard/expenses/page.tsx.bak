@@ -1,5 +1,4 @@
 'use client';
-import { Suspense } from 'react';
 
 import Link from 'next/link';
 import { useMemo, useState } from 'react';
@@ -28,7 +27,7 @@ const categoryIcons: Record<ExpenseItem['category'], string> = {
   other: '📝',
 };
 
-function ExpensesPage() {
+export default function ExpensesPage() {
   const [filterCategory, setFilterCategory] = useState<string>('all');
 
   const expenses = useMemo<ExpenseItem[]>(
@@ -130,13 +129,5 @@ function ExpensesPage() {
         </div>
       )}
     </div>
-  );
-}
-
-export default function () {
-  return (
-    <Suspense fallback={<div>Loading...</div>}>
-      <ExpensesPage \/>
-    <\/Suspense>
   );
 }
