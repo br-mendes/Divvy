@@ -27,7 +27,7 @@ export async function authorizeUser(request: Request): Promise<User> {
     throw new Error('Unauthorized');
   }
 
-  const supabase = createClient(supabaseUrl, supabaseKey);
+  const supabase = createClient(supabaseUrl!, supabaseKey!);
   const { data: { user }, error } = await supabase.auth.getUser(token);
 
   if (error || !user) {
