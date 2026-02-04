@@ -26,17 +26,21 @@ export default function LoginPage() {
       const redirect = sp.get('redirect') || sp.get('next') || '/dashboard';
       router.push(redirect.startsWith('/') ? redirect : '/dashboard');
     } catch (err) {
-      toast.error('Erro ao fazer login. Verifique suas credenciais.');
-    } finally {
-      setLoading(false);
+      console.error('❌ Google Login Error:', err);
+      console.error('- Error message:', err.message);
+      console.error('- Full error:', err);
+      toast.error(`Erro ao entrar com Google: ${err.message || 'Tente novamente.'}`);
+      setGoogleLoading(false);
     }
   }
 
   async function handleGoogleLogin() {
     setGoogleLoading(true);
+    console.log('🚀 Google OAuth: Starting login process');
     try {
       const sp = new URLSearchParams(window.location.search);
       const next = sp.get('redirect') || sp.get('next') || '/dashboard';
+      console.log('🔀 Google OAuth: Will redirect to:', next);
       await signInWithGoogle(next);
       // Don't set loading to false here - let the callback handle it
     } catch (err: any) {

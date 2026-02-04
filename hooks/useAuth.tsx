@@ -138,12 +138,45 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const nextSafe = sanitizeNextPath(nextPath);
     const redirectTo = `${getURL()}/auth/callback?next=${encodeURIComponent(nextSafe)}`;
 
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: {
-        redirectTo,
-      },
-    });
+    // Generate and store state for CSRF protection
+    const state = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+    if (typeof window !== 'undefined') {
+      sessionStorage.setItem('google_oauth_state', state);
+    }
+
+    console.log('🚀 Google OAuth Initiated:');
+    console.log('- Next path:', nextPath);
+    console.log('- Sanitized next:', nextSafe);
+    console.log('- Redirect URL:', redirectTo);
+    console.log('- Current origin:', typeof window !== 'undefined' ? window.location.origin : 'server');
+    console.log('- OAuth state:', state);
+
+    try {
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo,
+          queryParams: {
+            access_type: 'offline',
+            prompt: 'consent',
+          },
+          skipBrowserRedirect: false,
+        },
+      });
+      
+      console.log('✅ OAuth Response received:');
+      console.log('- Data:', data);
+      console.log('- Error:', error);
+      console.log('- Error message:', error?.message);
+      
+      if (error) {
+        console.error('❌ Google OAuth Error Details:', error);
+        throw new Error(`Google OAuth failed: ${error.message || 'Unknown error'}`);
+      }
+    } catch (err) {
+      console.error('❌ Google OAuth Exception:', err);
+      throw err;
+    }
     if (error) throw error;
   };
 

@@ -9,7 +9,19 @@ const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 let _supabaseClient: ReturnType<typeof createClient<Database>> | null = null;
 
 if (supabaseUrl && supabaseAnonKey) {
-  _supabaseClient = createClient<Database>(supabaseUrl, supabaseAnonKey);
+  _supabaseClient = createClient<Database>(supabaseUrl, supabaseAnonKey, {
+    auth: {
+      autoRefreshToken: true,
+      persistSession: true,
+      detectSessionInUrl: true,
+      flowType: 'pkce', // Use PKCE for better security
+    },
+    realtime: {
+      params: {
+        eventsPerSecond: 10,
+      },
+    },
+  });
 }
 
 // Export client getter that validates at runtime

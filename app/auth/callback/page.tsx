@@ -4,6 +4,7 @@ import React, { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import toast from 'react-hot-toast';
+import { OAuthDebugger } from '@/utils/oauth-debug';
 
 export default function AuthCallback() {
   const router = useRouter();
@@ -66,13 +67,44 @@ export default function AuthCallback() {
 
   useEffect(() => {
     const handleCallback = async () => {
-      console.log('Auth callback: Processing...');
+      console.log('🔄 Auth Callback: Processing OAuth...');
+      console.log('- Current URL:', typeof window !== 'undefined' ? window.location.href : 'server');
+      console.log('- URL params:', typeof window !== 'undefined' ? window.location.search : 'no-window');
+      console.log('- URL hash:', typeof window !== 'undefined' ? window.location.hash : 'no-window');
+      
+      // Check Supabase session
+      const { data: { session }, error } = await supabase.auth.getSession();
+      console.log('- Session result:', { 
+        hasSession: !!session, 
+        userId: session?.user?.id, 
+        email: session?.user?.email,
+        error: error?.message 
+      });
+      
+      // Validate OAuth state to prevent CSRF
+      const urlParams = new URLSearchParams(window.location.search);
+      const hashParams = new URLSearchParams(window.location.hash.substring(1));
+      const returnedState = urlParams.get('state') || hashParams.get('state');
+      const storedState = sessionStorage.getItem('google_oauth_state');
+      
+      console.log('OAuth state validation:', { returnedState, storedState });
+      
+      if (returnedState && storedState && returnedState !== storedState) {
+        console.error('OAuth state mismatch - possible CSRF attack');
+        toast.error('Erro de segurança. Tente novamente.');
+        router.push('/auth/login');
+        return;
+      }
+      
+      // Clear state after validation
+      sessionStorage.removeItem('google_oauth_state');
+      
       const { data: { session }, error } = await supabase.auth.getSession();
 
       if (error) {
-        console.error('Error during auth callback:', error.message);
-        console.error('Error details:', error);
-        toast.error(`Erro na autenticação: ${error.message}`);
+        console.error('❌ Auth Callback Error:', error);
+        console.error('- Error details:', error);
+        setError(error.message || 'Erro desconhecido');
         setTimeout(() => router.push('/auth/login'), 2000);
         return;
       }
@@ -104,23 +136,30 @@ export default function AuthCallback() {
       } else {
         // Wait for auth state change with proper cleanup
         const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event: any, session: any) => {
+          console.log('Auth state change in callback:', event, session?.user?.email);
+          
           if (event === 'SIGNED_IN' && session) {
+            console.log('Session detected in state change, completing login...');
             subscription.unsubscribe();
             try {
               await ensureProfile(session.user);
+              console.log('Profile ensured successfully');
             } catch (e) {
               console.error('Auto profile creation error', e);
             }
             toast.success('Login realizado com sucesso!');
             setTimeout(() => doRedirect(), 500);
+          } else if (event === 'TOKEN_REFRESHED') {
+            console.log('Token refreshed during callback');
           }
         });
 
         const timeout = setTimeout(() => {
+          console.error('Auth callback timeout reached');
           subscription.unsubscribe();
           toast.error('Tempo esgotado. Tente novamente.');
           router.push('/auth/login');
-        }, 8000); // Increased timeout for slower connections
+        }, 15000); // Increased timeout for slower connections
 
         return () => {
           clearTimeout(timeout);
