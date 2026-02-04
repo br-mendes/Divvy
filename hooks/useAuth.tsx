@@ -177,7 +177,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       console.error('❌ Google OAuth Exception:', err);
       throw err;
     }
-    if (error) throw error;
   };
 
   const logout = async () => {
