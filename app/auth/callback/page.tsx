@@ -65,6 +65,8 @@ export default function AuthCallback() {
     }
   };
 
+  const [error, setError] = useState<string | null>(null);
+
   useEffect(() => {
     const handleCallback = async () => {
       console.log('🔄 Auth Callback: Processing OAuth...');
