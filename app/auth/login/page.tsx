@@ -25,7 +25,7 @@ export default function LoginPage() {
       const sp = new URLSearchParams(window.location.search);
       const redirect = sp.get('redirect') || sp.get('next') || '/dashboard';
       router.push(redirect.startsWith('/') ? redirect : '/dashboard');
-    } catch (err) {
+    } catch (err: any) {
       console.error('❌ Google Login Error:', err);
       console.error('- Error message:', err.message);
       console.error('- Full error:', err);
