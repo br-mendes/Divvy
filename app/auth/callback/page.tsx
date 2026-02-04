@@ -98,8 +98,6 @@ export default function AuthCallback() {
       
       // Clear state after validation
       sessionStorage.removeItem('google_oauth_state');
-      
-      const { data: { session }, error } = await supabase.auth.getSession();
 
       if (sessionError) {
         console.error('❌ Auth Callback Error:', sessionError);
