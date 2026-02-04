@@ -67,10 +67,9 @@ export default function AuthCallback() {
 
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    const handleCallback = async () => {
-      console.log('🔄 Auth Callback: Processing OAuth...');
-      console.log('- Current URL:', typeof window !== 'undefined' ? window.location.href : 'server');
+  const handleCallback = async () => {
+    console.log('🔄 Auth Callback: Processing OAuth...');
+    console.log('- Current URL:', typeof window !== 'undefined' ? window.location.href : 'server');
       console.log('- URL params:', typeof window !== 'undefined' ? window.location.search : 'no-window');
       console.log('- URL hash:', typeof window !== 'undefined' ? window.location.hash : 'no-window');
       
