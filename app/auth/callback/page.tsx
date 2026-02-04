@@ -173,6 +173,10 @@ export default function AuthCallback() {
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50">
       <div className="animate-spin rounded-full h-12 w-12 border-4 border-brand-200 border-t-brand-600 mb-4"></div>
+      {error && (
+        <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg">
+          <p className="text-red-700">{error}</p>
+        </div>
       )}
       <h2 className="text-xl font-semibold text-gray-700">Finalizando acesso...</h2>
       <p className="text-gray-500 mt-2">Você será redirecionado em instantes.</p>
