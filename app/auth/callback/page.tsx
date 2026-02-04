@@ -73,12 +73,12 @@ export default function AuthCallback() {
       console.log('- URL hash:', typeof window !== 'undefined' ? window.location.hash : 'no-window');
       
       // Check Supabase session
-      const { data: { session }, error } = await supabase.auth.getSession();
+      const { data: { session: callbackSession }, error: sessionError } = await supabase.auth.getSession();
       console.log('- Session result:', { 
-        hasSession: !!session, 
-        userId: session?.user?.id, 
-        email: session?.user?.email,
-        error: error?.message 
+        hasSession: !!callbackSession, 
+        userId: callbackSession?.user?.id, 
+        email: callbackSession?.user?.email,
+        error: sessionError?.message 
       });
       
       // Validate OAuth state to prevent CSRF
@@ -101,15 +101,15 @@ export default function AuthCallback() {
       
       const { data: { session }, error } = await supabase.auth.getSession();
 
-      if (error) {
-        console.error('❌ Auth Callback Error:', error);
-        console.error('- Error details:', error);
-        setError(error.message || 'Erro desconhecido');
+      if (sessionError) {
+        console.error('❌ Auth Callback Error:', sessionError);
+        console.error('- Error details:', sessionError);
+        setError(sessionError.message || 'Erro desconhecido');
         setTimeout(() => router.push('/auth/login'), 2000);
         return;
       }
 
-      console.log('Auth callback: Session found:', !!session, 'User:', session?.user?.email);
+      console.log('Auth callback: Session found:', !!callbackSession, 'User:', callbackSession?.user?.email);
 
       const doRedirect = () => {
         const sp = new URLSearchParams(window.location.search);
@@ -123,16 +123,16 @@ export default function AuthCallback() {
         }
       };
 
-      if (session) {
+      if (callbackSession) {
         try {
-          await ensureProfile(session.user);
+          await ensureProfile(callbackSession.user);
         } catch (e) {
           console.error('Auto profile creation error', e);
         }
 
         toast.success('Login realizado com sucesso!');
         // Small delay to ensure state is updated before redirect
-        setTimeout(() => doRedirect(), 500);
+        setTimeout(() => doRedirect(), 100);
       } else {
         // Wait for auth state change with proper cleanup
         const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event: any, session: any) => {
