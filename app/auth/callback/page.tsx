@@ -1,26 +1,11 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useState, useEffect } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'react-hot-toast';
 import { supabase } from '@/lib/supabase';
 
-interface UserProfile {
-  id: string;
-  email?: string;
-  user_metadata?: {
-    full_name?: string;
-  };
-}
-
-interface EnsureProfileResult {
-  data: any;
-  error?: {
-    message?: string;
-  };
-}
-
-const ensureProfile = async (sessionUser: any) => {
+async function ensureProfile(sessionUser: any) {
   const now = new Date().toISOString();
   const email = sessionUser?.email || '';
   const fullName = sessionUser?.user_metadata?.full_name || '';
@@ -33,110 +18,132 @@ const ensureProfile = async (sessionUser: any) => {
       .maybeSingle();
 
     if (!error && !profile) {
-      await supabase.from('userprofiles').upsert({
-        id: sessionUser.id,
-        email,
-        full_name: fullName,
-        display_name: fullName || (email ? email.split('@')[0] : 'Usuário'),
-        created_at: now,
-        updated_at: now,
-      }, {
-        onConflict: 'id'
-      });
+      await supabase
+        .from('userprofiles')
+        .upsert(
+          {
+            id: sessionUser.id,
+            email,
+            full_name: fullName,
+            display_name: fullName || (email ? email.split('@')[0] : 'Usuario'),
+            created_at: now,
+            updated_at: now,
+          },
+          { onConflict: 'id' }
+        );
     }
   } catch {
-    // ignore and fallback
+    // ignore
   }
-};
+}
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 export default function AuthCallbackPage() {
   const router = useRouter();
-  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const nextPath = useMemo(() => {
+    if (typeof window === 'undefined') return '/dashboard';
+    const sp = new URLSearchParams(window.location.search);
+    const nextParam = sp.get('next') || sp.get('redirect') || '/dashboard';
+    try {
+      const decoded = decodeURIComponent(nextParam);
+      return decoded.startsWith('/') ? decoded : '/dashboard';
+    } catch {
+      return '/dashboard';
+    }
+  }, []);
+
+  const redirectedRef = useRef(false);
+  const redirect = () => {
+    if (redirectedRef.current) return;
+    redirectedRef.current = true;
+    router.replace(nextPath);
+  };
+
   useEffect(() => {
-    let hasRedirected = false;
-    
-    const doRedirect = () => {
-      if (hasRedirected) return;
-      hasRedirected = true;
-      
-      const sp = new URLSearchParams(window.location.search);
-      const nextParam = sp.get('next') || sp.get('redirect') || '/dashboard';
-      const next = decodeURIComponent(nextParam);
-      console.log('🚀 Redirecting to:', next);
-      router.push(next);
-    };
+    let cancelled = false;
 
-    const handleCallback = async () => {
-      console.log('🔄 Auth callback: Processing OAuth...');
-      console.log('🔗 Current URL:', window.location.href);
+    const sub = supabase.auth.onAuthStateChange(async (event: any, session: any) => {
+      console.log('[auth-callback] state:', event, session?.user?.email);
+      if (cancelled) return;
 
+      if ((event === 'SIGNED_IN' || event === 'INITIAL_SESSION') && session?.user) {
+        try {
+          await ensureProfile(session.user);
+        } catch (e) {
+          console.error('[auth-callback] ensureProfile failed', e);
+        }
+        toast.success('Login realizado com sucesso!');
+        redirect();
+      }
+    });
+
+    const run = async () => {
+      console.log('[auth-callback] url:', window.location.href);
+
+      // Start code exchange in parallel, but do not block redirect logic.
       const sp = new URLSearchParams(window.location.search);
       const code = sp.get('code');
       if (code) {
-        console.log('🔁 Exchanging OAuth code for session...');
-        const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
-        console.log('🔁 Exchange result:', { ok: !exchangeError, error: exchangeError?.message });
+        console.log('[auth-callback] exchanging code for session...');
+        Promise.race([
+          supabase.auth.exchangeCodeForSession(code),
+          sleep(4000).then(() => ({ error: new Error('exchange timeout') } as any)),
+        ])
+          .then((r: any) => {
+            const msg = r?.error?.message;
+            if (msg) console.warn('[auth-callback] exchange result error:', msg);
+            else console.log('[auth-callback] exchange result ok');
+          })
+          .catch((e) => console.warn('[auth-callback] exchange exception', e));
       }
-      
-      // Check if we already have a session
-      const { data: { session: initialSession } } = await supabase.auth.getSession();
-      
-      if (initialSession) {
-        console.log('✅ Session already exists:', initialSession.user?.email);
-        await ensureProfile(initialSession.user);
-        toast.success('Login realizado com sucesso!');
-        setTimeout(() => doRedirect(), 100);
-        return;
-      }
-      
-      // Listen for auth state changes
-      const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event: any, session: any) => {
-        console.log('📡 Auth state changed:', event, session?.user?.email);
-        
-        if ((event === 'SIGNED_IN' || event === 'INITIAL_SESSION') && session) {
-          subscription.unsubscribe();
-          console.log('✅ Auth successful, preparing redirect...');
-          
+
+      // Poll for session for a short period as a fallback.
+      for (let i = 0; i < 10 && !cancelled && !redirectedRef.current; i++) {
+        const { data } = await supabase.auth.getSession();
+        if (data?.session?.user) {
+          console.log('[auth-callback] session detected via poll');
           try {
-            await ensureProfile(session.user);
+            await ensureProfile(data.session.user);
           } catch (e) {
-            console.error('Profile creation error:', e);
+            console.error('[auth-callback] ensureProfile failed', e);
           }
-          
           toast.success('Login realizado com sucesso!');
-          setTimeout(() => doRedirect(), 500);
+          redirect();
+          return;
         }
-      });
+        await sleep(300);
+      }
 
-      // Timeout fallback
-      const timeout = setTimeout(() => {
-        subscription.unsubscribe();
-        console.error('⏰ Auth timeout - no session detected');
-        setError('Tempo de autenticação excedido');
-        setTimeout(() => router.push('/auth/login'), 2000);
-      }, 10000);
-
-      return () => {
-        clearTimeout(timeout);
-        subscription.unsubscribe();
-      };
+      if (!redirectedRef.current && !cancelled) {
+        console.error('[auth-callback] no session after waiting');
+        setError('Nao foi possivel concluir o login. Tente novamente.');
+        setTimeout(() => router.replace('/auth/login'), 1500);
+      }
     };
 
-    handleCallback();
-  }, [router]);
+    run();
+
+    return () => {
+      cancelled = true;
+      sub.data.subscription.unsubscribe();
+    };
+  }, [router, nextPath]);
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50">
-      <div className="animate-spin rounded-full h-12 w-12 border-4 border-brand-200 border-t-brand-600 mb-4"></div>
-      {error && (
+      <div className="animate-spin rounded-full h-12 w-12 border-4 border-brand-200 border-t-brand-600 mb-4" />
+      {error ? (
         <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg">
           <p className="text-red-700">{error}</p>
         </div>
-      )}
+      ) : null}
       <h2 className="text-xl font-semibold text-gray-700">Finalizando acesso...</h2>
-      <p className="text-gray-500 mt-2">Você será redirecionado em instantes.</p>
+      <p className="text-gray-500 mt-2">Voce sera redirecionado em instantes.</p>
     </div>
   );
 }
