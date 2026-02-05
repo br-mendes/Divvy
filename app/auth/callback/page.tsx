@@ -58,10 +58,14 @@ export default function AuthCallbackPage() {
   }, []);
 
   const redirectedRef = useRef(false);
+  const toastShownRef = useRef(false);
+
   const redirect = () => {
     if (redirectedRef.current) return;
     redirectedRef.current = true;
+
     router.replace(nextPath);
+
     // Fallback: force navigation if router stalls.
     setTimeout(() => {
       try {
@@ -77,67 +81,88 @@ export default function AuthCallbackPage() {
   useEffect(() => {
     let cancelled = false;
 
-    const sub = supabase.auth.onAuthStateChange(async (event: any, session: any) => {
-      console.log('[auth-callback] state:', event, session?.user?.email);
-      if (cancelled) return;
-      if ((event === 'SIGNED_IN' || event === 'INITIAL_SESSION') && session?.user) {
-        toast.success('Login realizado com sucesso!');
-        redirect();
-        // Fire-and-forget profile upsert; never block redirect.
+    const showToastOnce = () => {
+      if (toastShownRef.current) return;
+      toastShownRef.current = true;
+      toast.success('Login realizado com sucesso!');
+    };
+
+    const persistAndRedirect = async (session: any) => {
+      try {
+        const access_token = session?.access_token;
+        const refresh_token = session?.refresh_token;
+
+        if (access_token && refresh_token) {
+          await supabase.auth.setSession({ access_token, refresh_token });
+        }
+
+        // Confirm session is readable from storage before redirect.
+        for (let i = 0; i < 30 && !cancelled; i++) {
+          const { data } = await supabase.auth.getSession();
+          if (data?.session?.user) break;
+          await sleep(100);
+        }
+
+        showToastOnce();
+
         Promise.resolve(ensureProfile(session.user)).catch((e) => {
           console.error('[auth-callback] ensureProfile failed', e);
         });
+
+        redirect();
+      } catch (e: any) {
+        console.error('[auth-callback] persistAndRedirect failed', e);
+        setError(e?.message || 'Nao foi possivel concluir o login.');
+        setTimeout(() => router.replace('/auth/login'), 1500);
+      }
+    };
+
+    const sub = supabase.auth.onAuthStateChange(async (event: any, session: any) => {
+      console.log('[auth-callback] state:', event, session?.user?.email);
+      if (cancelled) return;
+
+      if ((event === 'SIGNED_IN' || event === 'INITIAL_SESSION') && session?.user) {
+        await persistAndRedirect(session);
       }
     });
 
     const run = async () => {
       console.log('[auth-callback] url:', window.location.href);
 
-      // Start code exchange in parallel, but do not block redirect logic.
+      const { data: existing } = await supabase.auth.getSession();
+      if (existing?.session?.user) {
+        showToastOnce();
+        Promise.resolve(ensureProfile(existing.session.user)).catch(() => {});
+        redirect();
+        return;
+      }
+
       const sp = new URLSearchParams(window.location.search);
       const code = sp.get('code');
       if (code) {
         console.log('[auth-callback] exchanging code for session...');
         Promise.race([
           supabase.auth.exchangeCodeForSession(code),
-          sleep(12000).then(() => ({ error: new Error('exchange timeout') } as any)),
+          sleep(30000).then(() => ({ error: new Error('exchange timeout') } as any)),
         ])
           .then((r: any) => {
             const msg = r?.error?.message;
             if (msg) console.warn('[auth-callback] exchange result error:', msg);
             else console.log('[auth-callback] exchange result ok');
-
-            if (!msg) {
-              supabase.auth
-                .getSession()
-                .then(({ data }: any) => {
-                  if (data?.session?.user && !redirectedRef.current) {
-                    console.log('[auth-callback] session detected after exchange');
-                    redirect();
-                  }
-                })
-                .catch(() => {
-                  // ignore
-                });
-            }
           })
           .catch((e) => console.warn('[auth-callback] exchange exception', e));
       }
 
-      // Poll for session for a short period as a fallback.
-      for (let i = 0; i < 10 && !cancelled && !redirectedRef.current; i++) {
+      for (let i = 0; i < 60 && !cancelled && !redirectedRef.current; i++) {
         const { data } = await supabase.auth.getSession();
         if (data?.session?.user) {
           console.log('[auth-callback] session detected via poll');
-          toast.success('Login realizado com sucesso!');
+          showToastOnce();
+          Promise.resolve(ensureProfile(data.session.user)).catch(() => {});
           redirect();
-          // Fire-and-forget profile upsert; never block redirect.
-          Promise.resolve(ensureProfile(data.session.user)).catch((e) => {
-            console.error('[auth-callback] ensureProfile failed', e);
-          });
           return;
         }
-        await sleep(300);
+        await sleep(250);
       }
 
       if (!redirectedRef.current && !cancelled) {
