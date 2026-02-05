@@ -62,6 +62,16 @@ export default function AuthCallbackPage() {
     if (redirectedRef.current) return;
     redirectedRef.current = true;
     router.replace(nextPath);
+    // Fallback: force navigation if router stalls.
+    setTimeout(() => {
+      try {
+        if (typeof window !== 'undefined' && window.location.pathname.startsWith('/auth/callback')) {
+          window.location.assign(`${window.location.origin}${nextPath}`);
+        }
+      } catch {
+        // ignore
+      }
+    }, 250);
   };
 
   useEffect(() => {
@@ -92,12 +102,26 @@ export default function AuthCallbackPage() {
         console.log('[auth-callback] exchanging code for session...');
         Promise.race([
           supabase.auth.exchangeCodeForSession(code),
-          sleep(4000).then(() => ({ error: new Error('exchange timeout') } as any)),
+          sleep(12000).then(() => ({ error: new Error('exchange timeout') } as any)),
         ])
           .then((r: any) => {
             const msg = r?.error?.message;
             if (msg) console.warn('[auth-callback] exchange result error:', msg);
             else console.log('[auth-callback] exchange result ok');
+
+            if (!msg) {
+              supabase.auth
+                .getSession()
+                .then(({ data }: any) => {
+                  if (data?.session?.user && !redirectedRef.current) {
+                    console.log('[auth-callback] session detected after exchange');
+                    redirect();
+                  }
+                })
+                .catch(() => {
+                  // ignore
+                });
+            }
           })
           .catch((e) => console.warn('[auth-callback] exchange exception', e));
       }
