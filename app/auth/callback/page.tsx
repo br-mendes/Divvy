@@ -71,6 +71,14 @@ export default function AuthCallbackPage() {
     const handleCallback = async () => {
       console.log('🔄 Auth callback: Processing OAuth...');
       console.log('🔗 Current URL:', window.location.href);
+
+      const sp = new URLSearchParams(window.location.search);
+      const code = sp.get('code');
+      if (code) {
+        console.log('🔁 Exchanging OAuth code for session...');
+        const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
+        console.log('🔁 Exchange result:', { ok: !exchangeError, error: exchangeError?.message });
+      }
       
       // Check if we already have a session
       const { data: { session: initialSession } } = await supabase.auth.getSession();

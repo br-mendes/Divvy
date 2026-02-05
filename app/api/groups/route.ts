@@ -1,11 +1,38 @@
 import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
+import { createClient } from '@supabase/supabase-js';
 
 export const dynamic = 'force-dynamic';
 
 type Supa = ReturnType<typeof createRouteHandlerClient>;
 type AnyRow = Record<string, any>;
+
+function bearerTokenFromRequest(req: Request) {
+  const auth = req.headers.get('authorization') || req.headers.get('Authorization');
+  if (!auth) return '';
+  const m = auth.match(/^Bearer\s+(.+)$/i);
+  return (m?.[1] ?? '').trim();
+}
+
+function createBearerSupabase(token: string) {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  if (!url || !anonKey) return null;
+
+  return createClient(url, anonKey, {
+    global: {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    },
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false,
+      detectSessionInUrl: false,
+    },
+  }) as any;
+}
 
 function pickFirst(...values: Array<string | undefined | null>) {
   for (const v of values) {
@@ -27,9 +54,9 @@ async function tryQuery<T>(fn: () => Promise<{ data: T | null; error: any }>) {
   }
 }
 
-async function getUser(supabase: Supa) {
+async function getUser(supabase: Supa, token?: string) {
   console.log('🔐 API: Getting user from session...');
-  const { data, error } = await supabase.auth.getUser();
+  const { data, error } = token ? await (supabase as any).auth.getUser(token) : await supabase.auth.getUser();
   console.log('🔐 API: User check result:', { 
     hasUser: !!data?.user, 
     userId: data?.user?.id,
@@ -161,13 +188,17 @@ export async function GET(req: Request) {
     console.log('🌐 API GET /api/groups called');
     console.log('🌐 API Request headers:', Object.fromEntries(req.headers.entries()));
     
+    const bearer = bearerTokenFromRequest(req);
+    const bearerSupabase = bearer ? createBearerSupabase(bearer) : null;
+    const authMode = bearerSupabase ? 'bearer' : 'cookie';
+
     const cookieStore = cookies();
     const allCookies = cookieStore.getAll();
     console.log('🍪 API Cookies found:', allCookies.length, 'cookies');
     console.log('🍪 API Cookie names:', allCookies.map(c => c.name));
-    
-    const supabase = createRouteHandlerClient({ cookies: () => cookieStore });
-    const user = await getUser(supabase);
+
+    const supabase = (bearerSupabase ?? createRouteHandlerClient({ cookies: () => cookieStore })) as any;
+    const user = await getUser(supabase, bearerSupabase ? bearer : undefined);
 
     if (!user) {
       return NextResponse.json({ ok: false, code: 'UNAUTHENTICATED', message: 'You must be logged in' }, { status: 401 });
@@ -180,7 +211,7 @@ export async function GET(req: Request) {
       return NextResponse.json({
         ok: true,
         groups: [],
-        authMode: 'cookie',
+        authMode,
         source: 'none',
         note: 'No groups table found (tried divvies, groups).',
         debug: { membership: membership.ok ? { via: membership.via, count: membership.ids.length } : { error: membership.error?.message } },
@@ -205,7 +236,7 @@ export async function GET(req: Request) {
       return NextResponse.json({
         ok: true,
         groups: data ?? [],
-        authMode: 'cookie',
+        authMode,
         source: shape.table,
         note: `Fetched by memberships (${membership.via})`,
       });
@@ -222,7 +253,7 @@ export async function GET(req: Request) {
       return NextResponse.json({
         ok: true,
         groups: [],
-        authMode: 'cookie',
+        authMode,
         source: shape.table,
         note: `No memberships found; fallback by ${shape.table}.${shape.ownerCol} failed.`,
         debug: { error: error.message, membership: membership.ok ? { via: membership.via, count: membership.ids.length } : { error: membership.error?.message } },
@@ -232,7 +263,7 @@ export async function GET(req: Request) {
     return NextResponse.json({
       ok: true,
       groups: data ?? [],
-      authMode: 'cookie',
+      authMode,
       source: shape.table,
       note: `No memberships found; fallback by ${shape.table}.${shape.ownerCol}`,
     });
@@ -251,9 +282,12 @@ export async function GET(req: Request) {
 
 export async function POST(req: Request) {
   try {
+    const bearer = bearerTokenFromRequest(req);
+    const bearerSupabase = bearer ? createBearerSupabase(bearer) : null;
+
     const cookieStore = cookies();
-    const supabase = createRouteHandlerClient({ cookies: () => cookieStore });
-    const user = await getUser(supabase);
+    const supabase = (bearerSupabase ?? createRouteHandlerClient({ cookies: () => cookieStore })) as any;
+    const user = await getUser(supabase, bearerSupabase ? bearer : undefined);
 
     if (!user) {
       return NextResponse.json({ ok: false, code: 'UNAUTHENTICATED', message: 'You must be logged in' }, { status: 401 });
