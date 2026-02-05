@@ -16,15 +16,19 @@ export default function DashboardClient() {
   async function load() {
     setLoading(true);
     setError(null);
+    console.log('🔄 Dashboard: Loading groups...');
 
     try {
       const { data: sessionData } = await supabase.auth.getSession();
       const token = sessionData?.session?.access_token;
+      console.log('📋 Dashboard: Session token:', token ? 'present' : 'missing');
 
+      console.log('🌐 Dashboard: Fetching /api/groups...');
       const res = await fetch('/api/groups', {
         cache: 'no-store',
         headers: token ? { Authorization: `Bearer ${token}` } : undefined,
       });
+      console.log('✅ Dashboard: API response received:', res.status, res.ok);
 
       const ct = res.headers.get('content-type') || '';
       let payload: any = null;
@@ -45,15 +49,29 @@ export default function DashboardClient() {
 
       setGroups(payload?.groups ?? payload?.payload?.groups ?? []);
     } catch (e: any) {
+      console.error('❌ Dashboard: Error loading groups:', e);
       setGroups([]);
       setError(e?.message || 'Falha ao carregar grupos');
     } finally {
+      console.log('🏁 Dashboard: Loading finished');
       setLoading(false);
     }
   }
 
   React.useEffect(() => {
-    load();
+    console.log('🚀 Dashboard: Component mounted, starting load...');
+    
+    // Add timeout to prevent infinite loading
+    const timeoutId = setTimeout(() => {
+      console.log('⏰ Dashboard: Load timeout reached (10s)');
+      setLoading(false);
+      setError('Tempo de carregamento excedido. Tente recarregar a página.');
+    }, 10000);
+
+    load().finally(() => {
+      clearTimeout(timeoutId);
+    });
+    
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
