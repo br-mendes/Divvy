@@ -19,14 +19,38 @@ export default function DashboardClient() {
     console.log('🔄 Dashboard: Loading groups...');
 
     try {
-      const { data: sessionData } = await supabase.auth.getSession();
+      // Wait for session to be ready
+      let attempts = 0;
+      let sessionData = null;
+      
+      while (attempts < 5) {
+        const { data } = await supabase.auth.getSession();
+        sessionData = data;
+        console.log(`📋 Dashboard: Session check attempt ${attempts + 1}:`, data?.session ? 'found' : 'not found');
+        
+        if (data?.session) {
+          break;
+        }
+        
+        // Wait 500ms before next attempt
+        await new Promise(resolve => setTimeout(resolve, 500));
+        attempts++;
+      }
+      
       const token = sessionData?.session?.access_token;
-      console.log('📋 Dashboard: Session token:', token ? 'present' : 'missing');
+      console.log('📋 Dashboard: Final session token:', token ? 'present' : 'missing');
 
-      console.log('🌐 Dashboard: Fetching /api/groups...');
+      if (!token) {
+        console.error('❌ Dashboard: No session token available');
+        setError('Sessão não encontrada. Faça login novamente.');
+        setLoading(false);
+        return;
+      }
+
+      console.log('🌐 Dashboard: Fetching /api/groups with token...');
       const res = await fetch('/api/groups', {
         cache: 'no-store',
-        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+        headers: { Authorization: `Bearer ${token}` },
       });
       console.log('✅ Dashboard: API response received:', res.status, res.ok);
 
