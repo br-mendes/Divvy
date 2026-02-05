@@ -15,6 +15,7 @@ if (supabaseUrl && supabaseAnonKey) {
       persistSession: true,
       detectSessionInUrl: true,
       flowType: 'pkce', // Use PKCE for better security
+      storageKey: 'sb-auth-token',
     },
     realtime: {
       params: {

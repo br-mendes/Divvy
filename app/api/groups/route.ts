@@ -28,7 +28,13 @@ async function tryQuery<T>(fn: () => Promise<{ data: T | null; error: any }>) {
 }
 
 async function getUser(supabase: Supa) {
+  console.log('🔐 API: Getting user from session...');
   const { data, error } = await supabase.auth.getUser();
+  console.log('🔐 API: User check result:', { 
+    hasUser: !!data?.user, 
+    userId: data?.user?.id,
+    error: error?.message 
+  });
   if (error || !data?.user) return null;
   return data.user;
 }
@@ -152,7 +158,14 @@ async function ensureMembership(supabase: Supa, userId: string, divvyId: string,
 
 export async function GET(req: Request) {
   try {
+    console.log('🌐 API GET /api/groups called');
+    console.log('🌐 API Request headers:', Object.fromEntries(req.headers.entries()));
+    
     const cookieStore = cookies();
+    const allCookies = cookieStore.getAll();
+    console.log('🍪 API Cookies found:', allCookies.length, 'cookies');
+    console.log('🍪 API Cookie names:', allCookies.map(c => c.name));
+    
     const supabase = createRouteHandlerClient({ cookies: () => cookieStore });
     const user = await getUser(supabase);
 
