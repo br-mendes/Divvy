@@ -80,15 +80,13 @@ export default function AuthCallbackPage() {
     const sub = supabase.auth.onAuthStateChange(async (event: any, session: any) => {
       console.log('[auth-callback] state:', event, session?.user?.email);
       if (cancelled) return;
-
       if ((event === 'SIGNED_IN' || event === 'INITIAL_SESSION') && session?.user) {
-        try {
-          await ensureProfile(session.user);
-        } catch (e) {
-          console.error('[auth-callback] ensureProfile failed', e);
-        }
         toast.success('Login realizado com sucesso!');
         redirect();
+        // Fire-and-forget profile upsert; never block redirect.
+        Promise.resolve(ensureProfile(session.user)).catch((e) => {
+          console.error('[auth-callback] ensureProfile failed', e);
+        });
       }
     });
 
@@ -131,13 +129,12 @@ export default function AuthCallbackPage() {
         const { data } = await supabase.auth.getSession();
         if (data?.session?.user) {
           console.log('[auth-callback] session detected via poll');
-          try {
-            await ensureProfile(data.session.user);
-          } catch (e) {
-            console.error('[auth-callback] ensureProfile failed', e);
-          }
           toast.success('Login realizado com sucesso!');
           redirect();
+          // Fire-and-forget profile upsert; never block redirect.
+          Promise.resolve(ensureProfile(data.session.user)).catch((e) => {
+            console.error('[auth-callback] ensureProfile failed', e);
+          });
           return;
         }
         await sleep(300);
