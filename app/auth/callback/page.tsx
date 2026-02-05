@@ -5,6 +5,10 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'react-hot-toast';
 import { supabase } from '@/lib/supabase';
 
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 async function ensureProfile(sessionUser: any) {
   const now = new Date().toISOString();
   const email = sessionUser?.email || '';
@@ -37,10 +41,6 @@ async function ensureProfile(sessionUser: any) {
   }
 }
 
-function sleep(ms: number) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
 export default function AuthCallbackPage() {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
@@ -49,6 +49,7 @@ export default function AuthCallbackPage() {
     if (typeof window === 'undefined') return '/dashboard';
     const sp = new URLSearchParams(window.location.search);
     const nextParam = sp.get('next') || sp.get('redirect') || '/dashboard';
+
     try {
       const decoded = decodeURIComponent(nextParam);
       return decoded.startsWith('/') ? decoded : '/dashboard';
@@ -60,10 +61,17 @@ export default function AuthCallbackPage() {
   const redirectedRef = useRef(false);
   const toastShownRef = useRef(false);
 
+  const showToastOnce = () => {
+    if (toastShownRef.current) return;
+    toastShownRef.current = true;
+    toast.success('Login realizado com sucesso!');
+  };
+
   const redirect = () => {
     if (redirectedRef.current) return;
     redirectedRef.current = true;
 
+    console.log('[auth-callback] redirect ->', nextPath);
     router.replace(nextPath);
 
     // Fallback: force navigation if router stalls.
@@ -81,62 +89,49 @@ export default function AuthCallbackPage() {
   useEffect(() => {
     let cancelled = false;
 
-    const showToastOnce = () => {
-      if (toastShownRef.current) return;
-      toastShownRef.current = true;
-      toast.success('Login realizado com sucesso!');
-    };
+    const handleSession = (session: any, source: string) => {
+      if (cancelled || !session?.user) return;
 
-    const persistAndRedirect = async (session: any) => {
-      try {
-        const access_token = session?.access_token;
-        const refresh_token = session?.refresh_token;
+      console.log('[auth-callback] session via', source, session.user?.email);
+      showToastOnce();
+      redirect();
 
-        if (access_token && refresh_token) {
-          await supabase.auth.setSession({ access_token, refresh_token });
-        }
+      // Never block navigation on these.
+      Promise.resolve(ensureProfile(session.user)).catch((e) => {
+        console.error('[auth-callback] ensureProfile failed', e);
+      });
 
-        // Confirm session is readable from storage before redirect.
-        for (let i = 0; i < 30 && !cancelled; i++) {
-          const { data } = await supabase.auth.getSession();
-          if (data?.session?.user) break;
-          await sleep(100);
-        }
-
-        showToastOnce();
-
-        Promise.resolve(ensureProfile(session.user)).catch((e) => {
-          console.error('[auth-callback] ensureProfile failed', e);
+      const access_token = session?.access_token;
+      const refresh_token = session?.refresh_token;
+      if (access_token && refresh_token) {
+        Promise.race([
+          supabase.auth.setSession({ access_token, refresh_token }),
+          sleep(2000),
+        ]).catch(() => {
+          // ignore
         });
-
-        redirect();
-      } catch (e: any) {
-        console.error('[auth-callback] persistAndRedirect failed', e);
-        setError(e?.message || 'Nao foi possivel concluir o login.');
-        setTimeout(() => router.replace('/auth/login'), 1500);
       }
     };
 
-    const sub = supabase.auth.onAuthStateChange(async (event: any, session: any) => {
+    const sub = supabase.auth.onAuthStateChange((event: any, session: any) => {
       console.log('[auth-callback] state:', event, session?.user?.email);
-      if (cancelled) return;
-
       if ((event === 'SIGNED_IN' || event === 'INITIAL_SESSION') && session?.user) {
-        await persistAndRedirect(session);
+        handleSession(session, 'auth-state');
       }
     });
 
     const run = async () => {
       console.log('[auth-callback] url:', window.location.href);
 
-      const { data: existing } = await supabase.auth.getSession();
-      if (existing?.session?.user) {
-        showToastOnce();
-        Promise.resolve(ensureProfile(existing.session.user)).catch(() => {});
-        redirect();
+      // 1) If session already exists, redirect immediately.
+      const existing = await supabase.auth.getSession().catch(() => null as any);
+      const existingSession = existing?.data?.session;
+      if (existingSession?.user) {
+        handleSession(existingSession, 'getSession');
         return;
       }
 
+      // 2) Kick off PKCE exchange (do not block redirect).
       const sp = new URLSearchParams(window.location.search);
       const code = sp.get('code');
       if (code) {
@@ -153,13 +148,12 @@ export default function AuthCallbackPage() {
           .catch((e) => console.warn('[auth-callback] exchange exception', e));
       }
 
-      for (let i = 0; i < 60 && !cancelled && !redirectedRef.current; i++) {
-        const { data } = await supabase.auth.getSession();
-        if (data?.session?.user) {
-          console.log('[auth-callback] session detected via poll');
-          showToastOnce();
-          Promise.resolve(ensureProfile(data.session.user)).catch(() => {});
-          redirect();
+      // 3) Poll briefly as a fallback.
+      for (let i = 0; i < 80 && !cancelled && !redirectedRef.current; i++) {
+        const r = await supabase.auth.getSession().catch(() => null as any);
+        const s = r?.data?.session;
+        if (s?.user) {
+          handleSession(s, 'poll');
           return;
         }
         await sleep(250);
