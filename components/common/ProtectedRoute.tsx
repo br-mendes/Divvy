@@ -1,9 +1,8 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
-import { Suspense } from 'react';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
@@ -14,57 +13,83 @@ function ProtectedRouteContent({ children, fallback = '/auth/login' }: Protected
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [authenticated, setAuthenticated] = useState(false);
+  const finishedRef = useRef(false);
 
   useEffect(() => {
+    const finish = (ok: boolean) => {
+      if (finishedRef.current) return;
+      finishedRef.current = true;
+      setAuthenticated(ok);
+      setLoading(false);
+    };
+
+    // Subscribe immediately to avoid missing racey SIGNED_IN.
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((event: any, session: any) => {
+      if (event === 'SIGNED_OUT' || !session) {
+        finish(false);
+        router.replace(fallback);
+        return;
+      }
+
+      // SIGNED_IN / INITIAL_SESSION with a session.
+      finish(true);
+    });
+
     const checkAuth = async () => {
       try {
-        const { data: { session } } = await supabase.auth.getSession();
-        
-        if (!session) {
-          router.push(fallback);
+        const r: any = await supabase.auth.getSession();
+        const session = r?.data?.session;
+
+        if (session) {
+          finish(true);
           return;
         }
 
-        setAuthenticated(true);
-        setLoading(false);
-
-        // Listen for auth changes
-        const { data: { subscription } } = supabase.auth.onAuthStateChange((event: any, session: any) => {
-          if (event === 'SIGNED_OUT' || !session) {
-            setAuthenticated(false);
-            router.push(fallback);
+        // Give the client a moment to hydrate/persist session after OAuth.
+        const timeoutId = setTimeout(() => {
+          if (!finishedRef.current) {
+            finish(false);
+            router.replace(fallback);
           }
-        });
+        }, 2000);
 
-        return () => subscription.unsubscribe();
-      } catch (error) {
-        console.error('Auth check error:', error);
-        router.push(fallback);
+        return () => clearTimeout(timeoutId);
+      } catch (e) {
+        console.error('Auth check exception:', e);
+        finish(false);
+        router.replace(fallback);
       }
     };
 
-    checkAuth();
+    let cleanupCheck: undefined | (() => void);
+    checkAuth().then((c: any) => {
+      if (typeof c === 'function') cleanupCheck = c;
+    });
+
+    return () => {
+      subscription.unsubscribe();
+      if (cleanupCheck) cleanupCheck();
+    };
   }, [router, fallback]);
 
   if (loading) {
     return (
       <div className="h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-brand-500"></div>
+        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-brand-500" />
       </div>
     );
   }
 
-  if (!authenticated) {
-    return null; // Will redirect
-  }
-
+  if (!authenticated) return null;
   return <>{children}</>;
 }
 
 export default function ProtectedRoute({ children, fallback }: ProtectedRouteProps) {
   return (
-    <Suspense fallback={<div>Loading...</div>}>
-      <ProtectedRouteContent children={children} fallback={fallback} />
+    <Suspense fallback={<div className="h-screen flex items-center justify-center">Loading...</div>}>
+      <ProtectedRouteContent fallback={fallback}>{children}</ProtectedRouteContent>
     </Suspense>
   );
 }
