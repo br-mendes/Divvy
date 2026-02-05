@@ -152,7 +152,8 @@ async function ensureMembership(supabase: Supa, userId: string, divvyId: string,
 
 export async function GET(req: Request) {
   try {
-    const supabase = createRouteHandlerClient({ cookies });
+    const cookieStore = cookies();
+    const supabase = createRouteHandlerClient({ cookies: () => cookieStore });
     const user = await getUser(supabase);
 
     if (!user) {
@@ -237,7 +238,8 @@ export async function GET(req: Request) {
 
 export async function POST(req: Request) {
   try {
-    const supabase = createRouteHandlerClient({ cookies });
+    const cookieStore = cookies();
+    const supabase = createRouteHandlerClient({ cookies: () => cookieStore });
     const user = await getUser(supabase);
 
     if (!user) {
