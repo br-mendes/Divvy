@@ -55,70 +55,69 @@ export default function AuthCallbackPage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    let hasRedirected = false;
+    
+    const doRedirect = () => {
+      if (hasRedirected) return;
+      hasRedirected = true;
+      
+      const sp = new URLSearchParams(window.location.search);
+      const nextParam = sp.get('next') || sp.get('redirect') || '/dashboard';
+      const next = decodeURIComponent(nextParam);
+      console.log('🚀 Redirecting to:', next);
+      router.push(next);
+    };
+
     const handleCallback = async () => {
-      console.log('Auth callback: Processing OAuth...');
-      console.log('Current URL:', typeof window !== 'undefined' ? window.location.href : 'server');
-      console.log('URL params:', typeof window !== 'undefined' ? window.location.search : 'no-window');
-      console.log('URL hash:', typeof window !== 'undefined' ? window.location.hash : 'no-window');
+      console.log('🔄 Auth callback: Processing OAuth...');
+      console.log('🔗 Current URL:', window.location.href);
       
-      const { data: { session: callbackSession }, error: sessionError } = await supabase.auth.getSession();
-      console.log('Session result:', { 
-        hasSession: !!callbackSession, 
-        userId: callbackSession?.user?.id, 
-        email: callbackSession?.user?.email,
-        error: sessionError?.message 
-      });
+      // Check if we already have a session
+      const { data: { session: initialSession } } = await supabase.auth.getSession();
       
-      if (sessionError) {
-        console.error('Auth Callback Error:', sessionError);
-        console.error('Error details:', sessionError);
-        setError(sessionError.message || 'Erro desconhecido');
-        setTimeout(() => router.push('/auth/login'), 2000);
-        return;
-      }
-
-      console.log('Auth callback: Session found:', !!callbackSession, 'User:', callbackSession?.user?.email);
-
-      const doRedirect = () => {
-        const sp = new URLSearchParams(window.location.search);
-        const nextParam = sp.get('next') || sp.get('redirect') || '/dashboard';
-        const next = decodeURIComponent(nextParam);
-        console.log('Redirecting to:', next);
-        router.push(next);
-      };
-
-      if (callbackSession) {
-        try {
-          await ensureProfile(callbackSession.user);
-        } catch (e) {
-          console.error('Auto profile creation error', e);
-        }
-
+      if (initialSession) {
+        console.log('✅ Session already exists:', initialSession.user?.email);
+        await ensureProfile(initialSession.user);
         toast.success('Login realizado com sucesso!');
         setTimeout(() => doRedirect(), 100);
-      } else {
-        const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event: any, session: any) => {
-          if (event === 'SIGNED_IN' && session) {
-            subscription.unsubscribe();
-            try {
-              await ensureProfile(session.user);
-            } catch (e) {
-              console.error('Auto profile creation error', e);
-            }
-            toast.success('Login realizado com sucesso!');
-            setTimeout(() => doRedirect(), 100);
-          }
-        });
-
-        const timeout = setTimeout(() => {
-          subscription.unsubscribe();
-          if (!callbackSession) router.push('/auth/login');
-        }, 8000);
+        return;
       }
+      
+      // Listen for auth state changes
+      const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event: any, session: any) => {
+        console.log('📡 Auth state changed:', event, session?.user?.email);
+        
+        if ((event === 'SIGNED_IN' || event === 'INITIAL_SESSION') && session) {
+          subscription.unsubscribe();
+          console.log('✅ Auth successful, preparing redirect...');
+          
+          try {
+            await ensureProfile(session.user);
+          } catch (e) {
+            console.error('Profile creation error:', e);
+          }
+          
+          toast.success('Login realizado com sucesso!');
+          setTimeout(() => doRedirect(), 500);
+        }
+      });
+
+      // Timeout fallback
+      const timeout = setTimeout(() => {
+        subscription.unsubscribe();
+        console.error('⏰ Auth timeout - no session detected');
+        setError('Tempo de autenticação excedido');
+        setTimeout(() => router.push('/auth/login'), 2000);
+      }, 10000);
+
+      return () => {
+        clearTimeout(timeout);
+        subscription.unsubscribe();
+      };
     };
 
     handleCallback();
-  }, []);
+  }, [router]);
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50">
