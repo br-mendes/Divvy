@@ -45,6 +45,8 @@ export async function GET() {
 export async function POST(req: Request) {
   const supabase = createSupabaseServerClient();
 
+  const sb = supabase as any;
+
   const {
     data: { user },
     error: userError,
@@ -58,7 +60,7 @@ export async function POST(req: Request) {
   const name = String(body?.name ?? body?.title ?? 'Novo grupo').trim() || 'Novo grupo';
   const type = String(body?.type ?? body?.kind ?? 'trip').trim() || 'trip';
 
-  const { data: divvy, error: divvyError } = await supabase
+  const { data: divvy, error: divvyError } = await sb
     .from('divvies')
     .insert({ name, type, creatorid: user.id })
     .select('id,name,type,creatorid,createdat,isarchived,endedat,description')
@@ -69,7 +71,7 @@ export async function POST(req: Request) {
   }
 
   // Ensure membership via RPC.
-  const rpc = await supabase.rpc('ensure_divvy_membership', {
+  const rpc = await sb.rpc('ensure_divvy_membership', {
     p_divvy_id: divvy.id,
     p_role: 'admin',
     p_user_id: user.id,
