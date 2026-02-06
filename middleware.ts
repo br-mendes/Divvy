@@ -5,31 +5,34 @@ import type { NextRequest } from 'next/server';
 export async function middleware(req: NextRequest) {
   const res = NextResponse.next();
   const supabase = createMiddlewareClient({ req, res });
-  const { data: { session } } = await supabase.auth.getSession();
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
 
-  const isAuth = req.nextUrl.pathname.startsWith('/auth');
-  const isDash = req.nextUrl.pathname.startsWith('/dashboard');
+  const path = req.nextUrl.pathname;
 
-  // Rotas protegidas que exigem login
-  if (!session && (
-    req.nextUrl.pathname.startsWith('/dashboard') ||
-    req.nextUrl.pathname.startsWith('/profile') ||
-    req.nextUrl.pathname.startsWith('/divvy') ||
-    req.nextUrl.pathname.startsWith('/admin') ||
-    req.nextUrl.pathname.startsWith('/join')
-  )) {
+  const isAuthRoute = path.startsWith('/auth');
+  const isProtected =
+    path.startsWith('/dashboard') ||
+    path.startsWith('/groups') ||
+    path.startsWith('/profile') ||
+    path.startsWith('/divvy') ||
+    path.startsWith('/admin');
+
+  // /join e publico (a pagina ja lida com logado/nao-logado)
+  if (!session && isProtected) {
     const redirectUrl = new URL('/auth/login', req.url);
-    redirectUrl.searchParams.set('redirect', req.nextUrl.pathname);
+    redirectUrl.searchParams.set('redirect', path + (req.nextUrl.search || ''));
     return NextResponse.redirect(redirectUrl);
   }
 
-  // Redirecionar usuário logado para fora das páginas de auth
-  if (session && req.nextUrl.pathname.startsWith('/auth/')) {
+  // se logado e tentar acessar /auth/*, manda para dashboard
+  if (session && isAuthRoute) {
     return NextResponse.redirect(new URL('/dashboard', req.url));
   }
 
-  // Proteção adicional para rotas de admin
-  if (session && req.nextUrl.pathname.startsWith('/admin')) {
+  // admin guard
+  if (session && path.startsWith('/admin')) {
     const { data: admin } = await supabase
       .from('admin_users')
       .select('id')
@@ -46,13 +49,12 @@ export async function middleware(req: NextRequest) {
 
 export const config = {
   matcher: [
-    '/dashboard/:path*', 
-    '/profile/:path*', 
-    '/divvy/:path*', 
+    '/dashboard/:path*',
+    '/groups/:path*',
+    '/profile/:path*',
+    '/divvy/:path*',
     '/admin/:path*',
+    '/auth/:path*',
     '/join/:path*',
-    '/login',
-    '/signup',
-    '/auth/:path*'
   ],
 };

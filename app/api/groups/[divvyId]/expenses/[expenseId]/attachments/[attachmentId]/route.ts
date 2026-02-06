@@ -1,34 +1,56 @@
 import { NextResponse } from 'next/server';
+import { createSupabaseServerClient } from '@/lib/supabase/server';
 
 export const dynamic = 'force-dynamic';
 
-/**
- * STUB AUTOMÁTICO PARA DESTRAVAR BUILD
- * - Evita qualquer throw em tempo de import durante 
-ext build
- * - Se faltar SUPABASE_SERVICE_ROLE_KEY, retorna 500 dentro do handler
- * - Usa req.url para pathname (evita problemas de backslash no Windows)
- */
-
-function missingEnv(pathname: string) {
-  return NextResponse.json(
-    { ok: false, code: 'MISSING_ENV', message: 'Missing env SUPABASE_SERVICE_ROLE_KEY', pathname },
-    { status: 500 }
-  );
+function jsonError(status: number, code: string, message: string, extra?: any) {
+  return NextResponse.json({ ok: false, code, message, ...(extra ?? {}) }, { status });
 }
 
-function ok(pathname: string, method: string) {
-  return NextResponse.json({ ok: true, pathname, method, note: 'stub' });
-}
+export async function DELETE(
+  _req: Request,
+  ctx: { params: { divvyId: string; expenseId: string; attachmentId: string } }
+) {
+  const supabase = createSupabaseServerClient();
+  const { data: auth, error: authErr } = await supabase.auth.getUser();
+  if (authErr || !auth?.user) {
+    return jsonError(401, 'UNAUTHENTICATED', 'You must be logged in');
+  }
 
-function gate(req: Request, method: string) {
-  const pathname = new URL(req.url).pathname;
-  if (!process.env.SUPABASE_SERVICE_ROLE_KEY) return missingEnv(pathname);
-  return ok(pathname, method);
-}
+  const { divvyId, expenseId, attachmentId } = ctx.params;
+  if (!divvyId || !expenseId || !attachmentId) {
+    return jsonError(400, 'BAD_REQUEST', 'Missing params');
+  }
 
-export async function GET(req: Request)    { return gate(req, 'GET'); }
-export async function POST(req: Request)   { return gate(req, 'POST'); }
-export async function PUT(req: Request)    { return gate(req, 'PUT'); }
-export async function PATCH(req: Request)  { return gate(req, 'PATCH'); }
-export async function DELETE(req: Request) { return gate(req, 'DELETE'); }
+  const { data: row, error: readErr } = await supabase
+    .from('expense_attachments')
+    .select('id,divvy_id,expense_id,storage_bucket,storage_path')
+    .eq('id', attachmentId)
+    .eq('divvy_id', divvyId)
+    .eq('expense_id', expenseId)
+    .maybeSingle();
+
+  if (readErr) {
+    return jsonError(500, 'DB_ERROR', readErr.message, { where: 'expense_attachments_get' });
+  }
+  if (!row) {
+    return jsonError(404, 'NOT_FOUND', 'Attachment not found');
+  }
+
+  const bucket = String((row as any).storage_bucket ?? 'expense-attachments');
+  const path = String((row as any).storage_path ?? '');
+
+  if (bucket && path) {
+    const { error: storageErr } = await supabase.storage.from(bucket).remove([path]);
+    if (storageErr) {
+      return jsonError(500, 'STORAGE_ERROR', storageErr.message, { where: 'storage_remove' });
+    }
+  }
+
+  const { error: delErr } = await supabase.from('expense_attachments').delete().eq('id', attachmentId);
+  if (delErr) {
+    return jsonError(500, 'DB_ERROR', delErr.message, { where: 'expense_attachments_delete' });
+  }
+
+  return NextResponse.json({ ok: true });
+}

@@ -7,7 +7,6 @@ import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Modal } from '@/components/ui/Modal';
-import { ProtectedRoute } from '@/components/ProtectedRoute';
 import toast from 'react-hot-toast';
 import {
   ShieldCheck, Users, Megaphone, Activity, MessageSquare,
@@ -278,7 +277,7 @@ export default function AdminPage() {
   if (!isAdmin) return null;
 
   return (
-    <ProtectedRoute>
+    <>
       <div className="min-h-screen bg-gray-50 dark:bg-dark-950 pb-20">
         <div className="max-w-7xl mx-auto px-4 py-8">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
@@ -609,6 +608,6 @@ export default function AdminPage() {
           </Button>
         </form>
       </Modal>
-    </ProtectedRoute>
+    </>
   );
 }

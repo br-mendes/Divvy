@@ -1,6 +1,5 @@
 import { NextResponse as NextResponse2 } from "next/server";
-import { cookies as cookies2 } from "next/headers";
-import { createRouteHandlerClient as createRouteHandlerClient2 } from "@supabase/auth-helpers-nextjs";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
 
@@ -11,7 +10,7 @@ async function getUser2(supabase: any) {
 }
 
 export async function GET(_: Request, ctx: { params: { divvyId: string; expenseId: string } }) {
-  const supabase = createRouteHandlerClient2({ cookies: cookies2 });
+  const supabase = createSupabaseServerClient();
   const user = await getUser2(supabase);
 
   if (!user) {
@@ -49,7 +48,7 @@ export async function GET(_: Request, ctx: { params: { divvyId: string; expenseI
 }
 
 export async function DELETE(_: Request, ctx: { params: { divvyId: string; expenseId: string } }) {
-  const supabase = createRouteHandlerClient2({ cookies: cookies2 });
+  const supabase = createSupabaseServerClient();
   const user = await getUser2(supabase);
 
   if (!user) {
@@ -70,7 +69,7 @@ export async function DELETE(_: Request, ctx: { params: { divvyId: string; expen
 }
 
 export async function PUT(req: Request, ctx: { params: { divvyId: string; expenseId: string } }) {
-  const supabase = createRouteHandlerClient2({ cookies: cookies2 });
+  const supabase = createSupabaseServerClient();
   const user = await getUser2(supabase);
 
   if (!user) {

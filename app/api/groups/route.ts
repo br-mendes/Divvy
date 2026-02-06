@@ -1,369 +1,90 @@
 import { NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
-import { createClient } from '@supabase/supabase-js';
+import { createSupabaseServerClient } from '@/lib/supabase/server';
 
 export const dynamic = 'force-dynamic';
 
-type Supa = ReturnType<typeof createRouteHandlerClient>;
-type AnyRow = Record<string, any>;
+export async function GET() {
+  const supabase = createSupabaseServerClient();
 
-function bearerTokenFromRequest(req: Request) {
-  const auth = req.headers.get('authorization') || req.headers.get('Authorization');
-  if (!auth) return '';
-  const m = auth.match(/^Bearer\s+(.+)$/i);
-  return (m?.[1] ?? '').trim();
-}
+  const {
+    data: { user },
+    error: userError,
+  } = await supabase.auth.getUser();
 
-function createBearerSupabase(token: string) {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  if (!url || !anonKey) return null;
-
-  return createClient(url, anonKey, {
-    global: {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    },
-    auth: {
-      persistSession: false,
-      autoRefreshToken: false,
-      detectSessionInUrl: false,
-    },
-  }) as any;
-}
-
-function pickFirst(...values: Array<string | undefined | null>) {
-  for (const v of values) {
-    const s = (v ?? '').toString().trim();
-    if (s) return s;
-  }
-  return '';
-}
-
-async function tryQuery<T>(fn: () => Promise<{ data: T | null; error: any }>) {
-  try {
-    const r = await fn();
-    if (!r.error) return { ok: true as const, data: r.data };
-    const msg = String(r.error?.message || '').toLowerCase();
-    const retry = msg.includes('does not exist') || msg.includes('relation') || msg.includes('schema cache');
-    return { ok: false as const, data: null, retry, error: r.error };
-  } catch (e: any) {
-    return { ok: false as const, data: null, retry: true as const, error: e };
-  }
-}
-
-async function getUser(supabase: Supa, token?: string) {
-  console.log('🔐 API: Getting user from session...');
-  const { data, error } = token ? await (supabase as any).auth.getUser(token) : await supabase.auth.getUser();
-  console.log('🔐 API: User check result:', { 
-    hasUser: !!data?.user, 
-    userId: data?.user?.id,
-    error: error?.message 
-  });
-  if (error || !data?.user) return null;
-  return data.user;
-}
-
-type MembershipShape = {
-  table: string;
-  groupIdCol: string;
-  userIdCol: string;
-  roleCol?: string;
-  createdAtCol?: string;
-};
-
-const MEMBERSHIP_SHAPES: MembershipShape[] = [
-  { table: 'divvy_members', groupIdCol: 'divvy_id', userIdCol: 'user_id', roleCol: 'role', createdAtCol: 'created_at' },
-  { table: 'divvymembers', groupIdCol: 'divvyid', userIdCol: 'userid', roleCol: 'role', createdAtCol: 'createdat' },
-  { table: 'divvy_memberships', groupIdCol: 'divvy_id', userIdCol: 'user_id', roleCol: 'role', createdAtCol: 'created_at' },
-  { table: 'group_members', groupIdCol: 'group_id', userIdCol: 'user_id', roleCol: 'role', createdAtCol: 'created_at' },
-];
-
-async function listMembershipGroupIds(supabase: Supa, userId: string) {
-  let lastErr: any = null;
-
-  for (const s of MEMBERSHIP_SHAPES) {
-    const select = [s.groupIdCol, s.roleCol, s.createdAtCol].filter(Boolean).join(',');
-
-    const { data, error } = await supabase
-      .from(s.table)
-      .select(select)
-      .eq(s.userIdCol, userId);
-
-    if (!error) {
-      const rows = (data ?? []) as AnyRow[];
-      const ids = rows.map((r) => r?.[s.groupIdCol]).filter(Boolean).map(String);
-      return { ok: true as const, ids, via: s.table, shape: s, error: null };
-    }
-
-    lastErr = error;
+  if (userError || !user) {
+    return NextResponse.json({ ok: false, code: 'UNAUTHENTICATED', message: 'You must be logged in' }, { status: 401 });
   }
 
-  return { ok: false as const, ids: [] as string[], via: 'unknown', shape: null as any, error: lastErr };
-}
+  const { data: memberships, error: memError } = await supabase
+    .from('divvy_members')
+    .select('divvyid, role, createdat')
+    .eq('userid', user.id);
 
-type GroupsTableShape = {
-  table: 'divvies' | 'groups';
-  select: string;
-  idCol: string;
-  ownerCol: string;
-  createdCol?: string;
-};
-
-const GROUPS_SHAPES: GroupsTableShape[] = [
-  { table: 'divvies', select: 'id,name,type,creatorid,created_at', idCol: 'id', ownerCol: 'creatorid', createdCol: 'created_at' },
-  { table: 'divvies', select: 'id,name,type,owner_id,created_at', idCol: 'id', ownerCol: 'owner_id', createdCol: 'created_at' },
-  { table: 'divvies', select: 'id,name,type,creatorid,createdat', idCol: 'id', ownerCol: 'creatorid', createdCol: 'createdat' },
-  { table: 'groups', select: 'id,name,type,creatorid,created_at', idCol: 'id', ownerCol: 'creatorid', createdCol: 'created_at' },
-  { table: 'groups', select: 'id,name,type,owner_id,created_at', idCol: 'id', ownerCol: 'owner_id', createdCol: 'created_at' },
-];
-
-async function pickFirstWorkingGroupsShape(supabase: Supa) {
-  for (const s of GROUPS_SHAPES) {
-    // eslint-disable-next-line no-await-in-loop
-    const r = await tryQuery(async () => {
-      const query = supabase.from(s.table).select(s.select).limit(1);
-      const { data, error }: any = await query;
-      return { data, error };
-    });
-    if (r.ok) return s;
-  }
-  return null;
-}
-
-async function ensureMembership(supabase: Supa, userId: string, divvyId: string, role: string) {
-  const rpc = await tryQuery(async () => {
-    const query = supabase.rpc('ensure_divvy_membership', {
-      p_divvy_id: divvyId,
-      p_role: role,
-    });
-    const { data, error }: any = await query;
-    return { data, error };
-  });
-  if (rpc.ok) return { ok: true as const, via: 'rpc:ensure_divvy_membership' };
-
-  for (const s of MEMBERSHIP_SHAPES) {
-    // eslint-disable-next-line no-await-in-loop
-    const exists = await tryQuery(async () => {
-      const query = supabase.from(s.table).select('id').limit(1);
-      const { data, error }: any = await query;
-      return { data, error };
-    });
-    if (!exists.ok) continue;
-
-    const payload: AnyRow = {
-      [s.groupIdCol]: divvyId,
-      [s.userIdCol]: userId,
-    };
-    if (s.roleCol) payload[s.roleCol] = role;
-
-    // eslint-disable-next-line no-await-in-loop
-    const ins = await tryQuery(async () => {
-      const query = supabase.from(s.table).insert(payload as any);
-      const { data, error }: any = await query;
-      return { data, error };
-    });
-    if (ins.ok) return { ok: true as const, via: `insert:${s.table}`, warning: rpc.error?.message ? { code: 'RPC_FAILED_USED_FALLBACK', message: String(rpc.error.message) } : null };
-
-    const msg = String((ins as any).error?.message ?? '').toLowerCase();
-    if (msg.includes('duplicate') || msg.includes('already exists') || msg.includes('unique')) {
-      return { ok: true as const, via: `exists:${s.table}`, warning: rpc.error?.message ? { code: 'RPC_FAILED_USED_FALLBACK', message: String(rpc.error.message) } : null };
-    }
+  if (memError) {
+    return NextResponse.json({ ok: false, code: 'DB_ERROR', message: memError.message }, { status: 500 });
   }
 
-  return {
-    ok: false as const,
-    via: 'none',
-    warning: {
-      code: 'MEMBERSHIP_NOT_CREATED',
-      message: `RPC error: ${String((rpc as any).error?.message ?? '')}`,
-    },
-  };
-}
-
-export async function GET(req: Request) {
-  try {
-    console.log('🌐 API GET /api/groups called');
-    console.log('🌐 API Request headers:', Object.fromEntries(req.headers.entries()));
-    
-    const bearer = bearerTokenFromRequest(req);
-    const bearerSupabase = bearer ? createBearerSupabase(bearer) : null;
-    const authMode = bearerSupabase ? 'bearer' : 'cookie';
-
-    const cookieStore = cookies();
-    const allCookies = cookieStore.getAll();
-    console.log('🍪 API Cookies found:', allCookies.length, 'cookies');
-    console.log('🍪 API Cookie names:', allCookies.map(c => c.name));
-
-    const supabase = (bearerSupabase ?? createRouteHandlerClient({ cookies: () => cookieStore })) as any;
-    const user = await getUser(supabase, bearerSupabase ? bearer : undefined);
-
-    if (!user) {
-      return NextResponse.json({ ok: false, code: 'UNAUTHENTICATED', message: 'You must be logged in' }, { status: 401 });
-    }
-
-    const membership = await listMembershipGroupIds(supabase, user.id);
-    const shape = await pickFirstWorkingGroupsShape(supabase);
-
-    if (!shape) {
-      return NextResponse.json({
-        ok: true,
-        groups: [],
-        authMode,
-        source: 'none',
-        note: 'No groups table found (tried divvies, groups).',
-        debug: { membership: membership.ok ? { via: membership.via, count: membership.ids.length } : { error: membership.error?.message } },
-      });
-    }
-
-    // Prefer membership ids; fallback to owner column.
-    if (membership.ok && membership.ids.length > 0) {
-      const { data, error } = await supabase
-        .from(shape.table)
-        .select(shape.select)
-        .in(shape.idCol, membership.ids)
-        .order(shape.createdCol ?? shape.idCol, { ascending: false });
-
-      if (error) {
-        return NextResponse.json(
-          { ok: false, code: 'DB_ERROR', message: error.message, debug: { table: shape.table, select: shape.select } },
-          { status: 500 }
-        );
-      }
-
-      return NextResponse.json({
-        ok: true,
-        groups: data ?? [],
-        authMode,
-        source: shape.table,
-        note: `Fetched by memberships (${membership.via})`,
-      });
-    }
-
-    const { data, error } = await supabase
-      .from(shape.table)
-      .select(shape.select)
-      .eq(shape.ownerCol, user.id)
-      .order(shape.createdCol ?? shape.idCol, { ascending: false });
-
-    if (error) {
-      // Non-fatal: return empty with debug.
-      return NextResponse.json({
-        ok: true,
-        groups: [],
-        authMode,
-        source: shape.table,
-        note: `No memberships found; fallback by ${shape.table}.${shape.ownerCol} failed.`,
-        debug: { error: error.message, membership: membership.ok ? { via: membership.via, count: membership.ids.length } : { error: membership.error?.message } },
-      });
-    }
-
-    return NextResponse.json({
-      ok: true,
-      groups: data ?? [],
-      authMode,
-      source: shape.table,
-      note: `No memberships found; fallback by ${shape.table}.${shape.ownerCol}`,
-    });
-  } catch (e: any) {
-    return NextResponse.json(
-      {
-        ok: false,
-        code: 'UNHANDLED_ERROR',
-        message: e?.message || 'Unhandled error',
-        stack: process.env.NODE_ENV === 'production' ? undefined : String(e?.stack || ''),
-      },
-      { status: 500 }
-    );
+  const ids = (memberships ?? []).map((m: any) => m.divvyid).filter(Boolean);
+  if (ids.length === 0) {
+    return NextResponse.json({ ok: true, groups: [] });
   }
+
+  const { data: groups, error: groupsError } = await supabase
+    .from('divvies')
+    .select('id,name,type,creatorid,createdat,isarchived,endedat,description')
+    .in('id', ids)
+    .order('createdat', { ascending: false });
+
+  if (groupsError) {
+    return NextResponse.json({ ok: false, code: 'DB_ERROR', message: groupsError.message }, { status: 500 });
+  }
+
+  return NextResponse.json({ ok: true, groups: groups ?? [] });
 }
 
 export async function POST(req: Request) {
-  try {
-    const bearer = bearerTokenFromRequest(req);
-    const bearerSupabase = bearer ? createBearerSupabase(bearer) : null;
+  const supabase = createSupabaseServerClient();
 
-    const cookieStore = cookies();
-    const supabase = (bearerSupabase ?? createRouteHandlerClient({ cookies: () => cookieStore })) as any;
-    const user = await getUser(supabase, bearerSupabase ? bearer : undefined);
+  const {
+    data: { user },
+    error: userError,
+  } = await supabase.auth.getUser();
 
-    if (!user) {
-      return NextResponse.json({ ok: false, code: 'UNAUTHENTICATED', message: 'You must be logged in' }, { status: 401 });
-    }
-
-    let body: any = {};
-    try {
-      body = await req.json();
-    } catch {
-      body = {};
-    }
-
-    const name = (body?.name ?? body?.title ?? 'Novo grupo').toString().trim();
-    const type = pickFirst(body?.type, body?.kind, 'trip');
-
-    // Insert into the first working groups table.
-    const groupsCandidates: Array<{ table: 'divvies' | 'groups'; payloads: AnyRow[] }> = [
-      {
-        table: 'divvies',
-        payloads: [
-          { name, type, creatorid: user.id },
-          { name, type, owner_id: user.id },
-          { name },
-        ],
-      },
-      {
-        table: 'groups',
-        payloads: [
-          { name, type, creatorid: user.id },
-          { name, type, owner_id: user.id },
-          { name },
-        ],
-      },
-    ];
-
-    let created: { id: string; table: string; usedKeys: string[] } | null = null;
-    let lastErr: any = null;
-
-    for (const t of groupsCandidates) {
-      for (const p of t.payloads) {
-        const { data, error } = await supabase.from(t.table).insert(p as any).select('id').single();
-        if (!error && data?.id) {
-          created = { id: String((data as any).id), table: t.table, usedKeys: Object.keys(p) };
-          break;
-        }
-        lastErr = error;
-      }
-      if (created) break;
-    }
-
-    if (!created) {
-      return NextResponse.json(
-        { ok: false, code: 'CREATE_GROUP_FAILED', message: lastErr?.message ?? 'Failed to insert group' },
-        { status: 500 }
-      );
-    }
-
-    const ensured = await ensureMembership(supabase, user.id, created.id, 'owner');
-
-    return NextResponse.json({
-      ok: true,
-      group: { id: created.id },
-      table: created.table,
-      debug: { usedKeys: created.usedKeys },
-      ...(ensured.ok ? {} : { warning: ensured.warning }),
-      ...(ensured.ok && ensured.warning ? { warning: ensured.warning } : {}),
-    });
-  } catch (e: any) {
-    return NextResponse.json(
-      {
-        ok: false,
-        code: 'UNHANDLED_ERROR',
-        message: e?.message || 'Unhandled error',
-        stack: process.env.NODE_ENV === 'production' ? undefined : String(e?.stack || ''),
-      },
-      { status: 500 }
-    );
+  if (userError || !user) {
+    return NextResponse.json({ ok: false, code: 'UNAUTHENTICATED', message: 'You must be logged in' }, { status: 401 });
   }
+
+  const body = await req.json().catch(() => ({} as any));
+  const name = String(body?.name ?? body?.title ?? 'Novo grupo').trim() || 'Novo grupo';
+  const type = String(body?.type ?? body?.kind ?? 'trip').trim() || 'trip';
+
+  const { data: divvy, error: divvyError } = await supabase
+    .from('divvies')
+    .insert({ name, type, creatorid: user.id })
+    .select('id,name,type,creatorid,createdat,isarchived,endedat,description')
+    .maybeSingle();
+
+  if (divvyError || !divvy) {
+    return NextResponse.json({ ok: false, code: 'DB_ERROR', message: divvyError?.message || 'Failed to create group' }, { status: 500 });
+  }
+
+  // Ensure membership via RPC.
+  const rpc = await supabase.rpc('ensure_divvy_membership', {
+    p_divvy_id: divvy.id,
+    p_role: 'admin',
+    p_user_id: user.id,
+  } as any);
+
+  if (rpc.error) {
+    // Fallback direct insert.
+    const { error: memError } = await supabase
+      .from('divvy_members')
+      .insert({ divvyid: divvy.id, userid: user.id, role: 'admin' } as any);
+
+    if (memError) {
+      return NextResponse.json({ ok: false, code: 'DB_ERROR', message: memError.message }, { status: 500 });
+    }
+  }
+
+  return NextResponse.json({ ok: true, group: divvy });
 }

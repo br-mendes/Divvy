@@ -26,11 +26,10 @@ export default function LoginPage() {
       const redirect = sp.get('redirect') || sp.get('next') || '/dashboard';
       router.push(redirect.startsWith('/') ? redirect : '/dashboard');
     } catch (err: any) {
-      console.error('❌ Google Login Error:', err);
-      console.error('- Error message:', err.message);
-      console.error('- Full error:', err);
-      toast.error(`Erro ao entrar com Google: ${err.message || 'Tente novamente.'}`);
-      setGoogleLoading(false);
+      console.error('Login error:', err);
+      toast.error(err?.message || 'Erro ao fazer login. Verifique suas credenciais.');
+    } finally {
+      setLoading(false);
     }
   }
 

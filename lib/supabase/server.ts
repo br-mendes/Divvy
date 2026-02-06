@@ -1,33 +1,58 @@
 import { createServerClient } from '@supabase/ssr';
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { cookies } from 'next/headers';
-import { getSupabaseEnv } from './env';
+import type { NextRequest } from 'next/server';
+import { NextResponse } from 'next/server';
+import type { Database } from '@/types/database';
 
-/**
- * Server-side Supabase client for Route Handlers / Server Components.
- * - Uses cookies() so auth persists.
- * - NEVER throws during import (build-safe). Caller should handle missing env.
- */
-export function createSupabaseServerClient() {
-  const { url, anonKey } = getSupabaseEnv();
-
-  if (!url || !anonKey) {
-    return null;
+function mustEnv(name: string) {
+  const v = process.env[name];
+  if (!v) {
+    throw new Error(`Missing env var: ${name}`);
   }
+  return v;
+}
+
+export function createSupabaseServerClient(): SupabaseClient<Database> {
+  const url = mustEnv('NEXT_PUBLIC_SUPABASE_URL');
+  const anonKey = mustEnv('NEXT_PUBLIC_SUPABASE_ANON_KEY');
 
   const cookieStore = cookies();
 
-  return createServerClient(url, anonKey, {
+  return createServerClient<Database>(url, anonKey, {
     cookies: {
-      get(name: string) {
-        return cookieStore.get(name)?.value;
+      getAll() {
+        return cookieStore.getAll();
       },
-      set(name: string, value: string, options: any) {
-        // next/headers cookies() supports set in route handlers in modern Next versions;
-        // if the runtime disallows, routes still work for reads (and you'll see it in logs).
-        cookieStore.set({ name, value, ...options });
+      setAll(cookiesToSet) {
+        // In Route Handlers, cookies() is mutable.
+        // In Server Components it may be read-only; this will be a no-op.
+        try {
+          cookiesToSet.forEach(({ name, value, options }) => {
+            cookieStore.set(name, value, options);
+          });
+        } catch {
+          // ignore
+        }
       },
-      remove(name: string, options: any) {
-        cookieStore.set({ name, value: '', ...options, maxAge: 0 });
+    },
+  });
+}
+
+// Helper for Middleware + auth callback route: writes cookies into NextResponse.
+export function createSupabaseMiddlewareClient(req: NextRequest, res: NextResponse) {
+  const url = mustEnv('NEXT_PUBLIC_SUPABASE_URL');
+  const anonKey = mustEnv('NEXT_PUBLIC_SUPABASE_ANON_KEY');
+
+  return createServerClient<Database>(url, anonKey, {
+    cookies: {
+      getAll() {
+        return req.cookies.getAll();
+      },
+      setAll(cookiesToSet) {
+        cookiesToSet.forEach(({ name, value, options }) => {
+          res.cookies.set(name, value, options);
+        });
       },
     },
   });

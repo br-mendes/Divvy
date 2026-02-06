@@ -3,99 +3,38 @@
 import * as React from 'react';
 import Link from 'next/link';
 import Button from '@/components/common/Button';
-import { supabase } from '@/lib/supabase';
 
 type Group = any;
 
 export default function DashboardClient() {
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
-  const [debug, setDebug] = React.useState<any>(null);
   const [groups, setGroups] = React.useState<Group[]>([]);
 
   async function load() {
     setLoading(true);
     setError(null);
-    console.log('🔄 Dashboard: Loading groups...');
 
     try {
-      // Wait for session to be ready
-      let attempts = 0;
-      let sessionData = null;
-      
-      while (attempts < 5) {
-        const { data } = await supabase.auth.getSession();
-        sessionData = data;
-        console.log(`📋 Dashboard: Session check attempt ${attempts + 1}:`, data?.session ? 'found' : 'not found');
-        
-        if (data?.session) {
-          break;
-        }
-        
-        // Wait 500ms before next attempt
-        await new Promise(resolve => setTimeout(resolve, 500));
-        attempts++;
-      }
-      
-      const token = sessionData?.session?.access_token;
-      console.log('📋 Dashboard: Final session token:', token ? 'present' : 'missing');
-
-      if (!token) {
-        console.error('❌ Dashboard: No session token available');
-        setError('Sessão não encontrada. Faça login novamente.');
-        setLoading(false);
-        return;
-      }
-
-      console.log('🌐 Dashboard: Fetching /api/groups with token...');
-      const res = await fetch('/api/groups', {
-        cache: 'no-store',
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      console.log('✅ Dashboard: API response received:', res.status, res.ok);
-
-      const ct = res.headers.get('content-type') || '';
-      let payload: any = null;
-
-      if (ct.includes('application/json')) {
-        payload = await res.json().catch(() => ({}));
-      } else {
-        const text = await res.text().catch(() => '');
-        payload = { nonJson: true, contentType: ct, text: text.slice(0, 2000) };
-      }
-
-      setDebug({ status: res.status, ok: res.ok, payload });
+      const res = await fetch('/api/groups', { cache: 'no-store' });
+      const payload = await res.json().catch(() => ({}));
 
       if (!res.ok) {
-        const msg = payload?.message || payload?.error || payload?.payload?.message || `HTTP ${res.status}`;
+        const msg = payload?.message || payload?.error || `HTTP ${res.status}`;
         throw new Error(msg);
       }
 
-      setGroups(payload?.groups ?? payload?.payload?.groups ?? []);
+      setGroups(payload?.groups ?? []);
     } catch (e: any) {
-      console.error('❌ Dashboard: Error loading groups:', e);
       setGroups([]);
       setError(e?.message || 'Falha ao carregar grupos');
     } finally {
-      console.log('🏁 Dashboard: Loading finished');
       setLoading(false);
     }
   }
 
   React.useEffect(() => {
-    console.log('🚀 Dashboard: Component mounted, starting load...');
-    
-    // Add timeout to prevent infinite loading
-    const timeoutId = setTimeout(() => {
-      console.log('⏰ Dashboard: Load timeout reached (10s)');
-      setLoading(false);
-      setError('Tempo de carregamento excedido. Tente recarregar a página.');
-    }, 10000);
-
-    load().finally(() => {
-      clearTimeout(timeoutId);
-    });
-    
+    load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -104,10 +43,13 @@ export default function DashboardClient() {
       <div className="flex items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold">Meus grupos</h1>
-          <p className="text-sm text-gray-600">Para uma experiência completa, acesse a página de grupos.</p>
+          <p className="text-sm text-gray-600">Crie um grupo ou entre em um existente para comecar.</p>
         </div>
         <div className="flex gap-2">
-          <Link href="/groups" className="inline-flex items-center justify-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium hover:bg-gray-50">
+          <Link
+            href="/groups"
+            className="inline-flex items-center justify-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium hover:bg-gray-50"
+          >
             Abrir /groups
           </Link>
           <Link href="/dashboard/create-divvy">
@@ -116,47 +58,40 @@ export default function DashboardClient() {
         </div>
       </div>
 
-      {loading ? <div className="text-sm text-gray-600">Carregando…</div> : null}
+      {loading ? <div className="text-sm text-gray-600">Carregando...</div> : null}
 
       {error ? (
         <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-red-700">
-          <div className="font-semibold">Não foi possível carregar seus grupos</div>
-          <div className="mt-2 text-sm">{error}</div>
-
-          <details className="mt-3 text-sm">
-            <summary className="cursor-pointer select-none">Debug (resposta /api/groups)</summary>
-            <pre className="mt-2 overflow-auto rounded bg-white p-3 text-xs text-gray-800">
-{JSON.stringify(debug, null, 2)}
-            </pre>
-          </details>
-
-          <div className="mt-3">
-            <Button variant="secondary" onClick={() => load()}>Tentar novamente</Button>
+          <div className="font-semibold">Erro</div>
+          <div className="mt-1 text-sm">{error}</div>
+          <div className="mt-3 flex gap-2">
+            <Button variant="outline" onClick={load}>
+              Tentar novamente
+            </Button>
+            <Link href="/auth/login">
+              <Button>Entrar</Button>
+            </Link>
           </div>
         </div>
       ) : null}
 
       {!loading && !error ? (
-        <div className="rounded-lg border border-gray-200 bg-white p-5">
-          <div className="text-lg font-semibold text-gray-900">Meus grupos</div>
+        <div className="grid gap-3">
           {groups.length === 0 ? (
-            <div className="mt-2 text-sm text-gray-600">Nenhum grupo encontrado.</div>
-          ) : (
-            <div className="mt-4 grid gap-2">
-              {groups.map((g: any, idx: number) => {
-                const id = g?.id ?? g?.divvy_id ?? g?.group_id ?? `row-${idx}`;
-                const name = g?.name ?? g?.title ?? 'Grupo';
-                return (
-                  <div key={id} className="flex items-center justify-between rounded-md border border-gray-200 px-3 py-2">
-                    <div className="min-w-0">
-                      <div className="truncate font-medium text-gray-900">{name}</div>
-                      <div className="text-xs text-gray-500 font-mono">{id}</div>
-                    </div>
-                    <Link className="text-sm underline" href={`/groups/${id}`}>Abrir</Link>
-                  </div>
-                );
-              })}
+            <div className="rounded-lg border border-gray-200 bg-white p-6 text-sm text-gray-700">
+              Voce ainda nao participa de nenhum grupo.
             </div>
+          ) : (
+            groups.map((g: any) => (
+              <Link
+                key={g.id}
+                href={`/groups/${g.id}`}
+                className="rounded-lg border border-gray-200 bg-white p-4 hover:bg-gray-50"
+              >
+                <div className="font-semibold">{g.name}</div>
+                <div className="text-xs text-gray-500">{g.type || 'trip'}</div>
+              </Link>
+            ))
           )}
         </div>
       ) : null}
