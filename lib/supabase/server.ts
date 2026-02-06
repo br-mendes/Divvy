@@ -1,5 +1,4 @@
 import { createServerClient } from '@supabase/ssr';
-import type { SupabaseClient } from '@supabase/supabase-js';
 import { cookies } from 'next/headers';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
@@ -13,7 +12,7 @@ function mustEnv(name: string) {
   return v;
 }
 
-export function createSupabaseServerClient(): SupabaseClient<Database> {
+export function createSupabaseServerClient() {
   const url = mustEnv('NEXT_PUBLIC_SUPABASE_URL');
   const anonKey = mustEnv('NEXT_PUBLIC_SUPABASE_ANON_KEY');
 
