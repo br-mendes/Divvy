@@ -23,7 +23,7 @@ export function createSupabaseServerClient() {
       getAll() {
         return cookieStore.getAll();
       },
-      setAll(cookiesToSet) {
+      setAll(cookiesToSet: Array<{ name: string; value: string; options: any }>) {
         // In Route Handlers, cookies() is mutable.
         // In Server Components it may be read-only; this will be a no-op.
         try {
@@ -48,7 +48,7 @@ export function createSupabaseMiddlewareClient(req: NextRequest, res: NextRespon
       getAll() {
         return req.cookies.getAll();
       },
-      setAll(cookiesToSet) {
+      setAll(cookiesToSet: Array<{ name: string; value: string; options: any }>) {
         cookiesToSet.forEach(({ name, value, options }) => {
           res.cookies.set(name, value, options);
         });
