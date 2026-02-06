@@ -249,9 +249,16 @@ async function insertExpenseAndSplitsTolerant(supabase: Supa, userId: string, di
   let insertMeta: any = null;
 
   for (const payload of expensePayloadCandidates) {
-    const { data, error } = await supabase.from("expenses").insert(payload as any).select("*").single();
-    if (!error && data?.id) {
-      createdExpense = data;
+    const { data, error } = await (supabase as any)
+      .from("expenses")
+      .insert(payload as any)
+      .select("*")
+      .single();
+
+    const anyData = data as any;
+
+    if (!error && anyData?.id) {
+      createdExpense = anyData;
       insertMeta = { usedPayloadKeys: Object.keys(payload) };
       break;
     }
