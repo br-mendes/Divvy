@@ -5,27 +5,32 @@ export async function getMyRoleInDivvy(divvyId: string) {
   if (!supabase) {
     throw new Error('Supabase client not initialized');
   }
+
   const {
     data: { session },
   } = await supabase.auth.getSession();
+
   if (!session?.user) {
     return { session: null as any, role: null as null | 'admin' | 'member', isCreator: false };
   }
 
-  const { data: divvy } = await supabase
+  // Destrava todos os "never" causados por types desalinhados
+  const sb = supabase as any;
+
+  const { data: divvy } = await sb
     .from('divvies')
     .select('id, creatorid')
     .eq('id', divvyId)
-    .single();
+    .maybeSingle();
 
   const isCreator = !!divvy && divvy.creatorid === session.user.id;
 
-  const { data: member } = await supabase
+  const { data: member } = await sb
     .from('divvymembers')
     .select('role')
     .eq('divvyid', divvyId)
     .eq('userid', session.user.id)
-    .single();
+    .maybeSingle();
 
   return { session, role: member?.role ?? null, isCreator };
 }
