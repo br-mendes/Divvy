@@ -55,7 +55,7 @@ export async function GET(_req: Request, ctx: { params: { token: string } }) {
   const token = ctx.params.token;
 
   // Prefer security definer RPC (works even for anon with proper grants)
-  const rpc = await supabase.rpc('get_invite_details', { invite_token: token });
+  const rpc = await (supabase as any).rpc('get_invite_details', { invite_token: token });
   if (!rpc.error && Array.isArray(rpc.data) && rpc.data[0]) {
     const info: any = rpc.data[0];
     const expired = Boolean(info.is_expired);

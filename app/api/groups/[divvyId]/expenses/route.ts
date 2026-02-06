@@ -1,10 +1,9 @@
 import { NextResponse } from "next/server";
-import { cookies } from "next/headers";
-import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
 
-type Supa = ReturnType<typeof createRouteHandlerClient>;
+type Supa = ReturnType<typeof createSupabaseServerClient>;
 
 function pickFirst<T>(...vals: Array<T | null | undefined>): T | null {
   for (const v of vals) if (v !== null && v !== undefined) return v;
@@ -358,7 +357,7 @@ async function insertExpenseAndSplitsTolerant(supabase: Supa, userId: string, di
 }
 
 export async function GET(req: Request, ctx: { params: { divvyId: string } }) {
-  const supabase = createRouteHandlerClient({ cookies });
+  const supabase = createSupabaseServerClient();
   const user = await getAuthedUser(supabase);
 
   if (!user) {
@@ -419,7 +418,7 @@ export async function GET(req: Request, ctx: { params: { divvyId: string } }) {
 }
 
 export async function POST(req: Request, ctx: { params: { divvyId: string } }) {
-  const supabase = createRouteHandlerClient({ cookies });
+  const supabase = createSupabaseServerClient();
   const user = await getAuthedUser(supabase);
 
   if (!user) {

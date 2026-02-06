@@ -1,17 +1,29 @@
 export function getURL() {
-  let url =
-    process.env.NEXT_PUBLIC_SITE_URL ||
-    process.env.NEXT_PUBLIC_VERCEL_URL || // Vercel define isso automaticamente
-    'http://localhost:3000';
-
-  // No lado do cliente, window.location.origin é a fonte da verdade sobre onde o usuário está
+  // Client: window is source of truth.
   if (typeof window !== 'undefined') {
-    url = window.location.origin;
+    return window.location.origin.replace(/\/$/, '');
   }
 
-  // Garante que a URL começa com http/https
-  url = url.startsWith('http') ? url : `https://${url}`;
+  // Server: prefer explicit site URL.
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL;
+  if (siteUrl) {
+    const u = siteUrl.startsWith('http') ? siteUrl : `https://${siteUrl}`;
+    return u.replace(/\/$/, '');
+  }
 
-  // Remove qualquer barra no final para evitar URLs como domain.com//auth/callback
-  return url.replace(/\/$/, '');
+  // Vercel provides VERCEL_URL (no scheme).
+  const vercelUrl = process.env.VERCEL_URL;
+  if (vercelUrl) {
+    return `https://${vercelUrl}`.replace(/\/$/, '');
+  }
+
+  return 'http://localhost:3000';
+}
+
+export function sanitizeNextPath(nextPath?: string | null) {
+  const raw = (nextPath ?? '').toString().trim();
+  if (!raw) return '/dashboard';
+  if (!raw.startsWith('/')) return '/dashboard';
+  if (raw.startsWith('//')) return '/dashboard';
+  return raw;
 }

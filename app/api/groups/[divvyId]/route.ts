@@ -1,10 +1,9 @@
 import { NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
+import { createSupabaseServerClient } from '@/lib/supabase/server';
 
 export const dynamic = 'force-dynamic';
 
-type Supa = ReturnType<typeof createRouteHandlerClient>;
+type Supa = ReturnType<typeof createSupabaseServerClient>;
 
 type MembershipShape = {
   table: string;
@@ -119,7 +118,7 @@ const GROUP_SHAPES: GroupShape[] = [
 
 export async function GET(_req: Request, ctx: { params: { divvyId: string } }) {
   try {
-    const supabase = createRouteHandlerClient({ cookies });
+    const supabase = createSupabaseServerClient();
     const user = await getUser(supabase);
 
     if (!user) {

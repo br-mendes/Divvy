@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
-import { cookies } from "next/headers";
-import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
 
@@ -89,7 +88,7 @@ export async function GET(
   req: Request,
   { params }: { params: { divvyId: string } }
 ) {
-  const supabase = createRouteHandlerClient({ cookies });
+  const supabase = createSupabaseServerClient();
 
   const { data: authData, error: authErr } = await supabase.auth.getUser();
   if (authErr || !authData?.user) {

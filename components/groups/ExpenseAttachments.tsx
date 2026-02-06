@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
+import { supabase } from '@/lib/supabase';
 
 type Attachment = {
   id: string;
@@ -20,7 +20,6 @@ export function ExpenseAttachments({
   divvyId: string;
   expenseId: string;
 }) {
-  const supabase = createClientComponentClient();
   const [items, setItems] = useState<Attachment[]>([]);
   const [uploading, setUploading] = useState(false);
 
@@ -40,10 +39,10 @@ export function ExpenseAttachments({
     setUploading(true);
 
     const safeName = file.name.replace(/[^\w.\-]+/g, '_');
-    const path = `divvy/${divvyId}/expense/${expenseId}/${Date.now()}-${safeName}`;
+    const path = `${divvyId}/${expenseId}/${Date.now()}-${safeName}`;
 
     const { error: upErr } = await supabase.storage
-      .from('receipts')
+      .from('expense-attachments')
       .upload(path, file, { contentType: file.type, upsert: false });
 
     if (upErr) {
@@ -56,7 +55,7 @@ export function ExpenseAttachments({
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        bucket: 'receipts',
+        bucket: 'expense-attachments',
         path,
         filename: file.name,
         mimetype: file.type,

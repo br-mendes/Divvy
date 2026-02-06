@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
+import { createSupabaseServerClient } from '@/lib/supabase/server';
 
 export const dynamic = 'force-dynamic';
 
@@ -116,7 +115,7 @@ async function replaceSplits(
 
 export async function GET(_req: Request, ctx: { params: { divvyId: string; expenseId: string } }) {
   const { divvyId, expenseId } = ctx.params;
-  const supabase = createRouteHandlerClient({ cookies });
+  const supabase = createSupabaseServerClient();
 
   const user = await getUser(supabase);
   if (!user) {
@@ -145,7 +144,7 @@ export async function GET(_req: Request, ctx: { params: { divvyId: string; expen
 
 export async function POST(req: Request, ctx: { params: { divvyId: string; expenseId: string } }) {
   const { divvyId, expenseId } = ctx.params;
-  const supabase = createRouteHandlerClient({ cookies });
+  const supabase = createSupabaseServerClient();
 
   const user = await getUser(supabase);
   if (!user) {
