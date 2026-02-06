@@ -81,7 +81,7 @@ async function tryEnsureMembership(supabase: Supa, divvyId: string, role: string
   // 1) tenta RPC (se existir no seu DB)
   //    (se não existir, vai falhar com “function does not exist” e seguimos)
   try {
-    const { error: rpcErr } = await supabase.rpc("ensure_divvy_membership", {
+    const { error: rpcErr } = await (supabase as any).rpc("ensure_divvy_membership", {
       p_divvy_id: divvyId,
       p_role: role,
     });
