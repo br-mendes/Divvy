@@ -152,7 +152,7 @@ export async function PUT(req: Request, ctx: { params: { divvyId: string; expens
   let updErr: any = null;
 
   for (const p of patches) {
-    const { data, error } = await supabase.from('expenses').update(p).eq('id', expenseId).select('*').maybeSingle();
+    const { data, error } = await (supabase as any).from('expenses').update(p).eq('id', expenseId).select('*').maybeSingle();
     if (!error) {
       updatedExpense = data;
       updErr = null;
